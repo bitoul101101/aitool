@@ -677,7 +677,7 @@ def test_allowed_origin_only_permits_local_app_hosts():
     assert srv._allowed_origin("https://evil.example") is None
 
 
-def test_run_scan_with_no_repos_does_not_reference_demo_clone_dir():
+def test_run_scan_with_no_repos_completes_cleanly():
     import app_server as srv
 
     session = srv.ScanSession()
