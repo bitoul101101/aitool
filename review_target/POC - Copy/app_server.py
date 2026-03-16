@@ -43,13 +43,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from scanner.bitbucket import BitbucketClient
-from scanner.detector  import AIUsageDetector
-from analyzer.security import SecurityAnalyzer
-from aggregator.aggregator import Aggregator
-from reports.csv_report import CSVReporter
-from reports.html_report import HTMLReporter
-from reports.delta import build_delta_meta
 from scanner.pat_store import save_pat, load_pat, delete_pat, is_available
+from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 BITBUCKET_URL = "https://bitbucket.cognyte.local:8443"
@@ -195,543 +190,72 @@ def _ollama_ensure_running(base_url: str) -> dict:
             "error": f"Ollama did not become ready within {OLLAMA_START_TIMEOUT}s"}
 
 
-# ── Scan state machine ────────────────────────────────────────────────────────
-
-class ScanSession:
-    """Holds all mutable state for one scan run."""
-
-    def __init__(self):
-        self.scan_id: str          = ""
-        self.project_key: str      = ""
-        self.repo_slugs: List[str] = []
-        self.llm_url: str          = "http://localhost:11434"
-        self.llm_model: str        = "qwen2.5-coder:7b-instruct"
-        self.operator: str         = "Unknown"
-        self.started_at_utc: str   = ""
-        self.completed_at_utc: str = ""
-        self.policy_version: str   = ""
-        self.tool_version: str     = APP_VERSION
-        self.repo_details: Dict[str, dict] = {}
-
-        self.state: str            = "idle"   # idle | running | done | stopped | error
-        self.progress: int         = 0
-        self.total: int            = 0
-        self.current_repo: str     = ""
-        self.current_file: str     = ""   # current file being scanned (for UI)
-        self.file_index:   int     = 0    # files scanned so far (for UI)
-        self.total_files:  int     = 0    # total files to scan (for UI)
-
-        self.log_queue: queue.Queue = queue.Queue()
-        self.log_lines: List[dict]  = []   # {msg, level, ts}
-        self.stop_event: threading.Event = threading.Event()
-        self.proc_holder: list     = []
-        self.proc_lock: threading.Lock = threading.Lock()
-
-        # Results
-        self.findings: List[dict]      = []
-        self.per_repo: Dict[str, Any]  = {}
-        self.report_paths: Dict[str, dict] = {}
-        self.scan_duration_s: int      = 0
-        self.llm_model_info: dict      = {}
-
-    def log(self, msg: str, level: str = "info"):
-        entry = {"msg": msg, "level": level, "ts": time.time()}
-        self.log_lines.append(entry)
-        self.log_queue.put(entry)
-
-    def to_status(self) -> dict:
-        from collections import Counter
-        sev = Counter(f.get("severity", 4) for f in self.findings)
-        return {
-            "state":        self.state,
-            "scan_id":      self.scan_id,
-            "project_key":  self.project_key,
-            "operator":     self.operator,
-            "started_at_utc": self.started_at_utc,
-            "completed_at_utc": self.completed_at_utc,
-            "policy_version": self.policy_version,
-            "tool_version": self.tool_version,
-            "progress":     self.progress,
-            "total":        self.total,
-            "current_repo": self.current_repo,
-            "current_file": self.current_file,
-            "file_index":   self.file_index,
-            "total_files":  self.total_files,
-            "findings":     len(self.findings),
-            "sev": {
-                "critical": sev.get(1, 0),
-                "high":     sev.get(2, 0),
-                "medium":   sev.get(3, 0),
-                "low":      sev.get(4, 0),
-            },
-            "per_repo": {
-                slug: {
-                    "skipped": data is None,
-                    "count":   len(data) if data else 0,
-                    "sev": dict(Counter(
-                        f.get("severity", 4) for f in (data or [])
-                    )),
-                    "reports": {},
-                }
-                for slug, data in self.per_repo.items()
-            },
-            "report":       self.report_paths.get("__all__", {}),
-            "duration_s":   self.scan_duration_s,
-        }
-
-
 # ── Global app state ──────────────────────────────────────────────────────────
 
-_client:  Optional[BitbucketClient] = None
-_session: ScanSession               = ScanSession()
-_projects_cache: List[dict]         = []
+_client: Optional[BitbucketClient] = None
+_session: ScanSession = ScanSession()
+_projects_cache: List[dict] = []
 _repos_cache: Dict[str, List[dict]] = {}
-_connected_user: str                = "Unknown"
+_connected_user: str = "Unknown"
 _state_lock = threading.Lock()
 
 
-# ── Scan runner (background thread) ──────────────────────────────────────────
+# ── Scan job service ─────────────────────────────────────────────────────────
 
 HISTORY_FILE = str(_BASE_DIR / "output" / "scan_history.json")
-LOG_DIR      = str(_BASE_DIR / "output" / "logs")
+LOG_DIR = str(_BASE_DIR / "output" / "logs")
+
+_scan_service = ScanJobService(
+    app_version=APP_VERSION,
+    paths=ScanJobPaths(
+        output_dir=OUTPUT_DIR,
+        temp_dir=TEMP_DIR,
+        policy_file=POLICY_FILE,
+        owner_map_file=OWNER_MAP_FILE,
+        history_file=HISTORY_FILE,
+        log_dir=LOG_DIR,
+    ),
+    load_policy=load_policy,
+    load_owner_map=load_owner_map,
+    policy_version=_policy_version,
+    utc_now_iso=_utc_now_iso,
+    git_head_commit=_git_head_commit,
+    ollama_ping=_ollama_ping,
+)
+
+
+def _sync_scan_service_paths() -> None:
+    _scan_service.update_paths(
+        output_dir=OUTPUT_DIR,
+        temp_dir=TEMP_DIR,
+        policy_file=POLICY_FILE,
+        owner_map_file=OWNER_MAP_FILE,
+        history_file=HISTORY_FILE,
+        log_dir=LOG_DIR,
+    )
+
 
 def _save_history_record(session, findings):
-    """Append a compact summary record to scan_history.json."""
-    from collections import Counter
-    try:
-        Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-        # Write log file
-        Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-        log_path = Path(LOG_DIR) / f"{session.scan_id}.log"
-        try:
-            with open(log_path, "w", encoding="utf-8") as f:
-                for entry in session.log_lines:
-                    ts = datetime.fromtimestamp(entry["ts"]).strftime("%H:%M:%S")
-                    f.write(f"[{ts}] {entry.get('msg','')}\n")
-        except Exception:
-            log_path = None
+    _sync_scan_service_paths()
+    _scan_service.save_history_record(session, findings)
 
-        sev = Counter(f.get("severity", 4) for f in findings)
-        ctx = Counter(f.get("context", "production") for f in findings)
-        llm_name = (session.llm_model_info or {}).get("name", session.llm_model)
-        record = {
-            "scan_id":      session.scan_id,
-            "date":         session.scan_id[:8],   # YYYYMMDD
-            "time":         session.scan_id[9:] if len(session.scan_id) > 8 else "",
-            "project":      session.project_key,
-            "repos":        session.repo_slugs,
-            "operator":     session.operator,
-            "state":        session.state,
-            "duration_s":   session.scan_duration_s,
-            "started_at_utc": session.started_at_utc,
-            "completed_at_utc": session.completed_at_utc,
-            "policy_version": session.policy_version,
-            "tool_version": session.tool_version,
-            "total":        len(findings),
-            "sev":          {
-                "critical": sev.get(1, 0),
-                "high":     sev.get(2, 0),
-                "medium":   sev.get(3, 0),
-                "low":      sev.get(4, 0),
-            },
-            "ctx":          dict(ctx),
-            "llm_model":    llm_name,
-            "repo_details": session.repo_details,
-            "log_file":     str(log_path) if log_path else "",
-            "reports":      session.report_paths,
-        }
-        # Load existing, append, save
-        hist = _load_history()
-        # Remove any previous record with same scan_id
-        hist = [r for r in hist if r.get("scan_id") != record["scan_id"]]
-        hist.append(record)
-        # Keep last 500 records
-        hist = hist[-500:]
-        # Atomic write: write to .tmp then replace — prevents corrupt file on crash
-        tmp_path = HISTORY_FILE + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(hist, f, indent=2)
-        os.replace(tmp_path, HISTORY_FILE)
-        _invalidate_history_cache()   # force next read from updated file
-    except Exception as e:
-        print(f"[WARN] Could not save history: {e}")
-
-
-
-# ── History cache: avoid re-reading JSON on every /api/history request ──
-_history_cache: list       = []
-_history_cache_mtime: float = 0.0
 
 def _load_history() -> list:
-    """
-    Load scan history from JSON sidecar, using a mtime-based cache.
-    Re-reads from disk only when the file has been modified since last load.
-    Only records written by the tool are returned — no filesystem reconciliation.
-    """
-    global _history_cache, _history_cache_mtime
-    try:
-        p = Path(HISTORY_FILE)
-        if not p.exists():
-            return []
-        mtime = p.stat().st_mtime
-        if mtime != _history_cache_mtime:
-            _history_cache       = json.loads(p.read_text("utf-8"))
-            _history_cache_mtime = mtime
-        return list(_history_cache)
-    except Exception:
-        return []
+    _sync_scan_service_paths()
+    return _scan_service.load_history()
 
 
 def _invalidate_history_cache() -> None:
-    """Force next _load_history() call to re-read from disk."""
-    global _history_cache_mtime
-    _history_cache_mtime = 0.0
+    _scan_service.invalidate_history_cache()
 
 
 def _run_scan(session: ScanSession):
-    """Full scan pipeline — runs in a daemon thread."""
-    from scanner.history import scan_history
-
-    log = session.log
-    stop = session.stop_event
-
-    policy    = load_policy(POLICY_FILE)
-    owner_map = load_owner_map(OWNER_MAP_FILE)
-    detector  = AIUsageDetector(verbose=False)
-    analyzer  = SecurityAnalyzer(policy=policy, verbose=False)
-    aggregator = Aggregator(owner_map=owner_map, min_severity=4)
-
-    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-    Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
-
-    t_start = time.time()
-    session.started_at_utc = session.started_at_utc or _utc_now_iso()
-    session.completed_at_utc = ""
-    session.policy_version = _policy_version(POLICY_FILE)
-    session.tool_version = APP_VERSION
-    all_findings: List[dict] = []
-    per_repo:  Dict[str, Any] = {}
-    per_branch: Dict[str, str] = {}
-
-    log(f"Scan ID  : {session.scan_id}", "hd")
-    log(f"Project  : {session.project_key}", "dim")
-    log(f"Repos    : {session.total}", "dim")
-
-    # LLM setup
-    session.llm_model_info = {}
-    llm_enabled = True
-
-    from scanner.llm_reviewer import LLMReviewer
-    if not _ollama_ping(session.llm_url):
-        log("  [LLM] Ollama not reachable - running without LLM review", "warn")
-        llm_enabled = False
-    else:
-        try:
-            session.llm_model_info = LLMReviewer(
-                base_url=session.llm_url, model=session.llm_model
-            ).model_info()
-            info = session.llm_model_info
-            parts = [info["name"]]
-            if info.get("parameter_size"): parts.append(info["parameter_size"])
-            if info.get("quantization"):   parts.append(info["quantization"])
-            log(f"LLM      : {' | '.join(parts)}", "dim")
-        except Exception:
-            session.llm_model_info = {"name": session.llm_model}
-            log(f"LLM      : {session.llm_model}", "dim")
-
-    log("=" * 58, "dim")
-
-    # Prefetch repo metadata
-    repo_meta: Dict[str, dict] = {}
-    for slug in session.repo_slugs:
-        if stop.is_set(): break
-        try:
-            branch = _client.get_default_branch(session.project_key, slug)
-            owner  = _client.get_repo_owner(session.project_key, slug)
-            url    = _client.get_clone_url(session.project_key, slug)
-            per_branch[slug] = branch or "default"
-            repo_meta[slug]  = {"branch": branch, "owner": owner, "url": url}
-            log(f"  {slug}  branch:{branch or '?'}  owner:{owner}", "dim")
-        except Exception as e:
-            log(f"  {slug}  metadata error: {e}", "err")
-            repo_meta[slug] = {"branch": None, "owner": "Unknown", "url": ""}
-
-    log("=" * 58, "dim")
-
-    # Worker count
-    try:
-        from scanner.llm_reviewer import compute_worker_count, _available_vram_gb
-        vram_gb = _available_vram_gb()
-        param_sz = (session.llm_model_info or {}).get("parameter_size", "")
-        workers = compute_worker_count(param_sz, vram_gb=vram_gb,
-                                       repo_count=len(session.repo_slugs))
-    except Exception:
-        workers = 4
-
-    log(f"Starting parallel scan (workers={workers})...", "info")
-
-    from scanner.bitbucket import shallow_clone, cleanup_clone
-
-    def _scan_one(slug: str) -> tuple:
-        if stop.is_set():
-            return slug, None, "", 0, "scan stopped"
-        meta      = repo_meta.get(slug, {})
-        branch    = meta.get("branch")
-        owner     = meta.get("owner", "Unknown")
-        clone_url = meta.get("url", "")
-        clone_dir = Path(TEMP_DIR) / slug
-        try:
-            shallow_clone(clone_url, clone_dir,
-                          branch=branch, verbose=False,
-                          stop_event=stop,
-                          proc_holder=session.proc_holder,
-                          proc_lock=session.proc_lock)
-            meta["commit"] = _git_head_commit(clone_dir)
-        except RuntimeError as e:
-            return slug, None, owner, 0, f"clone failed: {e}"
-        except Exception as e:
-            return slug, None, owner, 0, f"clone error: {e}"
-
-        if stop.is_set():
-            cleanup_clone(clone_dir)
-            return slug, None, owner, 0, "scan stopped"
-
-        try:
-            _last_pct = [-1]
-            def _on_file(rel, idx, total):
-                session.current_file  = f"{slug}/{rel}"
-                session.file_index    = idx + 1
-                session.total_files   = max(session.total_files, total)
-                pct = int((idx+1) / max(total,1) * 100)
-                if pct % 5 == 0 and pct != _last_pct[0]:
-                    _last_pct[0] = pct
-                    log(f"  [{slug}] Scanning: {pct}% ({idx+1}/{total} files)", "dim")
-            raw, file_contents = detector.scan(
-                clone_dir, repo_name=slug,
-                stop_event=stop,
-                return_file_contents=True,
-                on_file=_on_file,
-            )
-            try:
-                history_findings = scan_history(clone_dir, detector, slug,
-                                                stop_event=stop)
-                if history_findings:
-                    raw.extend(history_findings)
-            except Exception as _hist_err:
-                log(f"  [history] {slug}: {_hist_err}", "dim")
-
-            analyzed = analyzer.analyze(raw)
-            pre_llm_count = len(analyzed)
-
-            if llm_enabled and analyzed:
-                try:
-                    reviewer = LLMReviewer(
-                        base_url=session.llm_url,
-                        model=session.llm_model,
-                        log_fn=log,
-                        stop_event=stop,
-                    )
-                    log(f"  [LLM] Reviewing {len(analyzed)} finding(s)...", "dim")
-                    analyzed = reviewer.review(analyzed, file_contents)
-                    log(f"  [LLM] Review done -> {len(analyzed)} finding(s)", "dim")
-                except Exception as e:
-                    log(f"  [LLM] Review skipped: {e}", "dim")
-
-            return slug, analyzed, owner, pre_llm_count, None
-        except Exception as e:
-            return slug, None, owner, 0, f"scan error: {e}"
-        finally:
-            cleanup_clone(clone_dir)
-
-    total_pre_llm = 0
-    total_post_llm = 0
-    completed = 0
-
-    _session._active_pool = None
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        _session._active_pool = pool
-        futures = {pool.submit(_scan_one, slug): slug
-                   for slug in session.repo_slugs}
-        for fut in as_completed(futures):
-            if stop.is_set():
-                for f in futures: f.cancel()
-                break
-
-            slug, analyzed, bb_owner, pre_llm, skip_reason = fut.result()
-            completed += 1
-            session.progress    = completed
-            session.current_repo = slug
-
-            if analyzed is None:
-                reason_str = f": {skip_reason}" if skip_reason else ""
-                log(f"  SKIP {slug}: skipped{reason_str}", "err")
-                per_repo[slug] = None
-                session.per_repo = dict(per_repo)
-                continue
-
-            s1 = sum(1 for f in analyzed if f.get("severity") == 1)
-            s2 = sum(1 for f in analyzed if f.get("severity") == 2)
-            log(f"\nOK {slug} -> {len(analyzed)} findings  "
-                f"(Crit:{s1} High:{s2})", "info")
-            if s1:
-                log(f"  WARN {s1} Critical finding(s)!", "err")
-
-            total_pre_llm  += pre_llm
-            total_post_llm += len(analyzed)
-
-            for f in analyzed:
-                f["project_key"] = session.project_key
-                f["owner"]       = bb_owner
-                f["last_seen"]   = session.scan_id
-            all_findings.extend(analyzed)
-            per_repo[slug] = analyzed
-            session.per_repo  = dict(per_repo)
-            session.findings  = list(all_findings)
-
-    log("\n" + "=" * 58, "dim")
-    final = aggregator.process(all_findings)
-    session.findings = final
-    log(f"Total findings (deduped): {len(final)}", "hd")
-
-    session.scan_duration_s = int(time.time() - t_start)
-
-    # Reports
-    log("\nGenerating reports...", "dim")
-    report_paths: Dict[str, dict] = {}
-
-    # One report per scan regardless of repo count.
-    # Single repo: labelled by slug; multi-repo: labelled _ALL_ with repo_meta table.
-    scanned_slugs = [s for s in session.repo_slugs if per_repo.get(s) is not None]
-    for slug in session.repo_slugs:
-        if per_repo.get(slug) is None:
-            log(f"  {slug}: skipped (no findings recorded)", "dim")
-        elif not [f for f in final if f.get("repo") == slug]:
-            log(f"  {slug}: clean - no findings", "ok")
-
-    if not final:
-        log("  No findings - no report generated.", "dim")
-    else:
-        try:
-            dt_date   = datetime.now().strftime("%Y%m%d")
-            dt_time   = datetime.now().strftime("%H%M%S")
-            report_generated_at_utc = _utc_now_iso()
-            is_multi  = len(scanned_slugs) > 1
-            label     = ("ALL" if is_multi
-                         else (scanned_slugs[0] if scanned_slugs
-                               else session.repo_slugs[0]))
-            safe_name = f"AI_Scan_Report_{session.project_key}_{label}_{dt_date}_{dt_time}"
-
-            log("  Writing CSV report...", "dim")
-            cr = CSVReporter(output_dir=OUTPUT_DIR, scan_id=safe_name)
-            cp = cr.write_csv(final)
-            log(f"  Writing HTML report ({len(final)} finding(s))...", "dim")
-            if session.llm_url and session.llm_model:
-                log(f"  [Report] Generating LLM analysis for {len(final)} finding(s)...", "dim")
-
-            if is_multi:
-                # Build per-repo metadata table for header
-                repos_meta_list = [
-                    {
-                        "slug":   s,
-                        "owner":  repo_meta.get(s, {}).get("owner", "Unknown"),
-                        "branch": repo_meta.get(s, {}).get("branch") or "default",
-                        "commit": repo_meta.get(s, {}).get("commit", ""),
-                    }
-                    for s in session.repo_slugs
-                ]
-                report_meta = {
-                    "repo":           f"{len(session.repo_slugs)} repositories",
-                    "project_key":    session.project_key,
-                    "owner":          "",
-                    "branch":         "",
-                    "operator":       session.operator,
-                    "started_at_utc": session.started_at_utc,
-                    "completed_at_utc": report_generated_at_utc,
-                    "policy_version": session.policy_version,
-                    "tool_version":   session.tool_version,
-                    "repos_meta":     repos_meta_list,
-                    "scan_id":        session.scan_id,
-                    "delta":          {},
-                    "llm_model_info": session.llm_model_info,
-                    "scan_duration_s": session.scan_duration_s,
-                    "pre_llm_count":  total_pre_llm,
-                    "post_llm_count": total_post_llm,
-                }
-            else:
-                single_slug  = label
-                single_owner = next((f.get("owner","") for f in final), "Unknown")
-                delta_meta   = build_delta_meta(
-                    final, OUTPUT_DIR, session.project_key, single_slug)
-                report_meta = {
-                    "repo":           single_slug,
-                    "project_key":    session.project_key,
-                    "owner":          single_owner,
-                    "branch":         per_branch.get(single_slug, ""),
-                    "commit":         repo_meta.get(single_slug, {}).get("commit", ""),
-                    "operator":       session.operator,
-                    "started_at_utc": session.started_at_utc,
-                    "completed_at_utc": report_generated_at_utc,
-                    "policy_version": session.policy_version,
-                    "tool_version":   session.tool_version,
-                    "scan_id":        session.scan_id,
-                    "delta":          delta_meta,
-                    "llm_model_info": session.llm_model_info,
-                    "scan_duration_s": session.scan_duration_s,
-                    "pre_llm_count":  total_pre_llm,
-                    "post_llm_count": total_post_llm,
-                }
-
-            hr = HTMLReporter(
-                output_dir=OUTPUT_DIR,
-                scan_id=safe_name,
-                include_snippets=True,
-                meta=report_meta,
-            )
-            hp = hr.write(final, policy=policy,
-                          ollama_url=session.llm_url,
-                          ollama_model=session.llm_model,
-                          progress_fn=lambda i, n, cap: log(
-                              f"  [Report] LLM analysis {i}/{n}: {cap[:50]}...", "dim"))
-            report_paths["__all__"] = {
-                "csv":      str(Path(cp).resolve()),
-                "html":     str(Path(hp).resolve()),
-                "csv_name": Path(cp).name,
-                "html_name":Path(hp).name,
-            }
-            session.report_paths = dict(report_paths)
-            log(f"  OK Report: {Path(hp).name}", "ok")
-        except Exception as e:
-            log(f"  Report error: {e}", "err")
-
-    session.completed_at_utc = _utc_now_iso()
-    session.repo_details = {
-        slug: {
-            "owner": repo_meta.get(slug, {}).get("owner", "Unknown"),
-            "branch": repo_meta.get(slug, {}).get("branch") or "default",
-            "commit": repo_meta.get(slug, {}).get("commit", ""),
-        }
-        for slug in session.repo_slugs
-    }
-
-    skipped_all = all(v is None for v in per_repo.values()) and len(per_repo) > 0
-    if stop.is_set():
-        session.state = "stopped"
-    elif skipped_all:
-        session.state = "skipped"
-    else:
-        session.state = "done"
-    if stop.is_set():
-        log("\nScan stopped.", "hd")
-    elif skipped_all:
-        log("\nAll repositories were skipped.", "warn")
-    else:
-        log("\nScan complete.", "hd")
-    log(f"Duration: {session.scan_duration_s}s  |  "
-        f"Findings: {len(final)}", "info")
-
-    # Persist scan record to history sidecar
-    session.completed_at_utc = _utc_now_iso()
-    _save_history_record(session, final)
+    _sync_scan_service_paths()
+    _scan_service.run_scan(
+        session,
+        client=_client,
+        save_history_record=_save_history_record,
+    )
 
 
 # ── HTTP handler ──────────────────────────────────────────────────────────────
@@ -988,6 +512,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 HISTORY_FILE = str(p / "scan_history.json")
                 LOG_DIR      = str(p / "logs")
                 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+                _sync_scan_service_paths()
             except Exception as e:
                 return self._err(400, f"Invalid output directory: {e}")
         self._json({"ok": True, "output_dir": str(Path(OUTPUT_DIR).resolve())})

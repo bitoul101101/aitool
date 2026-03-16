@@ -66,5 +66,48 @@
     },
     "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_011701.log",
     "reports": {}
+  },
+  {
+    "scan_id": "20260317_011752",
+    "date": "20260317",
+    "time": "011752",
+    "project": "COGI",
+    "repos": [
+      "cogi-agent-evaluator"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 64,
+    "started_at_utc": "2026-03-16T23:17:52Z",
+    "completed_at_utc": "2026-03-16T23:21:36Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 15,
+    "sev": {
+      "critical": 13,
+      "high": 2,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {
+      "production": 15
+    },
+    "llm_model": "llama3:8b",
+    "repo_details": {
+      "cogi-agent-evaluator": {
+        "owner": "Shoham, Yarden",
+        "branch": "master",
+        "commit": "b1c4e3ee63f4c17bdd4e05ed80dae91e5a40051d"
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_011752.log",
+    "reports": {
+      "__all__": {
+        "csv": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_COGI_cogi-agent-evaluator_20260317_011857.csv",
+        "html": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_COGI_cogi-agent-evaluator_20260317_011857.html",
+        "csv_name": "ai_scan_AI_Scan_Report_COGI_cogi-agent-evaluator_20260317_011857.csv",
+        "html_name": "ai_scan_AI_Scan_Report_COGI_cogi-agent-evaluator_20260317_011857.html"
+      }
+    }
   }
 ]
