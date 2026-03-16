@@ -676,6 +676,24 @@ def test_allowed_origin_only_permits_local_app_hosts():
     assert srv._allowed_origin(f"http://localhost:{srv.APP_PORT}") == f"http://localhost:{srv.APP_PORT}"
     assert srv._allowed_origin("https://evil.example") is None
 
+
+def test_run_scan_with_no_repos_does_not_reference_demo_clone_dir():
+    import app_server as srv
+
+    session = srv.ScanSession()
+    session.scan_id = "20250316_010101"
+    session.project_key = "EMPTY"
+    session.repo_slugs = []
+    session.total = 0
+    session.state = "running"
+
+    with patch.object(srv, "_save_history_record", lambda session, findings: None):
+        srv._run_scan(session)
+
+    assert session.state == "done"
+    assert session.findings == []
+    assert session.repo_details == {}
+
 if __name__ == "__main__":
     tests = [
         # Original tests

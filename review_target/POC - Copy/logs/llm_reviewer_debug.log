@@ -1,0 +1,215 @@
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[{"verdict":"dismiss","reason":"Pattern appears in a documentation file, and the snippet is unavailable, indicating a false positive.","confidence":100},{"verdict":"dismiss","reason":"Pattern appears in a documentation file, and the snippet is unavailable, indicating a false positive.","confidence":100},{"verdict":"dismiss","reason":"Pattern appears in a documentation file, and the snippet is unavailable, indicating a false positive.","confidence":100}]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[[{"verdict": "dismiss", "reason": "Pattern appears in a code comment that describes the pattern", "confidence": 100}, {"verdict": "dismiss", "reason": "Pattern appears in a code comment that describes the pattern", "confidence": 100}, {"verdict": "dismiss", "reason": "Pattern appears in a code comment that describes the pattern", "confidence": 100}]]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[[{"verdict": "dismiss", "reason": "Matches in a code comment that describes the pattern", "confidence": 100}, {"verdict": "dismiss", "reason": "Matches in a code comment that describes the pattern", "confidence": 100}, {"verdict": "dismiss", "reason": "Matches in a code comment that describes the pattern", "confidence": 100}]]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100},
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100},
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100}
+]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100},
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100},
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100}
+]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100},
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100},
+  {"verdict": "dismiss", "reason": "snippet is '(source not available)'", "confidence": 100}
+]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[
+  {
+    "verdict": "downgrade",
+    "reason": "Context is 'docs' and snippet is '(source not available)', so downgrade to LOW",
+    "confidence": 80
+  }
+]
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "First model's dismissal relied solely on snippet unavailability, but this doesn't guarantee the finding is a false positive.",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "Availability of the snippet does not justify dismissing a Critical finding, especially in a documentation file.",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "Unavailability of snippet doesn't justify dismissal, as the context and file suggest potential risk",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "First model's reasoning that the pattern appears in a code comment is not sufficient to dismiss the finding, as it's a Critical risk and the snippet's absence doesn't provide enough context.",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+  "verdict": "keep",
+  "reason": "The first model's reason for dismissal is not convincing, as the snippet is not available to confirm it's a code comment.",
+  "confidence": 90
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "Dismissal reason cites a code comment, which is insufficient for a Critical severity finding",
+"confidence": 90
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+  "verdict": "dismiss",
+  "reason": "The dismissal is justified because the match is in a code comment, not a code snippet, making it unlikely to be a real injection vulnerability.",
+  "confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+  "verdict": "keep",
+  "reason": "The first model's dismissal due to a code comment is not convincing, as the presence of Jinja2 syntax in a template injection pattern is a real risk.",
+  "confidence": 90
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "dismiss",
+"reason": "The first model correctly dismissed this finding due to it being a code comment describing the pattern, not an actual template injection vulnerability.",
+"confidence": 95
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "The first model's dismissal relies solely on the snippet being unavailable, which is not a sufficient reason to dismiss a Critical finding.",
+"confidence": 100
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+  "verdict": "dismiss",
+  "reason": "The first model correctly identified the snippet as unavailable, which eliminates the potential risk.",
+  "confidence": 90
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "dismiss",
+"reason": "The first model correctly dismissed this finding because the snippet is not available, making it impossible to determine the actual code being executed.",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "The first model's dismissal due to snippet being '(source not available)' is insufficient, as this could be a placeholder for injected content.",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+  "verdict": "dismiss",
+  "reason": "The first model correctly dismissed this finding since the snippet is unavailable.",
+  "confidence": 100
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "dismiss",
+"reason": "First model's dismissal is justified as the snippet being '(source not available)' implies no actual template injection",
+"confidence": 95
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+  "verdict": "keep",
+  "reason": "The first model's dismissal is unjustified due to the critical nature of the finding and the lack of concrete reasoning provided.",
+  "confidence": 95
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "Snippet being unavailable does not provide sufficient context to justify dismissal, as the pattern name suggests a real risk.",
+"confidence": 90
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "The first model's dismissal is insufficient as the base severity is Critical, and a real template injection risk is present.",
+"confidence": 100
+}

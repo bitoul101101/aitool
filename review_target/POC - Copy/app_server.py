@@ -595,9 +595,6 @@ def _run_scan(session: ScanSession):
     log(f"Total findings (deduped): {len(final)}", "hd")
 
     session.scan_duration_s = int(time.time() - t_start)
-    session.repo_details = {
-        slug: {"owner": "demo", "branch": "main", "commit": _git_head_commit(clone_dir)}
-    }
 
     # Reports
     log("\nGenerating reports...", "dim")
@@ -895,6 +892,9 @@ def _run_demo_scan(session: ScanSession, demo_repo: dict):
     total_post_llm = len(final)
     session.findings = final
     session.scan_duration_s = int(time.time() - t_start)
+    session.repo_details = {
+        slug: {"owner": "demo", "branch": "main", "commit": _git_head_commit(clone_dir)}
+    }
     log("─" * 58, "dim")
     log(f"✓ Done — {len(final)} finding(s) in {session.scan_duration_s}s", "ok")
     session.state = "done"
