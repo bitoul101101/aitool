@@ -1,0 +1,2043 @@
+"""
+HTML Report Generator
+AI Security & Compliance Monitoring
+"""
+
+from pathlib import Path
+from typing import List, Dict, Any
+from collections import defaultdict, Counter
+import html as html_mod
+from datetime import datetime
+
+SEV_COLOR = {1: "#C00000", 2: "#e05c00", 3: "#c87800", 4: "#5a8a3a"}
+SEV_LABEL = {1: "Critical", 2: "High", 3: "Medium", 4: "Low"}
+
+POLICY_COLOR = {
+    "CRITICAL":   "#C00000",
+    "BANNED":     "#C00000",
+    "RESTRICTED": "#e05c00",
+    "REVIEW":     "#c87800",
+    "ALLOWED":    "#2e7d32",
+    "APPROVED":   "#2e7d32",
+}
+POLICY_DESC = {
+    "CRITICAL":   "Hardcoded secret — rotate immediately.",
+    "BANNED":     "Provider is explicitly banned by policy.",
+    "RESTRICTED": "Requires explicit approval before use.",
+    "REVIEW":     "Not yet assessed — review and document.",
+    "APPROVED":   "On the approved provider list.",
+    "ALLOWED":    "Matches an internal allowlist entry.",
+}
+
+PROVIDER_DISPLAY = {
+    # ── Approved AI Tools Registry (official names) ──────────────────
+    "microsoft_365_copilot_chat":  "Microsoft 365 Copilot Chat",
+    "microsoft_copilot_studio":    "Microsoft Copilot Studio",
+    "github_copilot_enterprise":   "GitHub Copilot – Enterprise Edition",
+    "openai_enterprise":           "OpenAI API – Enterprise",
+    "openai":                      "OpenAI API – Enterprise",
+    "chatgpt_enterprise":          "ChatGPT – Enterprise Edition",
+    "google_gemini_enterprise":    "Google Gemini – Enterprise Edition",
+    "google_ai_studio_enterprise": "Google AI Studio – Enterprise Edition",
+    "google_gemini_vertexai":      "Google Gemini – Enterprise Edition",
+    "grammarly_enterprise":        "Grammarly – Enterprise Edition",
+    "synthesia_enterprise":        "Synthesia – Enterprise Edition",
+    "cursor_ai_enterprise":        "Cursor AI – Enterprise Edition",
+    "gamma_ai_business":           "Gamma AI – Business Plan",
+    "adobe_firefly_enterprise":    "Adobe Firefly – Enterprise Edition",
+    "notion_enterprise":           "Notion – Enterprise Edition",
+    "anthropic":                   "Anthropic Claude – Enterprise Edition",
+    "anthropic_claude_code":       "Anthropic Claude Code – Enterprise Edition",
+    # ── Restricted / unapproved providers ────────────────────────────
+    "azure_openai":                "Azure OpenAI",
+    "cohere":                      "Cohere API",
+    "cohere_embeddings":           "Cohere Embeddings",
+    "huggingface_hub":             "HuggingFace Hub",
+    "hf_embeddings":               "HuggingFace Embeddings",
+    "mistral_ai":                  "Mistral AI",
+    "groq":                        "Groq API",
+    "together_ai":                 "Together AI",
+    "direct_http_ai":              "Direct HTTP → AI endpoint",
+    "langchain":                   "LangChain",
+    "llama_index":                 "LlamaIndex (RAG)",
+    "transformers":                "HuggingFace Transformers",
+    "vllm":                        "vLLM (local server)",
+    "llama_cpp":                   "llama.cpp (local)",
+    "ctransformers":               "CTransformers (local)",
+    "ollama":                      "Ollama (local LLM)",
+    "exllamav2":                   "ExLlamaV2 (local)",
+    "auto_gptq":                   "AutoGPTQ (quantized)",
+    "openai_embeddings":           "OpenAI Embeddings",
+    "sentence_transformers":       "Sentence Transformers",
+    "google_embeddings":           "Google Embeddings",
+    "faiss":                       "FAISS (vector index)",
+    "chromadb":                    "ChromaDB",
+    "qdrant":                      "Qdrant",
+    "weaviate":                    "Weaviate",
+    "milvus":                      "Milvus",
+    "pgvector":                    "pgvector",
+    "elasticsearch_vector":        "Elasticsearch KNN",
+    "pinecone":                    "Pinecone",
+    "rag_pattern":                 "RAG retrieval pattern",
+    "peft_lora":                   "PEFT / LoRA fine-tuning",
+    "bitsandbytes":                "bitsandbytes (quantization)",
+    "accelerate":                  "HuggingFace Accelerate",
+    "trl":                         "TRL (RLHF framework)",
+    "transformers_trainer":        "HuggingFace Trainer",
+    "generic_finetune":            "Fine-tuning script",
+    "pytorch":                     "PyTorch",
+    "tensorflow":                  "TensorFlow",
+    "scikit_learn":                "scikit-learn",
+    "xgboost":                     "XGBoost",
+    "lightgbm":                    "LightGBM",
+    "hardcoded_key":               "Hardcoded API key / secret",
+    "openai_key_pattern":          "OpenAI key pattern (sk-...)",
+    "anthropic_key_pattern":       "Anthropic key pattern (sk-ant-...)",
+    "prompt_injection_risk":       "Prompt injection risk",
+    "logging_risk":                "Prompt/response logging risk",
+    "unsafe_code_exec":            "Unsafe code execution near AI",
+    "sql_injection_risk":          "LLM-generated SQL injection risk",
+    "weak_config":                 "Weak AI config (unbounded tokens)",
+    "debug_mode":                  "Debug mode in production",
+    "notebook_output_secret":      "Secret in notebook output",
+    # Enhancement patterns
+    "entropy_secret":              "High-entropy secret (unknown format)",
+    "dynamic_import_ai":           "Dynamic AI import (importlib)",
+    "dynamic_require_ai":          "Dynamic AI require() call",
+    "dynamic_attr_ai":             "Dynamic attribute access on AI client",
+    "file_content_to_llm":         "File content → LLM (exfil risk)",
+    "dataframe_to_llm":            "DataFrame → LLM (exfil risk)",
+    "env_vars_to_llm":             "Env variables → LLM (exfil risk)",
+    "db_results_to_llm":           "DB query results → LLM (exfil risk)",
+    "http_response_to_llm":        "HTTP response → LLM (injection risk)",
+    "unsafe_torch_load":           "Unsafe torch.load() (no weights_only)",
+    "unsafe_pickle_model":         "Unsafe pickle/joblib model load",
+    "remote_model_load":           "Remote model load via from_pretrained()",
+    "unsafe_tf_load":              "Unsafe TensorFlow model load",
+    # Task 4: history findings
+    "cross_file_secret":           "Cross-file secret import",
+    # Task 5: cross-file
+    "minified_bundle_secret":      "Hardcoded key in minified bundle",
+    # Task 6: minified bundles
+    "aws_cdk_ai":                  "AWS AI Service (CDK)",
+    "pulumi_ai":                   "Cloud AI Resource (Pulumi)",
+    "helm_ai_values":              "AI Config in Helm values",
+    "ansible_ai":                  "AI Dependency / Secret (Ansible)",
+    "k8s_ai_manifest":             "AI Serving / Secret (Kubernetes)",
+    # JS/TS patterns
+    "openai_js":                   "OpenAI JS/TS SDK",
+    "anthropic_js":                "Anthropic JS/TS SDK",
+    "google_ai_js":                "Google AI JS/TS SDK",
+    "vercel_ai_sdk":               "Vercel AI SDK",
+    "langchain_js":                "LangChain JS/TS",
+    "js_env_key_ref":              "API key via process.env",
+    "js_hardcoded_key":            "Hardcoded key in JS/TS",
+    "nextjs_ai_route":             "Next.js AI route handler",
+    # Config patterns
+    "env_file_key":                "AI key in .env file",
+    "docker_compose_key":          "AI key in docker-compose",
+    "terraform_ai_resource":       "Cloud AI resource (Terraform)",
+    "k8s_model_serving":           "Model serving (Kubernetes)",
+    "dependency_declaration":      "AI library dependency",
+    "ci_secret_ref":               "AI key in CI/CD secret",
+    "model_name_in_config":        "Hardcoded model name in config",
+    # Agent / gateway patterns
+    "litellm":                     "LiteLLM proxy/gateway",
+    "portkey":                     "Portkey AI gateway",
+    "helicone":                    "Helicone observability proxy",
+    "autogen":                     "Microsoft AutoGen",
+    "crewai":                      "CrewAI agent framework",
+    "semantic_kernel":             "Microsoft Semantic Kernel",
+    "langgraph":                   "LangGraph (stateful agents)",
+    "openai_assistants":           "OpenAI Assistants / Function Calling",
+    "nocode_ai_platform":          "No-code AI platform",
+    "aws_bedrock":                 "AWS Bedrock",
+    "azure_ai_foundry":            "Azure AI Foundry",
+    "microsoft_365_copilot_chat":  "Microsoft 365 Copilot Chat",
+    "microsoft_copilot_studio":    "Microsoft Copilot Studio",
+    "github_copilot_enterprise":   "GitHub Copilot (Enterprise)",
+    "chatgpt_enterprise":          "ChatGPT (Enterprise)",
+    "grammarly_enterprise":        "Grammarly (Enterprise)",
+    "synthesia_enterprise":        "Synthesia (Enterprise)",
+    "cursor_ai_enterprise":        "Cursor AI (Enterprise)",
+    "gamma_ai_business":           "Gamma AI (Business)",
+    "adobe_firefly_enterprise":    "Adobe Firefly (Enterprise)",
+    "notion_enterprise":           "Notion (Enterprise)",
+}
+
+
+def fp(raw: str) -> str:
+    """Format provider slug → human readable."""
+    return PROVIDER_DISPLAY.get(raw, raw.replace("_", " ").title())
+
+
+class HTMLReporter:
+
+    def __init__(self, output_dir: str, scan_id: str,
+                 include_snippets: bool = True, meta: dict = None):
+        self.output_dir = Path(output_dir)
+        self.scan_id    = scan_id
+        self.include_snippets = include_snippets
+        self.meta = meta or {}   # repo, project_key, owner, scan_id
+
+    def write(self, findings: List[Dict[str, Any]], policy: dict = None,
+              ollama_url: str = "", ollama_model: str = "",
+              progress_fn=None) -> str:
+        path = self.output_dir / f"ai_scan_{self.scan_id}.html"
+        # Pre-bake LLM detail answers at report-write time if Ollama is available
+        llm_details = {}
+        if ollama_url and ollama_model:
+            try:
+                llm_details = self._fetch_llm_details(
+                    findings, ollama_url.rstrip("/"), ollama_model,
+                    progress_fn=progress_fn)
+            except Exception:
+                pass  # LLM unavailable — report still generates without answers
+        path.write_text(self._render(findings, policy or {}, llm_details),
+                        encoding="utf-8")
+        return str(path)
+
+    # ── Pre-bake LLM answers at write time ────────────────────────
+    def _fetch_llm_details(self, findings: list, base_url: str,
+                           model: str, progress_fn=None) -> dict:
+        """
+        Call Ollama once per finding at report-write time.
+        Returns {finding_key: rendered_html_str}.
+        Silently stores a placeholder on timeout or error.
+        """
+        import urllib.request, urllib.error, json as _json, html as _html
+
+        endpoint = base_url + "/api/chat"
+        timeout  = 60          # seconds per finding
+        results  = {}
+
+        _SYSTEM_PROMPT = (
+            "You are a security engineer writing concise, actionable finding reports "
+            "for developers. Follow all section headings exactly as instructed. "
+            "Return plain text only — no extra commentary before or after the sections."
+        )
+
+        def _lang_tag(filename: str) -> str:
+            ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+            return {
+                "py": "python", "js": "javascript", "ts": "typescript",
+                "jsx": "javascript", "tsx": "typescript", "java": "java",
+                "go": "go", "rs": "rust", "rb": "ruby", "cs": "csharp",
+                "yaml": "yaml", "yml": "yaml", "sh": "bash",
+                "tf": "hcl", "json": "json",
+            }.get(ext, ext or "text")
+
+        def _build_prompt(f: dict) -> str:
+            sev     = {1:"Critical",2:"High",3:"Medium",4:"Low"}.get(
+                        f.get("severity", 4), str(f.get("severity", "")))
+            cat     = f.get("ai_category", "")
+            risk    = f.get("provider_or_lib", "")
+            cap     = f.get("capability", "")
+            fname   = f.get("file", "")
+            line    = f.get("line", "")
+            desc    = f.get("description", "")
+            snippet = str(f.get("snippet", "") or "")[:300]
+            lang    = _lang_tag(fname)
+            loc     = f"{fname}:{line}" if line else fname
+            return (
+                "You are a security engineer. Write a short, structured finding report.\n"
+                "RULES:\n"
+                "- Use ONLY the four headings below, in order, each on its own line.\n"
+                "- Do NOT add any text before the first heading.\n"
+                "- Do NOT repeat yourself. Each sentence must be unique.\n"
+                "- Stop immediately after the References section.\n\n"
+                f"FINDING:\n"
+                f"Severity: {sev} | Category: {cat} | Pattern: {risk}\n"
+                f"Capability: {cap} | File: {loc}\n"
+                + (f"Description: {desc}\n" if desc else "")
+                + (f"Snippet:\n```{lang}\n{snippet}\n```\n" if snippet else "")
+                + "\n## Why It's Problematic\n"
+                "Write 2-3 sentences only. State the attack class (e.g. SQL injection, RCE). "
+                "Reference the specific code pattern. Do not repeat.\n\n"
+                "## How to Fix It\n"
+                "Write exactly 3 bullet points starting with -\n\n"
+                "## Secure Code Example\n"
+                f"Write one corrected code block fenced with ```{lang}. "
+                "Keep it under 15 lines.\n\n"
+                "## References\n"
+                "Write 1-2 plain HTTPS URLs (OWASP, CWE, or CVE). Then STOP.\n"
+            )
+
+        def _render_html(raw: str, placeholder: str = "") -> str:
+            """Convert LLM markdown response to safe HTML string."""
+            import html as _h, re as _re
+            if not raw.strip():
+                return (f'<div class="detail-panel">'
+                        f'<p style="color:#f97316;font-size:12px">'
+                        f'{_h.escape(placeholder)}</p></div>')
+
+            # ── Named section extraction (robust against positional drift) ──
+            HEADINGS = [
+                ("why",  _re.compile(r'^##\s+why\b',        _re.I)),
+                ("fix",  _re.compile(r'^##\s+how\b',        _re.I)),
+                ("code", _re.compile(r'^##\s+secure\b',     _re.I)),
+                ("refs", _re.compile(r'^##\s+ref',          _re.I)),
+            ]
+            slots = {"why": [], "fix": [], "code": [], "refs": []}
+            current = None
+            for line in raw.split("\n"):
+                matched = False
+                for name, pat in HEADINGS:
+                    if pat.match(line.strip()):
+                        current = name
+                        matched = True
+                        break
+                if not matched and current:
+                    slots[current].append(line)
+
+            def _dedup_sentences(text: str) -> str:
+                """Remove repeated sentences (model loop artifact)."""
+                seen, out = set(), []
+                for sent in _re.split(r'(?<=[.!?])\s+', text.strip()):
+                    key = sent.strip().lower()[:80]
+                    if key and key not in seen:
+                        seen.add(key)
+                        out.append(sent)
+                return " ".join(out)
+
+            def prose(lines):
+                text = _dedup_sentences(" ".join(l for l in lines if l.strip()))
+                return (f'<p style="font-size:13px;line-height:1.6;margin:6px 0 12px">'
+                        f'{_h.escape(text)}</p>') if text else ""
+
+            def bullets(lines):
+                _bullet_re = _re.compile(r'^[\-\*\u2022\u2013\u2014\u00b7]\s+|^\d+[\.\)]\s+')
+                # Also strip lines that are ONLY bullet chars / punctuation after stripping
+                _debris_re = _re.compile(r'^[\-\*\u2022\u2013\u2014\u00b7\.\,\:\;]+$')
+                def _strip(s):
+                    # Loop until stable — handles "* - text", "- * text" etc.
+                    prev = None
+                    while prev != s:
+                        prev = s
+                        s = _bullet_re.sub("", s).strip()
+                    return s
+                items = [_strip(l.strip()) for l in lines if l.strip()]
+                # Remove empty, single-char, or pure-punctuation debris lines
+                items = [i for i in items if i and len(i) > 1 and not _debris_re.match(i)]
+                if not items:
+                    return prose(lines)
+                return ('<ul style="list-style:disc;margin:4px 0 8px 18px;padding:0">'
+                        + "".join(f"<li>{_h.escape(i)}</li>" for i in items)
+                        + "</ul>")
+
+            def code_block(lines):
+                text = "\n".join(lines)
+                stripped = _re.sub(r"```[\w]*\n?", "", text).replace("```", "").strip()
+                return f"<pre>{_h.escape(stripped)}</pre>" if stripped else ""
+
+            def ref_links(lines):
+                links = [l.strip() for l in lines if l.strip().startswith("http")]
+                if not links:
+                    return prose(lines)
+                return "".join(
+                    f'<a href="{_h.escape(u)}" target="_blank" '
+                    f'style="display:block;font-size:12px;color:var(--pur2);'
+                    f'word-break:break-all">{_h.escape(u)}</a>'
+                    for u in links)
+
+            why_h  = prose(slots["why"])
+            fix_h  = bullets(slots["fix"])
+            code_h = code_block(slots["code"])
+            ref_h  = ref_links(slots["refs"])
+
+            # Fallback: if named parsing found nothing, try scanning raw for a fenced block
+            if not code_h:
+                m = _re.search(r"```[\w]*\n(.*?)```", raw, _re.DOTALL)
+                if m:
+                    code_h = f"<pre>{_h.escape(m.group(1).strip())}</pre>"
+
+            any_c = why_h or fix_h or code_h
+            return (
+                f'<div class="detail-panel">'
+                + (f'<h4>⚠️ Why It\'s Problematic</h4>{why_h}'
+                   f'<h4>🔧 How to Fix It</h4>{fix_h}'
+                   + (f'<h4>✅ Secure Code Example</h4>{code_h}' if code_h else "")
+                   + (f'<h4>📚 References</h4>{ref_h}' if ref_h else "")
+                   if any_c else
+                   f'<pre style="white-space:pre-wrap;font-size:12px;'
+                   f'color:var(--dim)">{_h.escape(raw.strip())}</pre>')
+                + "</div>"
+            )
+
+        def _key(f: dict) -> str:
+            return f"{f.get('file','')}:{f.get('line','')}:{f.get('provider_or_lib','')}"
+
+        n_total = len(findings)
+        for i, f in enumerate(findings, 1):
+            key    = _key(f)
+            cap    = f.get("capability", f.get("provider_or_lib", ""))
+            if progress_fn:
+                try:
+                    progress_fn(i, n_total, cap)
+                except Exception:
+                    pass
+            prompt = _build_prompt(f)
+            body   = _json.dumps({
+                "model":   model,
+                "messages": [
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user",   "content": prompt},
+                ],
+                "stream":  False,
+                "options": {
+                    "num_predict":    1024,   # enough for 4 complete sections
+                    "num_ctx":        2048,
+                    "temperature":    0.1,
+                    "repeat_penalty": 1.2,    # prevents repetition loops
+                },
+            }).encode("utf-8")
+            try:
+                req  = urllib.request.Request(
+                    endpoint,
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    data    = _json.loads(resp.read().decode("utf-8"))
+                    content = (data.get("message") or {}).get("content", "") or \
+                              data.get("response", "")
+                results[key] = _render_html(content)
+            except Exception as exc:
+                results[key] = _render_html(
+                    "", f"⚠ LLM unavailable ({model}): {exc}")
+        return results
+
+    def _render(self, findings, policy, llm_details=None):
+        llm_details = llm_details or {}
+        stats = self._stats(findings)
+        delta = self.meta.get("delta", {})
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AI Security &amp; Compliance Monitoring — {self.scan_id}</title>
+{self._css()}
+{self._config_js(llm_details)}
+</head>
+<body>
+<div class="wrap">
+  {self._header(findings)}
+  {self._section_delta(findings, delta)}
+  {self._section_summary(stats, findings, policy)}
+  {self._section_findings(findings, delta)}
+  {self._section_remediation(findings)}
+  {self._footer()}
+</div>
+{self._js()}
+</body>
+</html>"""
+
+    def _config_js(self, llm_details=None):
+        """Embed scan-time config and pre-baked LLM detail answers as JS constants."""
+        import json as _json
+        llm_info = self.meta.get("llm_model_info") or {}
+        model    = llm_info.get("name", "")
+        details_json = _json.dumps(llm_details or {})
+        return (f'<script>\n'
+                f'window.OLLAMA_URL    = "/ollama";\n'
+                f'window.OLLAMA_MODEL  = {_json.dumps(model)};\n'
+                f'window._LLM_DETAILS  = {details_json};\n'
+                f'</script>')
+
+    # ── Stats ──────────────────────────────────────────────────────
+    def _stats(self, findings):
+        by_sev    = Counter(f["severity"] for f in findings)
+        by_cat    = Counter(f.get("ai_category","") for f in findings)
+        by_repo   = Counter(f["repo"] for f in findings)
+        # repo → project_key mapping
+        repo_proj = {f["repo"]: f.get("project_key", "") for f in findings}
+        return {
+            "total":    len(findings),
+            "by_sev":   by_sev,
+            "by_cat":   dict(by_cat),
+            "by_repo":  dict(by_repo),
+            "repo_proj":repo_proj,
+            "critical": by_sev.get(1, 0),
+            "high":     by_sev.get(2, 0),
+            "medium":   by_sev.get(3, 0),
+            "low":      by_sev.get(4, 0),
+            "repos":    len(by_repo),
+            "findings": findings,
+        }
+
+    # ── CSS ────────────────────────────────────────────────────────
+    def _css(self):
+        return """<style>
+:root{
+  --red:#C00000;--ora:#e05c00;--yel:#c87800;--grn:#2e7d32;--lgrn:#5a8a3a;
+  --pur:#3b2a7a;--pur2:#5540aa;--pur3:#e8e4ff;
+  --bg:#f3f4f8;--card:#fff;--bdr:#dde1ea;--txt:#1a1d2e;--dim:#6b7280;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
+     color:var(--txt);font-size:14px;line-height:1.5;}
+.wrap{max-width:1380px;margin:0 auto;padding:26px 22px;}
+
+/* ══════════════════════════════════════════════════════
+   HEADER
+   ══════════════════════════════════════════════════════ */
+.hdr{
+  background:linear-gradient(135deg,#1a0545 0%,#2d0e7a 50%,#3d1599 100%);
+  border-radius:12px;margin-bottom:24px;overflow:hidden;
+  box-shadow:0 4px 20px rgba(30,5,100,.5);
+  border:1px solid rgba(255,255,255,.12);
+}
+
+/* risk accent bar */
+.hdr-accent{height:3px;background:#7c4dff;}
+.hdr.risk-crit .hdr-accent{background:linear-gradient(90deg,#e53935,#ff6f60);}
+.hdr.risk-high .hdr-accent{background:linear-gradient(90deg,#fb8c00,#ffd54f);}
+.hdr.risk-med  .hdr-accent{background:linear-gradient(90deg,#fdd835,#fff59d);}
+
+/* title band — compact single row */
+.hdr-band{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:11px 22px 10px;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.hdr-band-icon{font-size:20px;line-height:1;flex-shrink:0;}
+.hdr-band-title{
+  font-size:19px;font-weight:800;color:#fff;
+  letter-spacing:-.3px;line-height:1;text-align:center;
+}
+
+/* body: meta + stats side by side */
+.hdr-body{display:flex;align-items:stretch;gap:0;}
+
+/* ── Left: scan context ── */
+.hdr-meta{
+  flex:1;min-width:0;padding:10px 22px;
+  display:grid;grid-template-columns:auto 1fr;
+  column-gap:14px;row-gap:4px;align-content:start;
+  border-right:1px solid rgba(255,255,255,.1);
+}
+.hdr-meta-key{
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:rgba(255,255,255,.55);white-space:nowrap;padding-top:2px;
+}
+.hdr-meta-val{
+  font-size:12px;font-weight:600;color:rgba(255,255,255,.92);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.hdr-meta-val.mono{
+  font-family:'Cascadia Code',Consolas,monospace;
+  font-size:11px;font-weight:400;color:rgba(255,255,255,.78);
+}
+/* language chips */
+.lang-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.lang-chip{
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);
+  border-radius:4px;padding:1px 7px;
+  font-size:10px;font-weight:600;color:rgba(255,255,255,.88);
+  font-family:'Cascadia Code',Consolas,monospace;white-space:nowrap;
+}
+
+/* ── Right: stat strip — 4 horizontal counters ── */
+.hdr-stats{
+  flex-shrink:0;width:360px;
+  padding:10px 16px;
+  display:flex;flex-direction:column;justify-content:center;gap:6px;
+}
+.hdr-stat{
+  display:flex;align-items:center;gap:10px;
+  padding:5px 10px 5px 12px;
+  border-left:3px solid rgba(255,255,255,.18);
+  border-radius:0 6px 6px 0;
+  background:rgba(255,255,255,.05);
+}
+.hdr-stat-label{
+  flex:1;font-size:11px;font-weight:500;
+  color:rgba(255,255,255,.7);white-space:nowrap;
+}
+.hdr-stat-val{
+  font-size:20px;font-weight:800;line-height:1;color:#fff;
+  white-space:nowrap;text-align:right;min-width:36px;
+}
+.hdr-stat-sub{
+  font-size:10px;color:rgba(255,255,255,.5);white-space:nowrap;
+  text-align:right;margin-top:1px;display:none;
+}
+/* accent colours */
+.hdr-stat.s-warn { border-left-color:#ffb74d; }
+.hdr-stat.s-warn .hdr-stat-val { color:#ffb74d; }
+.hdr-stat.s-crit { border-left-color:#ef9a9a; }
+.hdr-stat.s-crit .hdr-stat-val { color:#ef9a9a; }
+.hdr-stat.s-ok   { border-left-color:#81c995; }
+.hdr-stat.s-ok   .hdr-stat-val { color:#81c995; }
+.hdr-stat.s-blue { border-left-color:#90caf9; }
+.hdr-stat.s-blue .hdr-stat-val { color:#90caf9; }
+
+/* ── KPI bar ── */
+.kpis{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:26px;}
+.kpi{background:var(--card);border-radius:11px;padding:16px 20px;flex:1;
+     min-width:120px;box-shadow:0 1px 5px rgba(0,0,0,.07);
+     border-top:4px solid var(--pur);}
+.kpi.k1{border-color:var(--red);}
+.kpi.k2{border-color:var(--ora);}
+.kpi.k3{border-color:var(--yel);}
+.kpi.k4{border-color:var(--lgrn);}
+.kpi .n{font-size:32px;font-weight:700;line-height:1.1;}
+.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+         color:var(--dim);margin-top:3px;}
+
+/* ── Cards ── */
+.card{background:var(--card);border-radius:11px;padding:20px 24px;
+      margin-bottom:20px;box-shadow:0 1px 5px rgba(0,0,0,.07);}
+h2{font-size:19px;font-weight:700;margin:0 0 16px;color:var(--txt);}
+h3{font-size:15px;font-weight:600;margin:12px 0 9px;color:var(--txt);}
+section{margin-bottom:28px;}
+
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+th{background:var(--pur);color:#fff;padding:9px 13px;text-align:left;
+   font-size:11px;font-weight:600;text-transform:uppercase;
+   letter-spacing:.4px;white-space:nowrap;}
+td{padding:8px 13px;border-bottom:1px solid var(--bdr);vertical-align:top;
+   word-wrap:break-word;overflow-wrap:break-word;}
+tr:nth-child(even) td{background:#fafbfd;}
+tr:hover td{background:#f0eeff;}
+/* Header repo table — no zebra, no hover highlight */
+.hdr tr:nth-child(even) td{background:transparent;}
+.hdr tr:hover td{background:transparent;}
+.num-cell{text-align:center;font-weight:600;}
+
+/* ── Badges ── */
+.b{display:inline-block;padding:2px 8px;border-radius:4px;
+   font-size:11px;font-weight:700;letter-spacing:.2px;color:#fff;}
+.b1{background:var(--red);}  .b2{background:var(--ora);}
+.b3{background:var(--yel);}  .b4{background:var(--lgrn);}
+.b-CRITICAL,.b-BANNED{background:var(--red);}
+.b-RESTRICTED{background:var(--ora);}
+.b-REVIEW{background:var(--yel);}
+.b-ALLOWED,.b-APPROVED{background:var(--grn);}
+
+/* ── Policy status cards (summary) ── */
+.ps-card{border-radius:8px;padding:7px 12px;flex:1;min-width:100px;
+         border:2px solid transparent;text-align:center;}
+.ps-card .psc{font-size:20px;font-weight:700;line-height:1.1;}
+.ps-card .psl{font-size:10px;font-weight:700;text-transform:uppercase;
+              letter-spacing:.5px;margin-top:2px;}
+.ps-card .psd{font-size:10px;color:var(--dim);margin-top:3px;line-height:1.3;}
+
+/* ── Provider tags (compact) ── */
+.tag-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+.tag-a{background:#e8f5e9;border:1px solid #a5d6a7;color:#2e7d32;
+       padding:2px 9px;border-radius:12px;font-size:11px;font-weight:500;}
+.tag-r{background:#fff3e0;border:1px solid #ffcc80;color:#bf4000;
+       padding:2px 9px;border-radius:12px;font-size:11px;font-weight:500;}
+
+/* ── Compact table (summary section) ── */
+table.compact{table-layout:fixed;width:100%;}
+table.compact td{padding:2px 8px;border-bottom:1px solid #f0f1f5;overflow:hidden;}
+table.compact tr:nth-child(even) td{background:none;}
+table.compact tr:hover td{background:#f7f5ff;}
+table.compact tr:last-child td{border-top:2px solid var(--bdr);border-bottom:none;
+                                padding-top:5px;padding-bottom:4px;}
+
+/* ── Sortable column headers ── */
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+th.sortable:hover{background:var(--pur2);}
+th.sort-asc::after{content:' ▲';font-size:9px;opacity:.85;}
+th.sort-desc::after{content:' ▼';font-size:9px;opacity:.85;}
+.snip{background:#1e1e2e;color:#cdd6f4;padding:9px 13px;border-radius:6px;
+      font-family:'Cascadia Code',Consolas,monospace;font-size:11px;
+      overflow-x:auto;overflow-y:auto;white-space:pre;
+      max-height:180px;min-width:320px;margin-top:5px;display:block;}
+.snip-hl{background:#ffdd57;color:#1e1e2e;border-radius:2px;padding:0 1px;
+         font-weight:700;}
+.fp{font-family:'Cascadia Code',Consolas,monospace;font-size:11px;color:var(--dim);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fp .snip{white-space:pre;overflow-x:auto;max-width:100%;}
+
+/* ── Clickable finding row ── */
+#ft-body tr[data-sev]{cursor:pointer;}
+#ft-body tr[data-sev]:hover td{background:#ede9ff !important;}
+#ft-body tr.row-expanded td{background:#f0eeff !important;}
+
+/* ── Detail panel row ── */
+tr.detail-row td{
+  padding:0 !important;
+  border-bottom:2px solid var(--pur2) !important;
+  background:#faf9ff !important;
+}
+tr.detail-row:hover td{background:#faf9ff !important;}
+.detail-panel{
+  padding:18px 24px;
+  font-size:13px;line-height:1.65;
+  border-left:4px solid var(--pur2);
+  background:#faf9ff;
+}
+.detail-panel h4{
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--pur2);margin:14px 0 5px;
+}
+.detail-panel h4:first-child{margin-top:0;}
+.detail-panel ul{list-style:disc;margin:4px 0 8px 18px;padding:0;}
+.detail-panel li{margin-bottom:3px;}
+.detail-panel pre{
+  display:inline-block;min-width:200px;max-width:100%;
+  background:#1e1e2e;color:#cdd6f4;
+  font-family:'Cascadia Code',Consolas,monospace;font-size:11px;
+  padding:10px 14px;border-radius:7px;overflow-x:auto;
+  margin:6px 0 8px;white-space:pre;
+}
+.detail-loading{
+  display:flex;align-items:center;gap:10px;
+  padding:16px 24px;font-size:12px;color:var(--dim);
+}
+.det-spinner{
+  width:16px;height:16px;border-radius:50%;
+  border:2px solid var(--bdr);border-top-color:var(--pur2);
+  animation:spin .7s linear infinite;flex-shrink:0;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Filter bar ── */
+.fbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.fbar input,.fbar select{padding:6px 10px;border:1px solid var(--bdr);
+  border-radius:7px;font-size:12px;background:#fff;color:var(--txt);}
+.fbar input:focus,.fbar select:focus{outline:none;border-color:var(--pur2);}
+
+/* ── Remediation ── */
+.ri{background:#f7f5ff;border-left:4px solid var(--pur2);
+    padding:12px 15px;border-radius:0 8px 8px 0;margin-bottom:10px;}
+.ri-ref{font-size:11px;color:var(--dim);margin-bottom:4px;}
+.ri-txt{font-size:13px;color:#2d2d2d;line-height:1.6;}
+
+/* ── Footer ── */
+.foot{text-align:center;padding:20px;color:var(--dim);font-size:12px;
+      border-top:1px solid var(--bdr);margin-top:12px;}
+
+.divider{border:0;border-top:1px solid var(--bdr);margin:14px 0;}
+@media(max-width:700px){.kpis{flex-direction:column;}}
+
+/* ── Tool description popover ── */
+.tip-wrap{position:relative;display:inline-block;cursor:default;}
+.tip-wrap .tip{
+  visibility:hidden;opacity:0;
+  position:absolute;z-index:999;left:0;top:calc(100% + 6px);
+  width:300px;background:#1e1e2e;color:#cdd6f4;
+  font-size:11px;font-weight:400;line-height:1.55;
+  padding:9px 13px;border-radius:7px;
+  box-shadow:0 4px 18px rgba(0,0,0,.35);
+  white-space:normal;pointer-events:none;
+  transition:opacity .15s ease;
+}
+.tip-wrap:hover .tip{visibility:visible;opacity:1;}
+
+/* ── Pagination controls ── */
+#pg-controls button:hover{filter:brightness(0.92);}
+#pg-controls button:disabled{opacity:.45;cursor:not-allowed;}
+
+
+</style>"""
+
+    # ── Header ────────────────────────────────────────────────────
+    def _header(self, findings=None):
+        findings = findings or []
+        commit = html_mod.escape(self.meta.get("commit", ""))
+        operator = html_mod.escape(self.meta.get("operator", ""))
+        started_at = self.meta.get("started_at_utc", "")
+        completed_at = self.meta.get("completed_at_utc", "")
+        policy_version = html_mod.escape(self.meta.get("policy_version", ""))
+        tool_version = html_mod.escape(self.meta.get("tool_version", ""))
+        repo       = html_mod.escape(self.meta.get("repo", "—"))
+        project    = html_mod.escape(self.meta.get("project_key", "—"))
+        owner_val  = html_mod.escape(self.meta.get("owner", ""))
+        branch     = html_mod.escape(self.meta.get("branch", "—")) or "—"
+        repos_meta = self.meta.get("repos_meta")   # list of {slug, owner, branch} for multi-repo
+        raw_sid  = self.meta.get("scan_id", self.scan_id)
+        dur_s    = self.meta.get("scan_duration_s")
+        pre_llm  = self.meta.get("pre_llm_count")
+        post_llm = self.meta.get("post_llm_count")
+        llm_info = self.meta.get("llm_model_info") or {}
+
+        # ── Scan date ─────────────────────────────────────────────
+        try:
+            dt      = datetime.strptime(raw_sid[:15], "%Y%m%d_%H%M%S")
+            scan_dt = dt.strftime("%d %b %Y  %H:%M:%S")
+        except Exception:
+            scan_dt = raw_sid or "—"
+
+        def _fmt_utc(ts: str) -> str:
+            if not ts:
+                return "—"
+            try:
+                return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").strftime("%d %b %Y  %H:%M:%S UTC")
+            except Exception:
+                return ts
+
+        # ── Duration ──────────────────────────────────────────────
+        if dur_s is not None:
+            try:
+                s = int(dur_s)
+                dur_str = f"{s // 60}m {s % 60}s" if s >= 60 else f"{s}s"
+            except (TypeError, ValueError):
+                dur_str = "—"
+        else:
+            dur_str = "—"
+
+        # ── LLM model label ───────────────────────────────────────
+        if llm_info.get("name"):
+            lp = [html_mod.escape(llm_info["name"])]
+            if llm_info.get("parameter_size"):
+                lp.append(html_mod.escape(llm_info["parameter_size"]))
+            if llm_info.get("quantization"):
+                lp.append(html_mod.escape(llm_info["quantization"]))
+            llm_label = " &thinsp;·&thinsp; ".join(lp)
+        else:
+            llm_label = None
+
+        # ── 1. Files scanned — derive from findings ───────────────
+        # Use unique file paths across all findings
+        scanned_files = len({f.get("file", "") for f in findings if f.get("file", "")})
+        # If no findings landed, fall back to 0 gracefully
+        files_str = str(scanned_files) if scanned_files else "—"
+
+        # ── 3. Policy violations (BANNED + RESTRICTED + CRITICAL) ─
+        banned_count     = sum(1 for f in findings
+                               if f.get("policy_status","") in ("BANNED","CRITICAL"))
+        restricted_count = sum(1 for f in findings
+                               if f.get("policy_status","") == "RESTRICTED")
+        policy_str  = str(banned_count + restricted_count)
+        policy_sub  = []
+        if banned_count:
+            policy_sub.append(f"{banned_count} banned")
+        if restricted_count:
+            policy_sub.append(f"{restricted_count} restricted")
+        policy_sub_str = "  ·  ".join(policy_sub) if policy_sub else "none"
+        policy_cls  = "s-crit" if banned_count else ("s-warn" if restricted_count else "s-ok")
+
+        # ── 4. Languages detected ─────────────────────────────────
+        EXT_LANG = {
+            ".py":"Python", ".pyw":"Python",
+            ".js":"JavaScript", ".mjs":"JavaScript", ".cjs":"JavaScript",
+            ".ts":"TypeScript", ".tsx":"TypeScript",
+            ".jsx":"JavaScript",
+            ".java":"Java", ".kt":"Kotlin", ".scala":"Scala",
+            ".go":"Go", ".rb":"Ruby", ".php":"PHP",
+            ".cs":"C#", ".cpp":"C++", ".c":"C", ".h":"C/C++",
+            ".rs":"Rust", ".swift":"Swift",
+            ".sh":"Shell", ".bash":"Shell", ".zsh":"Shell",
+            ".yaml":"YAML", ".yml":"YAML",
+            ".json":"JSON", ".toml":"TOML", ".env":"Env",
+            ".tf":"Terraform", ".hcl":"HCL",
+            ".ipynb":"Notebook",
+            ".md":"Markdown", ".rst":"reStructuredText",
+            ".dockerfile":"Docker", "dockerfile":"Docker",
+            ".sql":"SQL",
+        }
+        lang_set = set()
+        for f in findings:
+            fp_val = f.get("file", "")
+            if fp_val:
+                ext = Path(fp_val).suffix.lower()
+                name_lower = Path(fp_val).name.lower()
+                lang = EXT_LANG.get(name_lower) or EXT_LANG.get(ext)
+                if lang:
+                    lang_set.add(lang)
+        # Sort: common code langs first, then config/infra
+        _PRIO = ["Python","JavaScript","TypeScript","Java","Go","C#","C++","Rust",
+                 "Kotlin","Ruby","PHP","Scala","Swift","Shell","Notebook",
+                 "YAML","JSON","TOML","Env","Terraform","HCL","Docker","SQL",
+                 "Markdown","reStructuredText"]
+        langs_sorted = sorted(lang_set, key=lambda l: _PRIO.index(l) if l in _PRIO else 99)
+        lang_chips_html = "".join(
+            f'<span class="lang-chip">{html_mod.escape(l)}</span>'
+            for l in langs_sorted
+        ) if langs_sorted else '<span class="lang-chip" style="opacity:.45">—</span>'
+
+        # ── 6. LLM dismissal rate ─────────────────────────────────
+        if pre_llm and post_llm is not None and pre_llm > 0:
+            dismissed     = pre_llm - post_llm
+            dismiss_pct   = round(dismissed / pre_llm * 100)
+            dismiss_str   = f"{dismiss_pct}%"
+            dismiss_sub   = f"{dismissed} of {pre_llm} dismissed"
+            dismiss_cls   = "s-ok" if dismiss_pct >= 40 else ("s-blue" if dismiss_pct >= 15 else "s-blue")
+        elif pre_llm == 0:
+            dismiss_str, dismiss_sub, dismiss_cls = "0%", "no pattern matches", "s-ok"
+        else:
+            dismiss_str, dismiss_sub, dismiss_cls = "—", "no LLM data", "s-blue"
+
+        # ── Pattern matches tile ──────────────────────────────────
+        if pre_llm is not None and post_llm is not None:
+            matches_str = str(pre_llm)
+            matches_sub = f"→ {post_llm} after LLM review"
+        else:
+            matches_str = str(len(findings))
+            matches_sub = "total findings"
+
+        # ── Risk class for accent bar ─────────────────────────────
+        sev_counts = {1: 0, 2: 0, 3: 0, 4: 0}
+        for f in findings:
+            s = f.get("severity", 4)
+            if s in sev_counts:
+                sev_counts[s] += 1
+        if sev_counts[1]:   risk_cls = "risk-crit"
+        elif sev_counts[2]: risk_cls = "risk-high"
+        elif sev_counts[3]: risk_cls = "risk-med"
+        else:               risk_cls = ""
+
+        # ── Metadata rows ─────────────────────────────────────────
+        def mrow(key, val, mono=False, raw=False):
+            mono_cls = " mono" if mono else ""
+            val_html = val if raw else html_mod.escape(str(val))
+            return (f'<div class="hdr-meta-key">{key}</div>'
+                    f'<div class="hdr-meta-val{mono_cls}">{val_html}</div>')
+
+        meta_rows = ""
+        if project and project != "—":
+            meta_rows += mrow("Project", project)
+        if repos_meta:
+            # Multi-repo: show per-repo table instead of single repo/owner/branch rows
+            # Compact dimmed table — no highlight, small font
+            # Cell colour: visible on dark purple header but not dominant
+            _rc = "rgba(255,255,255,.72)"   # repo/branch — monospace
+            _oc = "rgba(255,255,255,.55)"   # owner — softer
+            _hc = "rgba(255,255,255,.45)"   # col headers — dimmest
+            trows = "".join(
+                f"<tr>"
+                f"<td style='padding:1px 0 1px 0;font-family:var(--mono);font-size:10px;"
+                f"color:{_rc};max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"
+                f"{html_mod.escape(r['slug'])}</td>"
+                f"<td style='padding:1px 0 1px 10px;font-size:10px;color:{_oc};"
+                f"max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"
+                f"{html_mod.escape(r.get('owner','—') or '—')}</td>"
+                f"<td style='padding:1px 0 1px 10px;font-family:var(--mono);font-size:10px;"
+                f"color:{_rc};max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"
+                f"{html_mod.escape(r.get('branch','—') or '—')}</td>"
+                f"</tr>"
+                for r in repos_meta
+            )
+            repo_table = (
+                f"<table style='border-collapse:collapse;margin-top:3px;table-layout:fixed;width:320px'>"
+                f"<colgroup>"
+                f"<col style='width:130px'><col style='width:100px'><col style='width:90px'>"
+                f"</colgroup>"
+                f"<thead><tr>"
+                f"<th style='padding:0 0 3px;font-size:9px;font-weight:600;"
+                f"color:{_hc};text-align:left;text-transform:uppercase;letter-spacing:.04em'>Repo</th>"
+                f"<th style='padding:0 0 3px 10px;font-size:9px;font-weight:600;"
+                f"color:{_hc};text-align:left;text-transform:uppercase;letter-spacing:.04em'>Owner</th>"
+                f"<th style='padding:0 0 3px 10px;font-size:9px;font-weight:600;"
+                f"color:{_hc};text-align:left;text-transform:uppercase;letter-spacing:.04em'>Branch</th>"
+                f"</tr></thead><tbody>{trows}</tbody></table>"
+            )
+            meta_rows += (
+                f'<div class="hdr-meta-key" style="align-self:start;padding-top:4px">Repositories</div>'
+                f'<div class="hdr-meta-val">{repo_table}</div>'
+            )
+        else:
+            if repo and repo not in ("—", "combined"):
+                meta_rows += mrow("Repository", repo)
+            if owner_val:
+                meta_rows += mrow("Owner", owner_val)
+            if branch and branch not in ("—", ""):
+                meta_rows += mrow("Branch", branch, mono=True)
+        if commit:
+            meta_rows += mrow("Commit", commit[:12], mono=True)
+        if operator:
+            meta_rows += mrow("Operator", operator)
+        meta_rows += mrow("Scan Date", scan_dt)
+        meta_rows += mrow("Started", _fmt_utc(started_at))
+        meta_rows += mrow("Completed", _fmt_utc(completed_at))
+        meta_rows += mrow("Duration", dur_str)
+        if tool_version:
+            meta_rows += mrow("Tool Version", tool_version, mono=True)
+        if policy_version:
+            meta_rows += mrow("Policy Version", policy_version, mono=True)
+        if llm_label:
+            meta_rows += mrow("Model Used", llm_label, raw=True)
+        # Languages row (always shown)
+        meta_rows += (
+            f'<div class="hdr-meta-key">Languages</div>'
+            f'<div class="hdr-meta-val"><div class="lang-chips">{lang_chips_html}</div></div>'
+        )
+
+        # ── Stat rows ─────────────────────────────────────────────
+        def stat(label, val, sub="", extra_cls=""):
+            sub_html = f'<div class="hdr-stat-sub" title="{html_mod.escape(sub)}">{html_mod.escape(sub)}</div>' if sub else ""
+            return (f'<div class="hdr-stat {extra_cls}">'
+                    f'<div class="hdr-stat-label">{label}</div>'
+                    f'<div class="hdr-stat-val">{val}</div>'
+                    f'</div>')
+
+        stats_html = (
+            stat("Files Scanned",       files_str,    "unique files with findings", "s-blue") +
+            stat("Pattern Matches",     matches_str,  matches_sub) +
+            stat("Policy Violations",   policy_str,   policy_sub_str, policy_cls) +
+            stat("LLM Dismissal Rate",  dismiss_str,  dismiss_sub,    dismiss_cls)
+        )
+
+        return f"""<div class="hdr {risk_cls}">
+  <div class="hdr-accent"></div>
+  <div class="hdr-band">
+    <div class="hdr-band-icon">🔍</div>
+    <div class="hdr-band-title">AI Security &amp; Compliance Scan Report</div>
+  </div>
+  <div class="hdr-body">
+    <div class="hdr-meta">{meta_rows}</div>
+    <div class="hdr-stats">{stats_html}</div>
+  </div>
+</div>"""
+
+    # ── KPI bar ────────────────────────────────────────────────────
+    def _kpi_bar(self, stats):
+        return f"""<div class="kpis">
+  <div class="kpi"><div class="n">{stats['total']}</div><div class="l">Total Findings</div></div>
+  <div class="kpi k1"><div class="n" style="color:var(--red)">{stats['critical']}</div><div class="l">Critical</div></div>
+  <div class="kpi k2"><div class="n" style="color:var(--ora)">{stats['high']}</div><div class="l">High</div></div>
+  <div class="kpi k3"><div class="n" style="color:var(--yel)">{stats['medium']}</div><div class="l">Medium</div></div>
+  <div class="kpi k4"><div class="n" style="color:var(--lgrn)">{stats['low']}</div><div class="l">Low</div></div>
+</div>"""
+
+    # ── Summary: category + severity+context side by side ─────────
+    def _section_summary(self, stats, findings, policy):
+        policy = policy or {}   # defensive guard — never let None reach .get() calls
+        # Findings by Category
+        cat_rows = ""
+        for cat, cnt in sorted(stats["by_cat"].items(), key=lambda x: -x[1]):
+            pct = int(cnt / stats["total"] * 100) if stats["total"] else 0
+            # bar lives in its own cell — clipped to cell width via overflow:hidden
+            bar = (f'<div style="background:var(--pur2);height:7px;border-radius:3px;'
+                   f'width:{pct}%;min-width:3px;"></div>')
+            cat_rows += (
+                f"<tr>"
+                # col 0: name — fixed width, never grows into bar column
+                f"<td style='width:140px;white-space:nowrap;overflow:hidden;"
+                f"text-overflow:ellipsis;padding-right:8px'>{html_mod.escape(cat)}</td>"
+                # col 1: bar — explicit width, overflow:hidden clips the div
+                f"<td style='width:100px;vertical-align:middle;overflow:hidden;"
+                f"padding-right:8px'>{bar}</td>"
+                # col 2: count
+                f"<td class='num-cell' style='width:30px'>{cnt}</td>"
+                f"</tr>"
+            )
+        cat_total = stats["total"]
+        cat_rows += (f"<tr style='border-top:2px solid var(--bdr);font-weight:700'>"
+                     f"<td>Total</td><td></td>"
+                     f"<td class='num-cell'>{cat_total}</td></tr>")
+
+        # Findings by Severity and Context
+        # Build (severity, context) → count matrix
+        from collections import Counter as _Counter
+        sev_ctx_counts = _Counter(
+            (f.get("severity", 4), f.get("context", "production"))
+            for f in findings
+        )
+        ctx_order  = ["production", "test", "docs", "deleted_file"]
+        ctx_labels = {
+            "production":  "Prod",
+            "test":        "Test",
+            "docs":        "Docs",
+            "deleted_file":"Hist",
+        }
+        ctx_colors = {
+            "production":  "var(--txt)",
+            "test":        "#9e9e9e",
+            "docs":        "#4db6e8",
+            "deleted_file":"#b39ddb",
+        }
+        # only show contexts that have at least one finding
+        active_ctxs = [c for c in ctx_order
+                       if any(sev_ctx_counts.get((s, c), 0) for s in (1,2,3,4))]
+
+        sev_order = [(1,"Critical","var(--red)"), (2,"High","var(--ora)"),
+                     (3,"Medium","var(--yel)"),   (4,"Low","var(--lgrn)")]
+
+        # Column headers always white
+        ctx_th = "".join(
+            f"<th style='color:#fff;font-size:11px;text-align:center'>"
+            f"{ctx_labels[c]}</th>"
+            for c in active_ctxs
+        )
+        sev_rows = ""
+        sev_total = 0
+        for sev_num, sev_name, color in sev_order:
+            row_total = sum(sev_ctx_counts.get((sev_num, c), 0) for c in active_ctxs)
+            if not row_total:
+                continue
+            sev_total += row_total
+            badge = f"<span class='b b{sev_num}'>{sev_name}</span>"
+            ctx_cells = "".join(
+                f"<td class='num-cell' style='color:{ctx_colors[c]}'>"
+                f"{sev_ctx_counts.get((sev_num, c), 0) or '—'}</td>"
+                for c in active_ctxs
+            )
+            sev_rows += f"<tr><td>{badge}</td>{ctx_cells}<td class='num-cell'>{row_total}</td></tr>"
+        # Totals row
+        ctx_totals = "".join(
+            f"<td class='num-cell'>{sum(sev_ctx_counts.get((s,c),0) for s in (1,2,3,4))}</td>"
+            for c in active_ctxs
+        )
+        sev_rows += (f"<tr style='border-top:2px solid var(--bdr);font-weight:700'>"
+                     f"<td>Total</td>{ctx_totals}"
+                     f"<td class='num-cell'>{sev_total}</td></tr>")
+
+        # Prod-only pie chart data (resolve CSS vars to hex for Canvas)
+        _sev_hex = {"var(--red)":"#C00000","var(--ora)":"#e05c00",
+                    "var(--yel)":"#c87800","var(--lgrn)":"#5a8a3a"}
+        prod_counts = {
+            sev_num: sev_ctx_counts.get((sev_num, "production"), 0)
+            for sev_num, _, _ in sev_order
+        }
+        prod_total = sum(prod_counts.values())
+        pie_js_data = ", ".join(
+            f"{{label:'{sev_name}',value:{prod_counts[sev_num]},color:'{_sev_hex.get(color, color)}'}}"
+            for sev_num, sev_name, color in sev_order
+            if prod_counts[sev_num] > 0
+        )
+
+        # Approved AI Tools Registry card
+        display_names = policy.get("approved_provider_display_names", {})
+
+        def registry_name(slug: str) -> str:
+            return html_mod.escape(
+                display_names.get(slug) or PROVIDER_DISPLAY.get(slug)
+                or slug.replace("_", " ").title()
+            )
+
+        approved_keys = policy.get("approved_providers", [])
+        policy_note   = policy.get("notes", "")
+
+        # Map provider slug → favicon domain (Google S2 favicon API)
+        PROVIDER_FAVICON = {
+            "microsoft_365_copilot_chat":  "microsoft.com",
+            "microsoft_copilot_studio":    "microsoft.com",
+            "github_copilot_enterprise":   "github.com",
+            "openai_enterprise":           "openai.com",
+            "openai":                      "openai.com",
+            "chatgpt_enterprise":          "openai.com",
+            "google_gemini_enterprise":    "google.com",
+            "google_ai_studio_enterprise": "aistudio.google.com",
+            "google_gemini_vertexai":      "cloud.google.com",
+            "grammarly_enterprise":        "grammarly.com",
+            "synthesia_enterprise":        "synthesia.io",
+            "cursor_ai_enterprise":        "cursor.com",
+            "gamma_ai_business":           "gamma.app",
+            "adobe_firefly_enterprise":    "adobe.com",
+            "notion_enterprise":           "notion.so",
+            "anthropic":                   "anthropic.com",
+            "anthropic_claude_code":       "anthropic.com",
+        }
+
+        seen_set, seen_approved = set(), []
+        for k in approved_keys:
+            n = registry_name(k)
+            if n not in seen_set:
+                seen_set.add(n)
+                domain = PROVIDER_FAVICON.get(k, "")
+                favicon_html = (
+                    f'<img src="https://www.google.com/s2/favicons?domain={domain}&sz=16" '
+                    f'width="14" height="14" '
+                    f'style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" '
+                    f'onerror="this.style.display=\'none\'">'
+                    if domain else
+                    '<span style="display:inline-block;width:14px;height:14px;'
+                    'margin-right:5px;flex-shrink:0"></span>'
+                )
+                seen_approved.append((n, favicon_html))
+
+        if seen_approved:
+            approved_items = "".join(
+                f'<div style="display:flex;align-items:center;padding:2px 0;'
+                f'font-size:11px;color:var(--txt)">{ico}{name}</div>'
+                for name, ico in seen_approved
+            )
+        else:
+            approved_items = "<em style='color:var(--dim);font-size:11px'>None defined</em>"
+
+        ciso_note = (
+            f'<p style="font-size:13px;color:#1a1a1a;margin:12px 0 0;'
+            f'padding-top:10px;border-top:1px solid var(--bdr);line-height:1.6">'
+            f'⚠️ &nbsp;{html_mod.escape(policy_note)}</p>'
+            if policy_note else ""
+        )
+
+        providers_card = f"""<div class="card" style="margin-top:0;padding:12px 16px">
+  <div style="font-weight:700;color:var(--grn);margin-bottom:9px;font-size:12px;">
+    ✅ Approved AI Tools Registry
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 20px;">
+    {approved_items}
+  </div>
+  {ciso_note}
+</div>"""
+
+        pie_card = f"""<div class="card" style="display:flex;flex-direction:column;padding:16px">
+  <h3 style="margin-bottom:12px;font-size:13px;letter-spacing:.2px">Findings by Severity in Prod</h3>
+  <div style="display:flex;align-items:center;gap:18px;flex:1">
+    <div style="position:relative;width:134px;height:134px;flex-shrink:0">
+      <canvas id="sev-pie" width="134" height="134" style="display:block"></canvas>
+      <div id="sev-pie-centre" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none">
+        <div style="font-size:18px;font-weight:800;color:#fff;line-height:1">{prod_total}</div>
+        <div style="font-size:8px;color:rgba(255,255,255,.5);margin-top:1px">findings</div>
+      </div>
+    </div>
+    <div id="sev-pie-legend" style="display:flex;flex-direction:column;gap:7px;flex:1;min-width:0"></div>
+  </div>
+  <script>
+  (function(){{
+    const data = [{pie_js_data}];
+    const total = {prod_total};
+    const canvas = document.getElementById('sev-pie');
+    const legend = document.getElementById('sev-pie-legend');
+    if (!canvas || !total) {{
+      document.getElementById('sev-pie-centre').innerHTML = '<span style="font-size:11px;color:var(--dim)">No prod findings</span>';
+      return;
+    }}
+
+    // Build legend immediately
+    data.forEach(d => {{
+      if (!d.value) return;
+      const pct = Math.round(d.value / total * 100);
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+      row.innerHTML = `
+        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${{d.color}};flex-shrink:0"></span>
+        <span style="font-size:12px;color:#333;white-space:nowrap">${{d.label}}</span>
+        <span style="font-size:12px;font-weight:700;color:${{d.color}};white-space:nowrap">${{d.value}}<span style="font-weight:400;color:#888;font-size:11px"> (${{pct}}%)</span></span>`;
+      legend.appendChild(row);
+    }});
+
+    const ctx = canvas.getContext('2d');
+    const W = 134, H = 134, cx = W/2, cy = H/2;
+    const R = 54, ir = 31, GAP = 0.025;
+    // Label radius = midpoint between inner and outer edge (inside the donut band)
+    const LR = (ir + R) / 2;
+
+    function draw(progress) {{
+      ctx.clearRect(0, 0, W, H);
+      let start = -Math.PI / 2;
+
+      data.forEach(d => {{
+        const full  = (d.value / total) * 2 * Math.PI * progress;
+        const slice = Math.max(0, full - GAP);
+        if (slice <= 0) {{ start += full; return; }}
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur  = 5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, R, start + GAP/2, start + GAP/2 + slice);
+        ctx.closePath();
+        ctx.fillStyle = d.color;
+        ctx.fill();
+        ctx.restore();
+
+        // % label at midpoint of donut band — only for slices wide enough
+        if (progress >= 1 && full > 0.45) {{
+          const mid = start + GAP/2 + slice/2;
+          const pct = Math.round(d.value / total * 100);
+          const lx  = cx + Math.cos(mid) * LR;
+          const ly  = cy + Math.sin(mid) * LR;
+          ctx.save();
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle    = 'rgba(255,255,255,0.95)';
+          ctx.font         = 'bold 10px sans-serif';
+          ctx.fillText(pct + '%', lx, ly);
+          ctx.restore();
+        }}
+
+        start += full;
+      }});
+
+      // Donut hole
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, ir, 0, 2*Math.PI);
+      ctx.fillStyle = '#1e2235';
+      ctx.fill();
+      ctx.restore();
+    }}
+
+    let t = 0;
+    const FRAMES = 40;
+    function step() {{
+      t++;
+      const ease = t < FRAMES ? 1 - Math.pow(1 - t/FRAMES, 3) : 1;
+      draw(ease);
+      if (t < FRAMES) requestAnimationFrame(step);
+    }}
+    requestAnimationFrame(step);
+  }})();
+  </script>
+</div>"""
+
+        # ── Combined: Findings by Repository × Severity (multi-repo only) ──────
+        is_multi_summ = bool(self.meta.get("repos_meta"))
+        per_repo_card = ""
+        if is_multi_summ:
+            from collections import Counter as _C2
+            # Build repo → severity → context → count
+            by_rsc = {}   # repo → (sev, ctx) → count
+            for f in findings:
+                r   = f.get("repo","?")
+                s   = f.get("severity", 4)
+                ctx = f.get("context", "production")
+                by_rsc.setdefault(r, {})
+                by_rsc[r][(s, ctx)] = by_rsc[r].get((s, ctx), 0) + 1
+
+            # Contexts present
+            ctx_order  = ["production","test","docs","deleted_file"]
+            ctx_labels = {"production":"Prod","test":"Test","docs":"Docs","deleted_file":"Hist"}
+            ctx_colors = {"production":"var(--txt)","test":"#9e9e9e",
+                          "docs":"#4db6e8","deleted_file":"#b39ddb"}
+            active_ctxs = [c for c in ctx_order
+                           if any(by_rsc[r].get((s,c),0)
+                                  for r in by_rsc for s in (1,2,3,4))]
+
+            # Header: Repo | Crit | High | Med | Low | Total
+            # Each cell shows total count; tooltip shows ctx breakdown
+            def _cell(repo, sev_n):
+                total_v = sum(by_rsc[repo].get((sev_n, c), 0) for c in ctx_order)
+                if not total_v:
+                    return "<td style='text-align:center;padding:3px 6px'><span style='color:var(--dim)'>—</span></td>"
+                # Build tooltip: "Prod:2 Test:1"
+                tip_parts = [f"{ctx_labels[c]}:{by_rsc[repo].get((sev_n,c),0)}"
+                             for c in active_ctxs if by_rsc[repo].get((sev_n,c),0)]
+                tip = " · ".join(tip_parts)
+                badge = (f"<span class='b b{sev_n}' style='font-size:10px;padding:1px 7px'>{total_v}</span>")
+                if len(tip_parts) > 1:
+                    badge = (f"<span class='tip-wrap'>{badge}"
+                             f"<span class='tip'>{html_mod.escape(tip)}</span></span>")
+                return f"<td style='text-align:center;padding:3px 6px'>{badge}</td>"
+
+            repo_rows = ""
+            for r in sorted(by_rsc, key=lambda x: -(sum(by_rsc[x].values()))):
+                total_r = sum(by_rsc[r].values())
+                # Context breakdown as small chips below repo name
+                ctx_chips = "".join(
+                    f"<span style='font-size:9px;color:{ctx_colors[c]};margin-right:5px'>"
+                    f"{ctx_labels[c]}:{sum(by_rsc[r].get((s,c),0) for s in (1,2,3,4))}</span>"
+                    for c in active_ctxs
+                    if sum(by_rsc[r].get((s,c),0) for s in (1,2,3,4)) > 0
+                )
+                repo_rows += (
+                    f"<tr>"
+                    f"<td style='font-family:var(--mono);font-size:12px;color:var(--text);"
+                    f"padding:4px 16px 4px 0;white-space:nowrap'>"
+                    f"{html_mod.escape(r)}"
+                    f"<div style='margin-top:1px'>{ctx_chips}</div></td>"
+                    + _cell(r, 1) + _cell(r, 2) + _cell(r, 3) + _cell(r, 4)
+                    + f"<td class='num-cell' style='font-weight:700;padding:3px 6px'>{total_r}</td>"
+                    f"</tr>"
+                )
+            per_repo_card = f"""<div class="card">
+  <h3>Findings by Repository &amp; Severity</h3>
+  <table class="compact" style="font-size:13px;width:100%">
+    <thead><tr>
+      <th style="color:#fff;text-align:left">Repository</th>
+      <th style="color:var(--red);text-align:center">Critical</th>
+      <th style="color:var(--ora);text-align:center">High</th>
+      <th style="color:var(--yel);text-align:center">Medium</th>
+      <th style="color:var(--lgrn);text-align:center">Low</th>
+      <th class="num-cell" style="color:#fff">Total</th>
+    </tr></thead>
+    <tbody>{repo_rows}</tbody>
+  </table>
+</div>"""
+
+        # For multi-repo: 3-col grid — Category | Repo×Sev | Pie
+        # For single-repo: 3-col grid — Category | Severity×Context | Pie
+        if is_multi_summ:
+            grid_html = f"""<div style="display:grid;grid-template-columns:1fr minmax(0,500px) 1fr;gap:18px;margin-bottom:18px;">
+  <div class="card">
+    <h3>Findings by Category</h3>
+    <table class="compact" style="font-size:13px"><colgroup><col style="width:140px"><col style="width:100px"><col style="width:30px"></colgroup><tbody>{cat_rows}</tbody></table>
+  </div>
+  {per_repo_card}
+  {pie_card}
+</div>"""
+        else:
+            # 3-col grid: Category | Severity×Context | Pie
+            grid_html = f"""<div style="display:grid;grid-template-columns:1fr minmax(0,500px) 1fr;gap:18px;margin-bottom:18px;">
+  <div class="card">
+    <h3>Findings by Category</h3>
+    <table class="compact" style="font-size:13px"><colgroup><col style="width:140px"><col style="width:100px"><col style="width:30px"></colgroup><tbody>{cat_rows}</tbody></table>
+  </div>
+  <div class="card">
+    <h3>Findings by Severity and Context</h3>
+    <table class="compact" style="font-size:13px">
+      <thead><tr>
+        <th style="color:#fff">Severity</th>{ctx_th}<th class="num-cell" style="color:#fff">Total</th>
+      </tr></thead>
+      <tbody>{sev_rows}</tbody>
+    </table>
+  </div>
+  {pie_card}
+</div>"""
+
+        return f"""<section id="summary">
+<h2>🔐 Findings Summary</h2>
+{grid_html}
+{providers_card}
+</section>"""
+
+    # ── K: Executive Summary ───────────────────────────────────────
+    def _section_executive(self, stats, findings, delta):
+        total  = stats["total"]
+        crit   = stats["critical"]
+        high   = stats["high"]
+        med    = stats["medium"]
+        low    = stats["low"]
+
+        # Overall risk score: weighted average (Crit=100, High=70, Med=35, Low=10)
+        if total:
+            raw_score = (crit*100 + high*70 + med*35 + low*10) / total
+            risk_score = min(100, int(raw_score))
+        else:
+            risk_score = 0
+
+        if risk_score >= 70:
+            risk_color, risk_label, risk_icon = "var(--red)",  "High Risk",    "🔴"
+        elif risk_score >= 35:
+            risk_color, risk_label, risk_icon = "var(--ora)",  "Medium Risk",  "🟠"
+        else:
+            risk_color, risk_label, risk_icon = "var(--grn)",  "Low Risk",     "🟢"
+
+        # Top 3 risks by severity then count
+        from collections import Counter
+        top_providers = Counter(
+            f.get("provider_or_lib","") for f in findings if f.get("severity",4) <= 2
+        ).most_common(3)
+        top_html = ""
+        for prov, cnt in top_providers:
+            top_html += (f"<li><strong>{html_mod.escape(fp(prov))}</strong> "
+                         f"— {cnt} critical/high finding{'s' if cnt>1 else ''}</li>")
+        if not top_html:
+            top_html = "<li style='color:var(--grn)'>No critical or high findings ✓</li>"
+
+        # Test vs production breakdown
+        test_count = sum(1 for f in findings if f.get("context") == "test")
+        prod_count = total - test_count
+
+        # Delta badge
+        delta_html = ""
+        if delta.get("has_baseline"):
+            new_c = delta.get("new_count", 0)
+            fix_c = delta.get("fixed_count", 0)
+            delta_html = (
+                f"<div style='margin-top:14px;padding:10px 14px;"
+                f"background:var(--card2);border-radius:6px;font-size:12px;'>"
+                f"<strong>vs last scan:</strong>&nbsp;"
+                f"<span style='color:var(--red)'>+{new_c} new</span>&nbsp;&nbsp;"
+                f"<span style='color:var(--grn)'>−{fix_c} resolved</span>"
+                f"</div>"
+            )
+
+        return f"""<section id="executive">
+<h2>📊 Executive Summary</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:18px;">
+  <div class="card" style="text-align:center;padding:24px 16px">
+    <div style="font-size:48px;font-weight:800;color:{risk_color}">{risk_score}</div>
+    <div style="font-size:13px;color:var(--dim);margin-top:4px">Risk Score / 100</div>
+    <div style="font-size:16px;font-weight:700;margin-top:8px">{risk_icon} {risk_label}</div>
+    {delta_html}
+  </div>
+  <div class="card">
+    <h3>Top Risks</h3>
+    <ul style="padding-left:18px;margin:0;line-height:2">{top_html}</ul>
+    <hr class="divider">
+    <div style="font-size:12px;color:var(--dim)">
+      Production: <strong>{prod_count}</strong> &nbsp;·&nbsp;
+      Test: <strong style="color:var(--dim)">{test_count}</strong>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Compliance Status</h3>
+    <table style="font-size:12px;width:100%"><tbody>
+      <tr><td>🔴 Critical findings</td><td class="num-cell"><strong style="color:var(--red)">{crit}</strong></td></tr>
+      <tr><td>🟠 High findings</td><td class="num-cell"><strong style="color:var(--ora)">{high}</strong></td></tr>
+      <tr><td>🟡 Medium findings</td><td class="num-cell"><strong style="color:var(--yel)">{med}</strong></td></tr>
+      <tr><td>🟢 Low findings</td><td class="num-cell"><strong style="color:var(--lgrn)">{low}</strong></td></tr>
+      <tr><td colspan="2"><hr class="divider"></td></tr>
+      <tr><td>Total findings</td><td class="num-cell"><strong>{total}</strong></td></tr>
+    </tbody></table>
+  </div>
+</div>
+</section>"""
+
+    # ── J: Delta / trend section ───────────────────────────────────
+    def _section_delta(self, findings, delta):
+        if not delta.get("has_baseline"):
+            return ""   # first scan — nothing to compare
+
+        new_c   = delta.get("new_count", 0)
+        fix_c   = delta.get("fixed_count", 0)
+        unch_c  = delta.get("unchanged_count", 0)
+        base_f  = html_mod.escape(delta.get("baseline_file", "previous scan"))
+        new_h   = delta.get("new_hashes", set())
+
+        new_rows = ""
+        for f in findings:
+            if f.get("finding_id", f.get("_hash","")) in new_h:
+                sev = f.get("severity", 4)
+                new_rows += (
+                    f"<tr style='background:rgba(192,0,0,0.08)'>"
+                    f"<td><span class='b b{sev}'>{SEV_LABEL.get(sev,str(sev))}</span> "
+                    f"<span style='font-size:10px;color:var(--red);font-weight:700'>NEW</span></td>"
+                    f"<td>{html_mod.escape(f.get('repo',''))}</td>"
+                    f"<td>{html_mod.escape(fp(f.get('provider_or_lib','')))}</td>"
+                    f"<td class='fp'>{html_mod.escape(f.get('file',''))} :{f.get('line','')}</td>"
+                    f"</tr>"
+                )
+
+        table_html = ""
+        if new_rows:
+            table_html = f"""<table style="margin-top:12px;font-size:12px;width:100%">
+  <thead><tr><th>Severity</th><th>Repo</th><th>Tool / Library</th><th>Location</th></tr></thead>
+  <tbody>{new_rows}</tbody>
+</table>"""
+
+        return f"""<section id="delta">
+<h2>📈 Scan Delta — Changes Since Last Scan</h2>
+<div class="card">
+  <div style="display:flex;gap:32px;align-items:center;flex-wrap:wrap">
+    <div style="text-align:center">
+      <div style="font-size:32px;font-weight:800;color:var(--red)">{new_c}</div>
+      <div style="font-size:12px;color:var(--dim)">New findings</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:32px;font-weight:800;color:var(--grn)">{fix_c}</div>
+      <div style="font-size:12px;color:var(--dim)">Resolved</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:32px;font-weight:800;color:var(--dim)">{unch_c}</div>
+      <div style="font-size:12px;color:var(--dim)">Unchanged</div>
+    </div>
+    <div style="font-size:11px;color:var(--dim);margin-left:auto">
+      Compared to: <code>{base_f}</code>
+    </div>
+  </div>
+  {table_html}
+</div>
+</section>"""
+
+    # ── Policy (removed — content moved to summary) ────────────────
+    def _section_policy(self, findings, policy):
+        return ""
+
+    # ── All Findings ───────────────────────────────────────────────
+    def _section_findings(self, findings, delta=None):
+        new_hashes  = (delta or {}).get("new_hashes", set())
+        repo        = html_mod.escape(self.meta.get("repo", ""))
+        project     = html_mod.escape(self.meta.get("project_key", ""))
+        is_multi    = bool(self.meta.get("repos_meta"))   # multi-repo scan
+        title_suffix = f"{project} / {repo}" if project and repo else (project or repo or "")
+
+        sorted_findings = sorted(findings, key=lambda f: (f.get("severity", 4), f.get("repo", "")))
+
+        cats = sorted({f.get("ai_category", "") for f in findings if f.get("ai_category", "")})
+        cat_options = "\n".join(
+            f'      <option value="{html_mod.escape(c)}">{html_mod.escape(c)}</option>'
+            for c in cats
+        )
+
+        # Unique risk values for filter dropdown
+        risks = sorted({fp(f.get("provider_or_lib", "")) for f in findings
+                        if f.get("provider_or_lib", "")})
+        risk_options = "\n".join(
+            f'      <option value="{html_mod.escape(r)}">{html_mod.escape(r)}</option>'
+            for r in risks
+        )
+
+        # Context display config
+        CTX_LABEL = {
+            "production":  ("Prod",    "var(--dim)",  "transparent"),
+            "test":        ("Test",    "#9e9e9e",     "rgba(158,158,158,0.12)"),
+            "docs":        ("Docs",    "#0277bd",     "rgba(2,119,189,0.12)"),
+            "deleted_file":("History", "#7b5ea7",     "rgba(123,94,167,0.12)"),
+        }
+
+        def _ctx_badge(ctx: str) -> str:
+            label, color, bg = CTX_LABEL.get(ctx, ("?", "var(--dim)", "transparent"))
+            return (f"<span style='font-size:10px;font-weight:600;color:{color};"
+                    f"background:{bg};border:1px solid {color};border-radius:3px;"
+                    f"padding:2px 6px;white-space:nowrap'>{label}</span>")
+
+        rows = ""
+        for f in sorted_findings:
+            sev      = f.get("severity", 4)
+            ctx      = f.get("context", "production")
+            is_new   = f.get("finding_id", f.get("_hash", "")) in new_hashes
+            risk_val = html_mod.escape(fp(f.get("provider_or_lib", "")))
+
+            # Code snippet
+            snip = ""
+            if self.include_snippets and f.get("snippet"):
+                raw_snippet = str(f["snippet"])[:400]
+                match_text  = str(f.get("match", ""))
+                esc_snippet = html_mod.escape(raw_snippet)
+                if match_text:
+                    esc_match   = html_mod.escape(match_text)
+                    esc_snippet = esc_snippet.replace(
+                        esc_match,
+                        f"<mark class='snip-hl'>{esc_match}</mark>", 1,
+                    )
+                snip = f'<div class="snip">{esc_snippet}</div>'
+
+            # Tool/risk cell — no tooltip (description is shown in the LLM detail panel)
+            tool_cell = f"<strong style='font-size:12px'>{risk_val}</strong>"
+
+            row_style = "background:rgba(192,0,0,0.07)" if is_new else ""
+            cat_val   = html_mod.escape(f.get("ai_category", ""))
+
+            # Extra data attrs for LLM detail panel — use double-quote delimiters;
+            # html_mod.escape converts " → &quot; so values are safe inside "…"
+            cap_val     = html_mod.escape(f.get("capability", ""))
+            desc_val    = html_mod.escape(f.get("description", ""))   # raw field, not tool_desc
+            file_val    = html_mod.escape(f.get("file", ""))
+            line_val    = html_mod.escape(str(f.get("line", "")))
+            sev_label   = SEV_LABEL.get(sev, str(sev))
+            snippet_val = html_mod.escape(str(f.get("snippet", ""))[:300]) if f.get("snippet") else ""
+            # Key must match _key() in _fetch_llm_details
+            llm_key_val = html_mod.escape(
+                f"{f.get('file','')}:{f.get('line','')}:{f.get('provider_or_lib','')}")
+
+            # col 0:Severity  col 1:Category  col 2:Potential Risk
+            # col 3:Capability  col 4:Context  col 5:File:Line/Code
+            repo_val = html_mod.escape(f.get("repo", ""))
+            rows += (
+                f'<tr data-sev="{sev}" data-ctx="{ctx}" data-cat="{cat_val}"'
+                f' data-risk="{risk_val}" data-cap="{cap_val}" data-repo="{repo_val}"'
+                f' data-desc="{desc_val}" data-file="{file_val}"'
+                f' data-line="{line_val}" data-sevlabel="{sev_label}"'
+                f' data-snippet="{snippet_val}" data-llm-key="{llm_key_val}"'
+                f' onclick="toggleDetail(event,this)"'
+                f' style="{row_style}">'
+                f"<td style='white-space:nowrap'>"
+                f"<span class='b b{sev}'>{sev_label}</span></td>"
+                + (f"<td style='font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap'>"
+                   f"{html_mod.escape(f.get('repo',''))}</td>"
+                   if is_multi else "")
+                + f"<td>{html_mod.escape(f.get('ai_category', ''))}</td>"
+                f"<td>{tool_cell}</td>"
+                f"<td>{html_mod.escape(f.get('capability', ''))}</td>"
+                f"<td style='text-align:center'>{_ctx_badge(ctx)}</td>"
+                f"<td class='fp'>{html_mod.escape(f.get('file', ''))}"
+                f"<span style='color:var(--dim)'> :{f.get('line', '')}</span>"
+                f"{snip}</td>"
+                + f"</tr>"
+            )
+
+        # Repo filter (multi-repo only)
+        repo_names = sorted({f.get("repo","") for f in findings if f.get("repo","")})
+        repo_options = "\n".join(
+            f'      <option value="{html_mod.escape(r)}">{html_mod.escape(r)}</option>'
+            for r in repo_names
+        )
+        repo_filter_html = (
+            f'''    <select id="frepo" onchange="ff()">
+      <option value="">All Repos</option>
+{repo_options}
+    </select>'''
+            if is_multi else ""
+        )
+
+        # Repo column in table (multi-repo only)
+        repo_col_header = '<th data-col="6" class="sortable">Repository</th>' if is_multi else ""
+        repo_colgroup   = '<col style="width:120px">' if is_multi else ""
+        min_width       = "760px" if is_multi else "640px"
+
+        return f"""<section id="findings">
+<h2>🗂 All Findings for: {title_suffix} ({len(findings)})</h2>
+<div class="card">
+  <div class="fbar">
+    <input type="text" id="fs" placeholder="🔍 Search..." oninput="ff()">
+    <select id="fv" onchange="ff()">
+      <option value="">All Severities</option>
+      <option value="1">Critical</option>
+      <option value="2">High</option>
+      <option value="3">Medium</option>
+      <option value="4">Low</option>
+    </select>
+    <select id="fcat" onchange="ff()">
+      <option value="">All Categories</option>
+{cat_options}
+    </select>
+    <select id="frisk" onchange="ff()">
+      <option value="">All Risks</option>
+{risk_options}
+    </select>
+    <select id="fc" onchange="ff()">
+      <option value="">All Contexts</option>
+      <option value="production">Production</option>
+      <option value="test">Test</option>
+      <option value="docs">Docs</option>
+      <option value="deleted_file">History (deleted)</option>
+    </select>
+{repo_filter_html}
+  </div>
+  <div id="pg-info-top" style="font-size:12px;color:var(--dim);margin-bottom:6px"></div>
+  <div style="width:100%;overflow-x:auto">
+  <table id="ft" style="width:100%;min-width:{min_width};table-layout:fixed">
+    <colgroup>
+      <col style="width:90px">
+      {repo_colgroup}
+      <col style="width:120px">
+      <col style="width:17%">
+      <col style="width:12%">
+      <col style="width:72px">
+      <col style="width:auto;min-width:200px">
+    </colgroup>
+    <thead><tr>
+      <th data-col="0" class="sortable" style="white-space:nowrap">Severity</th>
+      {repo_col_header}
+      <th data-col="1" class="sortable">Category</th>
+      <th data-col="2" class="sortable">Potential Risk</th>
+      <th data-col="3" class="sortable">Capability</th>
+      <th data-col="4" class="sortable" style="text-align:center">Context</th>
+      <th data-col="5">File : Line / Code</th>
+    </tr></thead>
+    <tbody id="ft-body">{rows}</tbody>
+  </table>
+  </div>
+  <div id="pg-controls" style="display:flex;gap:6px;align-items:center;
+       flex-wrap:wrap;margin-top:10px;font-size:12px"></div>
+</div>
+</section>"""
+
+    # ── Remediation ────────────────────────────────────────────────
+    def _section_remediation(self, findings):
+        # Group by provider_or_lib, keep only Critical+High
+        from collections import defaultdict
+        groups: dict = defaultdict(list)
+        for f in findings:
+            if f.get("severity", 4) <= 2:
+                groups[f.get("provider_or_lib", "")].append(f)
+
+        items = ""
+        # Sort groups: Critical-only first, then by occurrence count desc
+        def _group_sort_key(kv):
+            fs = kv[1]
+            min_sev = min(f.get("severity", 4) for f in fs)
+            return (min_sev, -len(fs))
+
+        for lib, fs in sorted(groups.items(), key=_group_sort_key):
+            min_sev  = min(f.get("severity", 4) for f in fs)
+            count    = len(fs)
+            remediation = next((f.get("remediation","") for f in fs if f.get("remediation","")), "")
+            description = next((f.get("description","") for f in fs if f.get("description","")), "")
+            category    = fs[0].get("ai_category", "")
+            capability  = fs[0].get("capability", "")
+
+            # Unique files, sorted, deduplicated
+            seen_files: set = set()
+            file_items = ""
+            for f in sorted(fs, key=lambda x: (x.get("file",""), x.get("line", 0))):
+                fkey = f"{f.get('file','')}:{f.get('line','')}"
+                if fkey in seen_files:
+                    continue
+                seen_files.add(fkey)
+                sev_f = f.get("severity", 4)
+                file_items += (
+                    f"<li style='margin-bottom:3px'>"
+                    f"<span class='b b{sev_f}' style='font-size:9px;padding:1px 5px'>"
+                    f"{SEV_LABEL.get(sev_f,'')}</span> "
+                    f"<code style='font-size:11px'>{html_mod.escape(f.get('file',''))}"
+                    f" :{f.get('line','')}</code>"
+                    f"</li>"
+                )
+
+            meta_line = " &nbsp;·&nbsp; ".join(p for p in [
+                html_mod.escape(category),
+                html_mod.escape(capability),
+                f"<strong>{count}</strong> occurrence{'s' if count > 1 else ''}",
+            ] if p)
+
+            items += (
+                f'<div class="ri">'
+                f'<div class="ri-ref" style="margin-bottom:6px">'
+                f'<span class="b b{min_sev}">{SEV_LABEL.get(min_sev,"")}</span>'
+                f' &nbsp;<strong style="font-size:13px">'
+                f'{html_mod.escape(fp(lib))}</strong>'
+                f'<span style="font-size:11px;color:var(--dim);margin-left:10px">'
+                f'{meta_line}</span>'
+                f'</div>'
+                + (f'<div class="ri-txt" style="margin-bottom:8px">'
+                   f'{html_mod.escape(description)}</div>' if description else '')
+                + (f'<div class="ri-txt" style="background:#f0eeff;border-left:3px solid var(--pur2);'
+                   f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:8px">'
+                   f'<strong>Remediation:</strong> {html_mod.escape(remediation)}</div>'
+                   if remediation else '')
+                + f'<details style="margin-top:4px">'
+                  f'<summary style="font-size:11px;color:var(--dim);cursor:pointer">'
+                  f'▸ {len(seen_files)} affected location{"s" if len(seen_files)>1 else ""}</summary>'
+                  f'<ul style="margin:6px 0 2px 14px;padding:0;list-style:none">'
+                  f'{file_items}</ul>'
+                  f'</details>'
+                f'</div>'
+            )
+
+        if not items:
+            items = ("<p style='color:var(--grn);font-weight:600'>"
+                     "✓ No critical or high findings require immediate action.</p>")
+        return f"""<section id="remediation">
+<h2>🔧 Remediation Checklist — Critical &amp; High</h2>
+<div class="card">{items}</div>
+</section>"""
+
+    # ── Footer ─────────────────────────────────────────────────────
+    def _footer(self):
+        return (f'<div class="foot">'
+                f'AI Security &amp; Compliance Monitoring &nbsp;·&nbsp; '
+                f'Scan: {self.scan_id} &nbsp;·&nbsp; Internal use only</div>')
+
+    # ── JS ─────────────────────────────────────────────────────────
+    def _js(self):
+        return r"""<script>
+// ── Pagination + filter engine ───────────────────────────────────
+const PAGE_SIZE = 20;
+let allRows     = [];
+let visRows     = [];
+let curPage     = 1;
+
+document.addEventListener('DOMContentLoaded', function(){
+  allRows = Array.from(document.querySelectorAll('#ft-body tr[data-sev]'));
+  // Wire up sortable headers
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => sortBy(parseInt(th.getAttribute('data-col'))));
+  });
+  ff();
+});
+
+// ── Filter ───────────────────────────────────────────────────────
+function ff(){
+  const s    = (document.getElementById('fs')     || {value:''}).value.toLowerCase();
+  const v    = (document.getElementById('fv')     || {value:''}).value;
+  const cat  = (document.getElementById('fcat')   || {value:''}).value;
+  const risk = (document.getElementById('frisk')  || {value:''}).value;
+  const c    = (document.getElementById('fc')     || {value:''}).value;
+  const repo = (document.getElementById('frepo')  || {value:''}).value;
+
+  visRows = allRows.filter(r => {
+    const txt     = r.textContent.toLowerCase();
+    const sev     = r.getAttribute('data-sev')  || '';
+    const ctx     = r.getAttribute('data-ctx')  || '';
+    const rowCat  = r.getAttribute('data-cat')  || '';
+    const rowRisk = r.getAttribute('data-risk') || '';
+    const rowRepo = r.getAttribute('data-repo') || '';
+    return (!s    || txt.includes(s))
+        && (!v    || sev     === v)
+        && (!cat  || rowCat  === cat)
+        && (!risk || rowRisk === risk)
+        && (!c    || ctx     === c)
+        && (!repo || rowRepo === repo);
+  });
+
+  allRows.forEach(r => r.style.display = 'none');
+  curPage = 1;
+  renderPage();
+}
+
+// ── Render a single page ─────────────────────────────────────────
+function renderPage(){
+  const total = visRows.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  curPage     = Math.min(Math.max(1, curPage), pages);
+
+  const start = (curPage - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+
+  allRows.forEach(r => {
+    r.style.display = 'none';
+    // also hide any open detail row
+    const dr = r.nextElementSibling;
+    if (dr && dr.classList.contains('detail-row')) dr.style.display = 'none';
+  });
+  visRows.slice(start, end).forEach(r => {
+    r.style.display = '';
+    // restore visible detail row if one was open
+    const dr = r.nextElementSibling;
+    if (dr && dr.classList.contains('detail-row')) dr.style.display = '';
+  });
+
+  const info = total === 0
+    ? 'No matching findings'
+    : `Showing ${start + 1}–${end} of ${total} finding${total !== 1 ? 's' : ''}`;
+  ['pg-info-top'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = info;
+  });
+
+  const ctrl = document.getElementById('pg-controls');
+  if (!ctrl) return;
+  ctrl.innerHTML = '';
+  if (pages <= 1) return;
+
+  const btnStyle   = 'padding:3px 10px;border-radius:5px;border:1px solid var(--bdr);'
+                   + 'background:#fff;cursor:pointer;font-size:12px;';
+  const activeStyle = btnStyle + 'background:var(--pur);color:#fff;border-color:var(--pur);';
+
+  const prev = document.createElement('button');
+  prev.textContent = '← Prev';
+  prev.setAttribute('style', btnStyle);
+  prev.disabled = (curPage === 1);
+  prev.onclick = () => { curPage--; renderPage(); };
+  ctrl.appendChild(prev);
+
+  const WING = 3;
+  let lo = Math.max(1, curPage - WING);
+  let hi = Math.min(pages, curPage + WING);
+  if (lo > 1) {
+    ctrl.appendChild(pageBtn(1, btnStyle, activeStyle));
+    if (lo > 2) ctrl.appendChild(ellipsis());
+  }
+  for (let p = lo; p <= hi; p++) ctrl.appendChild(pageBtn(p, btnStyle, activeStyle));
+  if (hi < pages) {
+    if (hi < pages - 1) ctrl.appendChild(ellipsis());
+    ctrl.appendChild(pageBtn(pages, btnStyle, activeStyle));
+  }
+
+  const next = document.createElement('button');
+  next.textContent = 'Next →';
+  next.setAttribute('style', btnStyle);
+  next.disabled = (curPage === pages);
+  next.onclick = () => { curPage++; renderPage(); };
+  ctrl.appendChild(next);
+
+  const info2 = document.createElement('span');
+  info2.style.marginLeft = '12px';
+  info2.style.color = 'var(--dim)';
+  info2.textContent = `Page ${curPage} / ${pages}`;
+  ctrl.appendChild(info2);
+}
+
+function pageBtn(p, base, active){
+  const b = document.createElement('button');
+  b.textContent = p;
+  b.setAttribute('style', p === curPage ? active : base);
+  b.onclick = () => { curPage = p; renderPage(); };
+  return b;
+}
+function ellipsis(){
+  const s = document.createElement('span');
+  s.textContent = '…';
+  s.style.padding = '0 4px';
+  s.style.color = 'var(--dim)';
+  return s;
+}
+
+// ── Column sort ──────────────────────────────────────────────────
+let _sortCol = -1;
+let _sortAsc = true;
+
+function _cellText(row, col){
+  const td = row.querySelectorAll('td')[col];
+  return td ? td.textContent.trim().toLowerCase() : '';
+}
+
+function sortBy(col){
+  if (_sortCol === col){
+    _sortAsc = !_sortAsc;
+  } else {
+    _sortCol = col;
+    _sortAsc = true;
+  }
+
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (parseInt(th.getAttribute('data-col')) === _sortCol){
+      th.classList.add(_sortAsc ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  // Context sort order: production < test < docs < deleted_file
+  const _ctxOrder = {production:0, test:1, docs:2, deleted_file:3};
+
+  allRows.sort((a, b) => {
+    if (col === 0){
+      const an = parseInt(a.getAttribute('data-sev')) || 99;
+      const bn = parseInt(b.getAttribute('data-sev')) || 99;
+      return _sortAsc ? an - bn : bn - an;
+    }
+    if (col === 4){
+      const ac = _ctxOrder[a.getAttribute('data-ctx')] ?? 99;
+      const bc = _ctxOrder[b.getAttribute('data-ctx')] ?? 99;
+      return _sortAsc ? ac - bc : bc - ac;
+    }
+    const av = _cellText(a, col);
+    const bv = _cellText(b, col);
+    return _sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+
+  const tbody = document.getElementById('ft-body');
+  if (tbody) allRows.forEach(r => tbody.appendChild(r));
+
+  curPage = 1;
+  renderPage();
+}
+
+// ════════════════════════════════════════════════════════════════
+// FINDING DETAIL PANEL  —  click row → expand, click again → close
+// Pre-baked LLM answers embedded at report-write time in window._LLM_DETAILS
+// ════════════════════════════════════════════════════════════════
+
+function toggleDetail(evt, row) {
+  // Ignore text-selection gestures
+  const sel = window.getSelection();
+  if (sel && sel.toString().length > 0) return;
+
+  // Ignore clicks that originated inside the detail panel itself
+  if (evt.target.closest('tr.detail-row')) return;
+
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains('detail-row')) {
+    // Close
+    existing.remove();
+    row.classList.remove('row-expanded');
+    return;
+  }
+
+  // Close any other open panel first
+  document.querySelectorAll('tr.detail-row').forEach(r => r.remove());
+  document.querySelectorAll('tr.row-expanded').forEach(r => r.classList.remove('row-expanded'));
+
+  row.classList.add('row-expanded');
+
+  // Build the detail row
+  const colCount = row.querySelectorAll('td').length;
+  const detRow = document.createElement('tr');
+  detRow.className = 'detail-row';
+  detRow.addEventListener('click', e => e.stopPropagation());
+  const detTd = document.createElement('td');
+  detTd.colSpan = colCount;
+
+  // Look up pre-baked HTML
+  const llmKey = row.getAttribute('data-llm-key') || '';
+  const details = (window._LLM_DETAILS || {});
+  const prebaked = details[llmKey];
+
+  if (prebaked) {
+    detTd.innerHTML = prebaked;
+  } else {
+    // No pre-baked answer — show informational message (no live fetch)
+    const model = (window.OLLAMA_MODEL || '').trim();
+    const msg = model
+      ? `<p style="color:#f97316;font-size:12px">⚠ LLM analysis was not generated for this finding. ` +
+        `Re-run the scan with LLM enabled to embed answers in the report.</p>`
+      : `<p style="color:var(--dim);font-size:12px">ℹ LLM analysis not available — no model was configured when this report was generated.</p>`;
+    detTd.innerHTML = `<div class="detail-panel">${msg}</div>`;
+  }
+
+  detRow.appendChild(detTd);
+  row.after(detRow);
+}
+
+
+function _esc(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+</script>"""

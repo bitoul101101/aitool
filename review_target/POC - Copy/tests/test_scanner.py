@@ -1,0 +1,735 @@
+"""
+Tests for AI Usage Scanner components.
+Run: python -m pytest tests/ -v
+"""
+
+import sys
+import os
+import tempfile
+import json
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from scanner.detector import AIUsageDetector
+from analyzer.security import SecurityAnalyzer
+from aggregator.aggregator import Aggregator
+
+
+# ── Detector tests ────────────────────────────────────────────────
+
+def make_test_file(content: str, suffix=".py") -> Path:
+    """Write content to a temp file and return its path."""
+    d = tempfile.mkdtemp()
+    p = Path(d) / f"test{suffix}"
+    p.write_text(content)
+    return p.parent, p.name
+
+
+def test_detects_openai_import():
+    detector = AIUsageDetector()
+    code = "import openai\nclient = openai.OpenAI()\n"
+    tmpdir, fname = make_test_file(code)
+    findings = detector.scan(tmpdir)
+    providers = [f["provider_or_lib"] for f in findings]
+    assert "openai" in providers, f"Expected openai, got: {providers}"
+
+
+def test_detects_anthropic_import():
+    detector = AIUsageDetector()
+    code = "import anthropic\nclient = anthropic.Anthropic()\nresult = client.messages.create()\n"
+    tmpdir, _ = make_test_file(code)
+    findings = detector.scan(tmpdir)
+    providers = [f["provider_or_lib"] for f in findings]
+    assert "anthropic" in providers
+
+
+def test_detects_hardcoded_key():
+    detector = AIUsageDetector()
+    code = 'OPENAI_API_KEY = "sk-abc123def456ghi789jkl012mno345"\n'
+    tmpdir, _ = make_test_file(code)
+    findings = detector.scan(tmpdir)
+    cats = [f["category"] for f in findings]
+    assert "Security" in cats
+
+
+def test_detects_openai_key_pattern():
+    detector = AIUsageDetector()
+    code = 'api_key = "sk-abcdefghijklmnopqrstuvwxyz123456"\n'
+    tmpdir, _ = make_test_file(code)
+    findings = detector.scan(tmpdir)
+    providers = [f["provider_or_lib"] for f in findings]
+    assert "openai_key_pattern" in providers
+
+
+def test_detects_rag_pattern():
+    detector = AIUsageDetector()
+    code = "from langchain.chains import RetrievalQA\nchain = RetrievalQA.from_chain_type()\n"
+    tmpdir, _ = make_test_file(code)
+    findings = detector.scan(tmpdir)
+    cats = [f["category"] for f in findings]
+    assert any(c in ("External AI API", "RAG/Vector DB") for c in cats)
+
+
+def test_detects_notebook():
+    detector = AIUsageDetector()
+    nb = {
+        "nbformat": 4,
+        "cells": [
+            {
+                "cell_type": "code",
+                "source": ["import openai\n", "client = openai.OpenAI()\n"],
+                "outputs": []
+            }
+        ]
+    }
+    d = tempfile.mkdtemp()
+    p = Path(d) / "analysis.ipynb"
+    p.write_text(json.dumps(nb))
+    findings = detector.scan(Path(d))
+    assert any(f["is_notebook"] for f in findings), "Expected notebook finding"
+
+
+def test_notebook_output_secret():
+    detector = AIUsageDetector()
+    nb = {
+        "nbformat": 4,
+        "cells": [
+            {
+                "cell_type": "code",
+                "source": ["print(api_key)"],
+                "outputs": [{"text": ["sk-secretkey12345678901234567890"]}]
+            }
+        ]
+    }
+    d = tempfile.mkdtemp()
+    p = Path(d) / "notebook.ipynb"
+    p.write_text(json.dumps(nb))
+    findings = detector.scan(Path(d))
+    providers = [f["provider_or_lib"] for f in findings]
+    assert "notebook_output_secret" in providers
+
+
+def test_deduplication():
+    detector = AIUsageDetector()
+    # Same exact code = same line numbers = same hashes = deduped
+    code = "import openai\nclient = openai.OpenAI()\n"
+    tmpdir, _ = make_test_file(code)
+    findings1 = detector.scan(tmpdir)
+    findings2 = detector.scan(tmpdir)
+    # Running scan twice should not produce duplicates within each scan
+    hashes1 = [f["_hash"] for f in findings1]
+    assert len(hashes1) == len(set(hashes1)), "Duplicate hashes within single scan"
+
+
+def test_skip_node_modules():
+    detector = AIUsageDetector()
+    d = Path(tempfile.mkdtemp())
+    nm = d / "node_modules" / "openai"
+    nm.mkdir(parents=True)
+    (nm / "index.py").write_text("import openai\n")
+    findings = detector.scan(d)
+    assert len(findings) == 0, "node_modules should be skipped"
+
+
+# ── Security Analyzer tests ───────────────────────────────────────
+
+POLICY = {
+    "approved_providers": ["azure_openai"],
+    "restricted_providers": ["openai", "anthropic"],
+    "banned_providers": ["some_banned_lib"],
+}
+
+
+def make_finding(provider="openai", sev=2, cat="External AI API"):
+    return {
+        "repo": "test-repo",
+        "category": cat,
+        "provider_or_lib": provider,
+        "capability": "LLM",
+        "severity": sev,
+        "file": "app.py",
+        "line": 10,
+        "snippet": "import openai",
+        "policy_status": "REVIEW",
+        "is_notebook": False,
+        "description": "Test",
+        "_hash": "abc123",
+    }
+
+
+def test_restricted_policy():
+    analyzer = SecurityAnalyzer(policy=POLICY)
+    f = make_finding(provider="openai", sev=2)
+    results = analyzer.analyze([f])
+    assert results[0]["policy_status"] == "RESTRICTED"
+    assert results[0]["severity"] <= 2
+
+
+def test_approved_policy():
+    analyzer = SecurityAnalyzer(policy=POLICY)
+    f = make_finding(provider="azure_openai", sev=2)
+    results = analyzer.analyze([f])
+    assert results[0]["policy_status"] == "APPROVED"
+
+
+def test_banned_policy():
+    analyzer = SecurityAnalyzer(policy=POLICY)
+    f = make_finding(provider="some_banned_lib", sev=3)
+    results = analyzer.analyze([f])
+    assert results[0]["policy_status"] == "BANNED"
+    assert results[0]["severity"] == 1
+
+
+def test_security_category_critical():
+    analyzer = SecurityAnalyzer(policy=POLICY)
+    f = make_finding(provider="hardcoded_key", sev=2, cat="Security")
+    results = analyzer.analyze([f])
+    assert results[0]["policy_status"] == "CRITICAL"
+    assert results[0]["severity"] == 1
+
+
+def test_remediation_assigned():
+    analyzer = SecurityAnalyzer(policy=POLICY)
+    f = make_finding(provider="openai", sev=2)
+    results = analyzer.analyze([f])
+    assert results[0]["remediation"]
+    assert len(results[0]["remediation"]) > 10
+
+
+# ── Aggregator tests ──────────────────────────────────────────────
+
+def test_aggregator_dedup():
+    agg = Aggregator(min_severity=4)
+    findings = [
+        {**make_finding(), "product_house": "PH1", "owner": "A",
+         "last_seen": "20250101", "_hash": "x1",
+         "risk": "High", "severity_label": "Sev-2", "is_notebook": False,
+         "match": "", "description": "test"},
+        {**make_finding(), "product_house": "PH1", "owner": "A",
+         "last_seen": "20250101", "_hash": "x1",  # same hash = duplicate
+         "risk": "High", "severity_label": "Sev-2", "is_notebook": False,
+         "match": "", "description": "test"},
+    ]
+    result = agg.process(findings)
+    assert len(result) == 1, f"Expected 1 after dedup, got {len(result)}"
+
+
+def test_aggregator_severity_filter():
+    agg = Aggregator(min_severity=2)  # Only sev 1 and 2
+    findings = []
+    for sev in [1, 2, 3, 4]:
+        f = {**make_finding(sev=sev), "product_house": "PH1", "owner": "A",
+             "last_seen": "20250101", "_hash": f"h{sev}",
+             "risk": "X", "severity_label": f"Sev-{sev}", "is_notebook": False,
+             "match": "", "description": "test", "remediation": "fix"}
+        findings.append(f)
+    result = agg.process(findings)
+    for r in result:
+        assert r["severity"] <= 2, f"Expected sev ≤ 2, got {r['severity']}"
+
+
+# ══════════════════════════════════════════════════════════════════
+# New tests — added during architecture review
+# Covers: path_context, placeholder suppression, multi-hit dedup,
+#         challenge pass logic, delta baseline, history persistence,
+#         pattern cache, _scan_text_file_from_content delegation.
+# ══════════════════════════════════════════════════════════════════
+
+import threading
+import time
+import re
+from unittest.mock import patch, MagicMock
+
+# ── path_context enforcement ──────────────────────────────────────
+
+def test_helm_pattern_only_fires_in_helm_paths():
+    """helm_ai_values must NOT fire on arbitrary YAML files."""
+    detector = AIUsageDetector()
+    # openai_key: matches helm_ai_values pattern
+    code = "openai_key: some-model-name\n"
+    d = Path(tempfile.mkdtemp())
+
+    # Should fire in helm context
+    helm_dir = d / "helm"
+    helm_dir.mkdir()
+    (helm_dir / "values.yaml").write_text(code)
+    findings_helm = detector.scan(helm_dir)
+    helm_hits = [f for f in findings_helm if f["provider_or_lib"] == "helm_ai_values"]
+    assert helm_hits, "helm_ai_values should fire under helm/ directory"
+
+    # Should NOT fire in unrelated YAML
+    src_dir = d / "src"
+    src_dir.mkdir()
+    (src_dir / "config.yaml").write_text(code)
+    findings_src = detector.scan(src_dir)
+    src_hits = [f for f in findings_src if f["provider_or_lib"] == "helm_ai_values"]
+    assert not src_hits, f"helm_ai_values should not fire in src/config.yaml, got {src_hits}"
+
+
+def test_k8s_pattern_only_fires_in_k8s_paths():
+    """k8s_ai_manifest must NOT fire outside k8s/manifests directories.
+
+    Both files are placed under a common root so rel_path includes the
+    parent directory — that is what path_context matches against.
+    """
+    detector = AIUsageDetector()
+    code = "annotations:\n  kserve.io/enabled: \"true\"\n"
+    d = Path(tempfile.mkdtemp())
+
+    # Should fire under manifests/
+    m_dir = d / "manifests"
+    m_dir.mkdir()
+    (m_dir / "deploy.yaml").write_text(code)
+    findings_m = detector.scan(d)
+    k8s_hits = [f for f in findings_m if f["provider_or_lib"] == "k8s_ai_manifest"]
+    assert k8s_hits, "k8s_ai_manifest should fire under manifests/"
+
+    # Should NOT fire under src/
+    d2 = Path(tempfile.mkdtemp())
+    src_dir = d2 / "src"
+    src_dir.mkdir()
+    (src_dir / "deploy.yaml").write_text(code)
+    findings_src = detector.scan(d2)
+    src_hits = [f for f in findings_src if f["provider_or_lib"] == "k8s_ai_manifest"]
+    assert not src_hits, f"k8s_ai_manifest should not fire in src/, got {src_hits}"
+
+
+def test_path_context_enforced_in_history_scanner():
+    """path_context gate must apply in _scan_text_file_from_content too."""
+    detector = AIUsageDetector()
+    helm_code = "openai_key: my-model\n"
+
+    # Deleted file from a helm path — should fire
+    findings_helm = detector._scan_text_file_from_content(
+        helm_code, ".yaml", "helm/values.yaml", "repo"
+    )
+    helm_hits = [f for f in findings_helm if f["provider_or_lib"] == "helm_ai_values"]
+    assert helm_hits, "helm pattern should fire on helm/values.yaml in history scan"
+
+    # Deleted file from unrelated path — should NOT fire
+    findings_src = detector._scan_text_file_from_content(
+        helm_code, ".yaml", "src/config.yaml", "repo"
+    )
+    src_hits = [f for f in findings_src if f["provider_or_lib"] == "helm_ai_values"]
+    assert not src_hits, "helm pattern should not fire on src/config.yaml in history scan"
+
+
+# ── _PLACEHOLDER_RE suppression ──────────────────────────────────
+
+def test_placeholder_value_suppressed():
+    """replace-with-* style values must not be reported as hardcoded keys."""
+    detector = AIUsageDetector()
+    placeholders = [
+        'HF_TOKEN="replace-with-your-huggingface-token"',
+        'OPENAI_API_KEY="your-api-key"',
+        'OPENAI_API_KEY=YOUR_API_KEY',
+        'OPENAI_API_KEY=changeme',
+        'OPENAI_API_KEY=<INSERT_KEY_HERE>',
+        'GROQ_API_KEY=placeholder-key',
+        'OPENAI_API_KEY=example-key',
+    ]
+    for line in placeholders:
+        d = Path(tempfile.mkdtemp())
+        (d / "config.py").write_text(line + "\n")
+        findings = detector.scan(d)
+        sec = [f for f in findings if f["provider_or_lib"] == "hardcoded_key"]
+        assert not sec, f"Placeholder should be suppressed: {line!r}"
+
+
+def test_real_key_not_suppressed():
+    """Real-looking keys must still be detected."""
+    detector = AIUsageDetector()
+    d = Path(tempfile.mkdtemp())
+    (d / "config.py").write_text('OPENAI_API_KEY="sk-proj-xKj9mNpLqR2sT4uVwXyZ12"\n')
+    findings = detector.scan(d)
+    sec = [f for f in findings
+           if f.get("provider_or_lib") in ("hardcoded_key", "openai_key_pattern")]
+    assert sec, "Real API key should be detected"
+
+
+# ── Multi-hit deduplication ───────────────────────────────────────
+
+def test_multihit_deduplication():
+    """Same credential matching multiple patterns → one finding, not two."""
+    detector = AIUsageDetector()
+    # OPENAI_API_KEY: fires both hardcoded_key and docker_compose_key
+    d = Path(tempfile.mkdtemp())
+    (d / "docker-compose.yml").write_text(
+        'OPENAI_API_KEY: "sk-realkey12345678901234567890"\n'
+    )
+    findings = detector.scan(d)
+    # All findings for the same file+match should have unique hashes
+    hashes = [f["_hash"] for f in findings]
+    assert len(hashes) == len(set(hashes)), (
+        f"Duplicate hashes — multi-hit not deduped: "
+        f"{[f['provider_or_lib'] for f in findings]}"
+    )
+
+
+def test_cross_repo_notebook_hashes_differ():
+    """Same notebook path in two repos must produce different hashes."""
+    detector = AIUsageDetector()
+    nb = json.dumps({
+        "nbformat": 4,
+        "cells": [{
+            "cell_type": "code",
+            "source": ["print(key)"],
+            "outputs": [{"text": ["sk-secretkey12345678901234"]}]
+        }]
+    })
+    p = Path(tempfile.mkdtemp()) / "analysis.ipynb"
+    p.write_text(nb)
+    findings_a = detector._scan_notebook(p, "notebooks/analysis.ipynb", "repo-A")
+    findings_b = detector._scan_notebook(p, "notebooks/analysis.ipynb", "repo-B")
+    hashes_a = {f["_hash"] for f in findings_a}
+    hashes_b = {f["_hash"] for f in findings_b}
+    assert not hashes_a & hashes_b, (
+        "Same notebook path in two repos produced identical hashes — "
+        "would cause cross-repo deduplication"
+    )
+
+
+# ── Pattern cache ─────────────────────────────────────────────────
+
+def test_pattern_cache_shared_across_instances():
+    """Multiple AIUsageDetector instances must share the compiled pattern list."""
+    from scanner.detector import _get_compiled_patterns
+    d1 = AIUsageDetector()
+    d2 = AIUsageDetector()
+    assert d1._compiled is d2._compiled, (
+        "Each instance has its own compiled list — cache not working"
+    )
+    assert len(d1._compiled) == len(_get_compiled_patterns())
+
+
+def test_pattern_cache_is_populated():
+    """Compiled cache must contain patterns with _re, _guard, _path_ctx keys."""
+    from scanner.detector import _get_compiled_patterns
+    compiled = _get_compiled_patterns()
+    assert len(compiled) > 50, f"Expected >50 compiled patterns, got {len(compiled)}"
+    for p in compiled:
+        assert "_re" in p, f"Missing _re in pattern {p.get('provider_or_lib')}"
+        assert "_guard" in p, f"Missing _guard in pattern {p.get('provider_or_lib')}"
+        assert "_path_ctx" in p, f"Missing _path_ctx in pattern {p.get('provider_or_lib')}"
+
+
+# ── _scan_text_file delegation ────────────────────────────────────
+
+def test_scan_text_file_sets_docs_context():
+    """Files in docs/ paths must get context=docs and sev_bump applied."""
+    detector = AIUsageDetector()
+    d = Path(tempfile.mkdtemp())
+    docs = d / "docs"
+    docs.mkdir()
+    # Severity-1 finding in docs should become severity-3 (bump +2)
+    (docs / "setup.md").write_text("import openai\nclient = openai.OpenAI()\n")
+    findings = detector.scan(docs)
+    for f in findings:
+        assert f["context"] == "docs", f"Expected docs context, got {f['context']}"
+        assert f["severity"] >= 3, (
+            f"Docs finding severity {f['severity']} not bumped (expected ≥3)"
+        )
+
+
+def test_scan_text_file_from_content_deleted_file_default():
+    """History scanner path must produce context=deleted_file by default."""
+    detector = AIUsageDetector()
+    findings = detector._scan_text_file_from_content(
+        "import openai\nclient = openai.OpenAI()\n",
+        ".py", "src/app.py", "my-repo"
+    )
+    assert findings, "Expected findings from history scan"
+    for f in findings:
+        assert f["context"] == "deleted_file", (
+            f"Expected deleted_file, got {f['context']}"
+        )
+
+
+def test_scan_text_file_from_content_context_override():
+    """Context override must flow through to all findings."""
+    detector = AIUsageDetector()
+    findings = detector._scan_text_file_from_content(
+        "import openai\nclient = openai.OpenAI()\n",
+        ".py", "tests/test_app.py", "my-repo",
+        ctx_str="test", sev_bump=2, is_test=True
+    )
+    assert findings
+    for f in findings:
+        assert f["context"] == "test", f"Expected test, got {f['context']}"
+
+
+# ── delta.py baseline comparison ─────────────────────────────────
+
+def test_delta_no_baseline():
+    """First scan: has_baseline=False, all findings counted as new."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from reports.delta import build_delta_meta
+
+    findings = [
+        {"_hash": "aaa", "provider_or_lib": "openai"},
+        {"_hash": "bbb", "provider_or_lib": "anthropic"},
+    ]
+    d = Path(tempfile.mkdtemp())
+    meta = build_delta_meta(findings, str(d), "PROJ", "my-repo")
+    assert meta["has_baseline"] is False
+    assert meta["new_count"] == 2
+
+
+def test_delta_with_baseline():
+    """Second scan: correctly identifies new, fixed, unchanged findings."""
+    from reports.delta import build_delta_meta
+    import csv
+
+    findings_scan1 = [
+        {"_hash": "aaa", "finding_id": "aaa", "provider_or_lib": "openai"},
+        {"_hash": "bbb", "finding_id": "bbb", "provider_or_lib": "anthropic"},
+    ]
+    findings_scan2 = [
+        {"_hash": "bbb", "finding_id": "bbb", "provider_or_lib": "anthropic"},  # unchanged
+        {"_hash": "ccc", "finding_id": "ccc", "provider_or_lib": "langchain"},  # new
+        # aaa is absent = fixed
+    ]
+
+    d = Path(tempfile.mkdtemp())
+    # Write a baseline CSV (scan 1)
+    baseline = d / "AI_Scan_Report_PROJ_my-repo_20250101_120000.csv"
+    with open(baseline, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["finding_id"])
+        writer.writeheader()
+        for finding in findings_scan1:
+            writer.writerow({"finding_id": finding["finding_id"]})
+
+    meta = build_delta_meta(findings_scan2, str(d), "PROJ", "my-repo")
+    assert meta["has_baseline"] is True
+    assert meta["new_count"] == 1,       f"Expected 1 new, got {meta['new_count']}"
+    assert meta["fixed_count"] == 1,     f"Expected 1 fixed, got {meta['fixed_count']}"
+    assert meta["unchanged_count"] == 1, f"Expected 1 unchanged, got {meta['unchanged_count']}"
+    assert "ccc" in meta["new_hashes"],  "ccc should be in new_hashes"
+    assert "bbb" not in meta["new_hashes"], "bbb is unchanged, not new"
+
+
+# ── History persistence (_save_history_record) ────────────────────
+
+def test_save_history_record_creates_file():
+    """_save_history_record must write a valid JSON file."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+    # Temporarily redirect OUTPUT_DIR/HISTORY_FILE/LOG_DIR to a temp location
+    import app_server as srv
+    orig_out  = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log  = srv.LOG_DIR
+
+    d = Path(tempfile.mkdtemp())
+    srv.OUTPUT_DIR   = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR      = str(d / "logs")
+    srv._invalidate_history_cache()
+
+    try:
+        session = srv.ScanSession()
+        session.scan_id      = "20250315_120000"
+        session.project_key  = "TEST"
+        session.repo_slugs   = ["my-repo"]
+        session.state        = "done"
+        session.scan_duration_s = 42
+        session.llm_model    = "qwen2.5-coder:7b"
+        session.llm_model_info = {"name": "qwen2.5-coder:7b"}
+        session.operator = "Security Engineer"
+        session.started_at_utc = "2025-03-15T12:00:00Z"
+        session.completed_at_utc = "2025-03-15T12:00:42Z"
+        session.policy_version = "abc123def456"
+        session.tool_version = "19.1"
+        session.repo_details = {
+            "my-repo": {"owner": "alice", "branch": "main", "commit": "deadbeefcafebabe"}
+        }
+        session.log("Test log entry", "info")
+
+        findings = [
+            {"severity": 1, "context": "production", "provider_or_lib": "openai"},
+            {"severity": 2, "context": "test",       "provider_or_lib": "anthropic"},
+        ]
+        srv._save_history_record(session, findings)
+
+        hist_path = Path(srv.HISTORY_FILE)
+        assert hist_path.exists(), "scan_history.json not created"
+
+        records = json.loads(hist_path.read_text())
+        assert len(records) == 1
+        r = records[0]
+        assert r["scan_id"]    == "20250315_120000"
+        assert r["project"]    == "TEST"
+        assert r["total"]      == 2
+        assert r["sev"]["critical"] == 1
+        assert r["sev"]["high"]     == 1
+        assert r["llm_model"]  == "qwen2.5-coder:7b"
+        assert r["state"]      == "done"
+        assert r["operator"]   == "Security Engineer"
+        assert r["started_at_utc"] == "2025-03-15T12:00:00Z"
+        assert r["completed_at_utc"] == "2025-03-15T12:00:42Z"
+        assert r["policy_version"] == "abc123def456"
+        assert r["tool_version"] == "19.1"
+        assert r["repo_details"]["my-repo"]["branch"] == "main"
+
+        # Log file should exist
+        log_path = Path(srv.LOG_DIR) / "20250315_120000.log"
+        assert log_path.exists(), "Log file not created"
+        log_text = log_path.read_text()
+        assert "Test log entry" in log_text
+
+    finally:
+        srv.OUTPUT_DIR   = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR      = orig_log
+        srv._invalidate_history_cache()
+
+
+def test_history_cache_invalidated_after_write():
+    """_load_history must return fresh data after _save_history_record."""
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_out  = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log  = srv.LOG_DIR
+    srv.OUTPUT_DIR   = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR      = str(d / "logs")
+    srv._invalidate_history_cache()
+
+    try:
+        # First load: no file yet
+        assert srv._load_history() == []
+
+        # Write a record
+        session = srv.ScanSession()
+        session.scan_id = "20250315_130000"
+        session.project_key = "PROJ"
+        session.repo_slugs = ["r1"]
+        session.state = "done"
+        session.scan_duration_s = 10
+        session.llm_model = "test-model"
+        session.llm_model_info = {"name": "test-model"}
+        srv._save_history_record(session, [])
+
+        # Load should now return 1 record without manual invalidation
+        hist = srv._load_history()
+        assert len(hist) == 1, f"Expected 1 record, got {len(hist)}"
+
+    finally:
+        srv.OUTPUT_DIR   = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR      = orig_log
+        srv._invalidate_history_cache()
+
+
+def test_atomic_history_write():
+    """History write must be atomic — no .tmp file left behind."""
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_hist = srv.HISTORY_FILE
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv._invalidate_history_cache()
+
+    try:
+        session = srv.ScanSession()
+        session.scan_id = "20250315_140000"
+        session.project_key = "P"
+        session.repo_slugs = []
+        session.state = "done"
+        session.scan_duration_s = 1
+        session.llm_model = "m"
+        session.llm_model_info = {"name": "m"}
+        srv.OUTPUT_DIR = str(d)
+        srv.LOG_DIR    = str(d / "logs")
+        srv._save_history_record(session, [])
+
+        # No .tmp file should remain after write
+        tmp = Path(srv.HISTORY_FILE + ".tmp")
+        assert not tmp.exists(), ".tmp file left behind after atomic write"
+        assert Path(srv.HISTORY_FILE).exists(), "scan_history.json not created"
+    finally:
+        srv.HISTORY_FILE = orig_hist
+        srv._invalidate_history_cache()
+
+
+def test_build_spa_does_not_embed_saved_pat():
+    import app_server as srv
+
+    with patch.object(srv, "load_pat", return_value="secret-token-123"):
+        html = srv._build_spa().decode("utf-8")
+
+    assert "secret-token-123" not in html
+    assert "__SAVED_PAT__" not in html
+    assert "const HAS_SAVED_PAT = (true === true);" in html
+
+
+def test_allowed_origin_only_permits_local_app_hosts():
+    import app_server as srv
+
+    assert srv._allowed_origin(f"http://127.0.0.1:{srv.APP_PORT}") == f"http://127.0.0.1:{srv.APP_PORT}"
+    assert srv._allowed_origin(f"http://localhost:{srv.APP_PORT}") == f"http://localhost:{srv.APP_PORT}"
+    assert srv._allowed_origin("https://evil.example") is None
+
+if __name__ == "__main__":
+    tests = [
+        # Original tests
+        test_detects_openai_import,
+        test_detects_anthropic_import,
+        test_detects_hardcoded_key,
+        test_detects_openai_key_pattern,
+        test_detects_rag_pattern,
+        test_detects_notebook,
+        test_notebook_output_secret,
+        test_deduplication,
+        test_skip_node_modules,
+        test_restricted_policy,
+        test_approved_policy,
+        test_banned_policy,
+        test_security_category_critical,
+        test_remediation_assigned,
+        test_aggregator_dedup,
+        test_aggregator_severity_filter,
+        # path_context
+        test_helm_pattern_only_fires_in_helm_paths,
+        test_k8s_pattern_only_fires_in_k8s_paths,
+        test_path_context_enforced_in_history_scanner,
+        # placeholder suppression
+        test_placeholder_value_suppressed,
+        test_real_key_not_suppressed,
+        # multi-hit dedup
+        test_multihit_deduplication,
+        test_cross_repo_notebook_hashes_differ,
+        # pattern cache
+        test_pattern_cache_shared_across_instances,
+        test_pattern_cache_is_populated,
+        # _scan_text_file delegation
+        test_scan_text_file_sets_docs_context,
+        test_scan_text_file_from_content_deleted_file_default,
+        test_scan_text_file_from_content_context_override,
+        # delta baseline
+        test_delta_no_baseline,
+        test_delta_with_baseline,
+        # history persistence
+        test_save_history_record_creates_file,
+        test_history_cache_invalidated_after_write,
+        test_atomic_history_write,
+    ]
+    passed = 0
+    failed = 0
+    for t in tests:
+        try:
+            t()
+            print(f"  ✓ {t.__name__}")
+            passed += 1
+        except Exception as e:
+            print(f"  ✗ {t.__name__}: {e}")
+            failed += 1
+    print(f"\n{passed}/{len(tests)} tests passed")
+    if failed:
+        sys.exit(1)

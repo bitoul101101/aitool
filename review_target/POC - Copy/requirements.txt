@@ -1,0 +1,16 @@
+# Core (required)
+requests>=2.28.0
+
+# Excel output (strongly recommended)
+openpyxl>=3.1.0
+
+# Graph output (recommended)
+matplotlib>=3.7.0
+
+# Task 13: Cross-platform PAT persistence (strongly recommended)
+# Falls back to session-only memory if not installed.
+keyring>=24.0.0
+keyrings.alt>=5.0.0   # headless / CI fallback (encrypted file backend)
+
+# Optional: faster regex matching for large codebases
+regex>=2023.0.0

@@ -1,0 +1,49 @@
+{
+  "_comment": "Approved AI Tools Registry \u2014 as officially approved by CISO",
+  "approved_providers": [
+    "microsoft_365_copilot_chat",
+    "microsoft_copilot_studio",
+    "github_copilot_enterprise",
+    "openai_enterprise",
+    "openai",
+    "chatgpt_enterprise",
+    "google_gemini_enterprise",
+    "google_ai_studio_enterprise",
+    "google_gemini_vertexai",
+    "grammarly_enterprise",
+    "synthesia_enterprise",
+    "cursor_ai_enterprise",
+    "gamma_ai_business",
+    "adobe_firefly_enterprise",
+    "notion_enterprise",
+    "anthropic",
+    "anthropic_claude_code"
+  ],
+  "banned_providers": [],
+  "require_logging_review": true,
+  "require_prompt_sanitization": true,
+  "require_policy_tag": true,
+  "data_classification_required_for": [
+    "External AI API"
+  ],
+  "approved_provider_display_names": {
+    "microsoft_365_copilot_chat": "Microsoft 365 Copilot Chat",
+    "microsoft_copilot_studio": "Microsoft Copilot Studio",
+    "github_copilot_enterprise": "GitHub Copilot \u2013 Enterprise Edition",
+    "openai_enterprise": "OpenAI API \u2013 Enterprise",
+    "openai": "OpenAI API \u2013 Enterprise",
+    "chatgpt_enterprise": "ChatGPT \u2013 Enterprise Edition",
+    "google_gemini_enterprise": "Google Gemini \u2013 Enterprise Edition",
+    "google_ai_studio_enterprise": "Google AI Studio \u2013 Enterprise Edition",
+    "google_gemini_vertexai": "Google Gemini \u2013 Enterprise Edition",
+    "grammarly_enterprise": "Grammarly \u2013 Enterprise Edition",
+    "synthesia_enterprise": "Synthesia \u2013 Enterprise Edition",
+    "cursor_ai_enterprise": "Cursor AI \u2013 Enterprise Edition",
+    "gamma_ai_business": "Gamma AI \u2013 Business Plan",
+    "adobe_firefly_enterprise": "Adobe Firefly \u2013 Enterprise Edition",
+    "notion_enterprise": "Notion \u2013 Enterprise Edition",
+    "anthropic": "Anthropic Claude \u2013 Enterprise Edition",
+    "anthropic_claude_code": "Anthropic Claude Code \u2013 Enterprise Edition"
+  },
+  "notes": "All tools not on the Approved list require CISO security assessment and approval before use."
+}
