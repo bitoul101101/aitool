@@ -213,3 +213,61 @@ CHALLENGE use_schema=True
 "reason": "The first model's dismissal is insufficient as the base severity is Critical, and a real template injection risk is present.",
 "confidence": 100
 }
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[{"verdict":"dismiss","reason":"(source not available) indicates a placeholder or documentation, making the findings likely false positives","confidence":100},{"verdict":"dismiss","reason":"(source not available) indicates a placeholder or documentation, making the findings likely false positives","confidence":100},{"verdict":"dismiss","reason":"(source not available) indicates a placeholder or documentation, making the findings likely false positives","confidence":100}]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[{"verdict":"keep","reason":"Real code execution risk in production code, no placeholder or comment context","confidence":100},{"verdict":"keep","reason":"Real code execution risk in production code, no placeholder or comment context","confidence":100},{"verdict":"keep","reason":"Real insecure output handling in production code, LLM output in dangerous sink","confidence":100}]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[{"verdict":"keep","reason":"Direct API call with credentials or sensitive data visible in snippet","confidence":90},{"verdict":"keep","reason":"Direct API call with credentials or sensitive data visible in snippet","confidence":90},{"verdict":"keep","reason":"Direct API call with credentials or sensitive data visible in snippet","confidence":90}]
+
+============================================================
+mode=schema attempt=1 model=llama3:8b
+============================================================
+[
+  {
+    "verdict": "keep",
+    "reason": "Insecure output handling in production code, exposing sensitive data",
+    "confidence": 100
+  },
+  {
+    "verdict": "keep",
+    "reason": "Code execution risk in production code, potentially executing arbitrary code",
+    "confidence": 100
+  }
+]
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "The first model's reason is not specific enough, as it only relies on the presence of a placeholder, which is not a reliable indicator of a false positive.",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+"verdict": "keep",
+"reason": "The first model's reason is unclear and does not provide sufficient justification for dismissing the finding, especially since the match is an external API.",
+"confidence": 80
+}
+
+============================================================
+CHALLENGE use_schema=True
+============================================================
+{
+  "verdict": "keep",
+  "reason": "First model's assumption of placeholder or documentation is not supported by available context or snippet",
+  "confidence": 80
+}

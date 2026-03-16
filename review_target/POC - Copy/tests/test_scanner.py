@@ -677,6 +677,14 @@ def test_allowed_origin_only_permits_local_app_hosts():
     assert srv._allowed_origin("https://evil.example") is None
 
 
+def test_default_temp_dir_prefers_system_temp_on_windows():
+    import app_server as srv
+
+    temp_dir = srv._default_temp_dir(os_name="nt", temp_root=r"C:\Temp")
+
+    assert temp_dir == Path(r"C:\Temp") / "ai_scanner_tmp"
+
+
 def test_run_scan_with_no_repos_completes_cleanly():
     import app_server as srv
 
@@ -687,12 +695,15 @@ def test_run_scan_with_no_repos_completes_cleanly():
     session.total = 0
     session.state = "running"
 
-    with patch.object(srv, "_save_history_record", lambda session, findings: None):
+    with patch.object(srv, "_ollama_ping", return_value=False), \
+         patch.object(srv, "_save_history_record", lambda session, findings: None):
         srv._run_scan(session)
 
     assert session.state == "done"
     assert session.findings == []
     assert session.repo_details == {}
+    assert any(msg["msg"] == "  No findings - no report generated." for msg in session.log_lines)
+    assert all(ord(ch) < 128 for entry in session.log_lines for ch in entry["msg"])
 
 if __name__ == "__main__":
     tests = [

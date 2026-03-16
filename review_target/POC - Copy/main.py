@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 AI Security & Compliance Scanner
 PAT login → project/repo selection (checkboxes + search) → live scan → summary
@@ -1580,3 +1580,4 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         srv.shutdown()
+

@@ -1,4 +1,4 @@
-"""
+﻿"""
 HTML Report Generator
 AI Security & Compliance Monitoring
 """
@@ -2041,3 +2041,4 @@ function _esc(str) {
     .replace(/"/g,'&quot;');
 }
 </script>"""
+

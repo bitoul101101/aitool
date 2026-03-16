@@ -1,23 +1,23 @@
 ﻿"""
 app_server.py
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+─────────────
 Single-file web application server for the AI Security & Compliance Scanner.
 
 Replaces the Tkinter GUI with a browser-based SPA.
 
 Routes
-â”€â”€â”€â”€â”€â”€
-GET  /                â†’ SPA shell (HTML)
-GET  /api/status      â†’ server health + config
-POST /api/connect     â†’ validate PAT, return projects
-GET  /api/projects    â†’ list projects (cached)
-GET  /api/repos?project=KEY  â†’ list repos for project
-POST /api/scan/start  â†’ start scan, return scan_id
-GET  /api/scan/stream â†’ SSE log stream
-GET  /api/scan/status â†’ current scan state + results
-POST /api/scan/stop   â†’ request cancellation
-POST /api/ollama      â†’ proxy to Ollama (for HTML report LLM panel)
-GET  /reports/<file>  â†’ serve a report file from OUTPUT_DIR
+──────
+GET  /                → SPA shell (HTML)
+GET  /api/status      → server health + config
+POST /api/connect     → validate PAT, return projects
+GET  /api/projects    → list projects (cached)
+GET  /api/repos?project=KEY  → list repos for project
+POST /api/scan/start  → start scan, return scan_id
+GET  /api/scan/stream → SSE log stream
+GET  /api/scan/status → current scan state + results
+POST /api/scan/stop   → request cancellation
+POST /api/ollama      → proxy to Ollama (for HTML report LLM panel)
+GET  /reports/<file>  → serve a report file from OUTPUT_DIR
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ import json
 import os
 import queue
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -37,7 +38,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# â”€â”€ Project imports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Project imports ───────────────────────────────────────────────────────────
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -50,11 +51,10 @@ from reports.html_report import HTMLReporter
 from reports.delta import build_delta_meta
 from scanner.pat_store import save_pat, load_pat, delete_pat, is_available
 
-# â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Constants ─────────────────────────────────────────────────────────────────
 BITBUCKET_URL = "https://bitbucket.cognyte.local:8443"
 _BASE_DIR     = Path(__file__).parent          # always relative to script
 OUTPUT_DIR    = str(_BASE_DIR / "output")      # mutable at runtime via settings
-TEMP_DIR      = str(_BASE_DIR / "tmp_clones")
 POLICY_FILE   = str(_BASE_DIR / "policy.json")
 OWNER_MAP_FILE = str(_BASE_DIR / "owner_map.json")
 LLM_CFG_FILE  = str(_BASE_DIR / "ai_scanner_llm_config.json")
@@ -62,7 +62,19 @@ APP_PORT      = 5757   # fixed port for the app (report servers use random ports
 APP_VERSION   = "19.1"
 
 
-# â”€â”€ Utility helpers (lifted from main.py) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+def _default_temp_dir(os_name: Optional[str] = None,
+                      temp_root: Optional[str] = None) -> Path:
+    current_os = os_name or os.name
+    if current_os == "nt":
+        root = Path(temp_root or tempfile.gettempdir())
+        return root / "ai_scanner_tmp"
+    return _BASE_DIR / "tmp_clones"
+
+
+TEMP_DIR      = str(_default_temp_dir())
+
+
+# ── Utility helpers (lifted from main.py) ─────────────────────────────────────
 
 def load_policy(path):
     try:
@@ -168,7 +180,7 @@ def _ollama_ensure_running(base_url: str) -> dict:
         )
     except FileNotFoundError:
         return {"ok": False,
-                "error": "`ollama` not found in PATH â€” install from https://ollama.com"}
+                "error": "`ollama` not found in PATH - install from https://ollama.com"}
     except Exception as e:
         return {"ok": False, "error": f"Failed to start ollama: {e}"}
 
@@ -183,7 +195,7 @@ def _ollama_ensure_running(base_url: str) -> dict:
             "error": f"Ollama did not become ready within {OLLAMA_START_TIMEOUT}s"}
 
 
-# â”€â”€ Scan state machine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Scan state machine ────────────────────────────────────────────────────────
 
 class ScanSession:
     """Holds all mutable state for one scan run."""
@@ -268,7 +280,7 @@ class ScanSession:
         }
 
 
-# â”€â”€ Global app state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Global app state ──────────────────────────────────────────────────────────
 
 _client:  Optional[BitbucketClient] = None
 _session: ScanSession               = ScanSession()
@@ -278,7 +290,7 @@ _connected_user: str                = "Unknown"
 _state_lock = threading.Lock()
 
 
-# â”€â”€ Scan runner (background thread) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Scan runner (background thread) ──────────────────────────────────────────
 
 HISTORY_FILE = str(_BASE_DIR / "output" / "scan_history.json")
 LOG_DIR      = str(_BASE_DIR / "output" / "logs")
@@ -335,7 +347,7 @@ def _save_history_record(session, findings):
         hist.append(record)
         # Keep last 500 records
         hist = hist[-500:]
-        # Atomic write: write to .tmp then replace â€” prevents corrupt file on crash
+        # Atomic write: write to .tmp then replace — prevents corrupt file on crash
         tmp_path = HISTORY_FILE + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(hist, f, indent=2)
@@ -346,7 +358,7 @@ def _save_history_record(session, findings):
 
 
 
-# â”€â”€ History cache: avoid re-reading JSON on every /api/history request â”€â”€
+# ── History cache: avoid re-reading JSON on every /api/history request ──
 _history_cache: list       = []
 _history_cache_mtime: float = 0.0
 
@@ -354,7 +366,7 @@ def _load_history() -> list:
     """
     Load scan history from JSON sidecar, using a mtime-based cache.
     Re-reads from disk only when the file has been modified since last load.
-    Only records written by the tool are returned â€” no filesystem reconciliation.
+    Only records written by the tool are returned — no filesystem reconciliation.
     """
     global _history_cache, _history_cache_mtime
     try:
@@ -377,7 +389,7 @@ def _invalidate_history_cache() -> None:
 
 
 def _run_scan(session: ScanSession):
-    """Full scan pipeline â€” runs in a daemon thread."""
+    """Full scan pipeline — runs in a daemon thread."""
     from scanner.history import scan_history
 
     log = session.log
@@ -411,7 +423,7 @@ def _run_scan(session: ScanSession):
 
     from scanner.llm_reviewer import LLMReviewer
     if not _ollama_ping(session.llm_url):
-        log("  [LLM] Ollama not reachable â€” running without LLM review", "warn")
+        log("  [LLM] Ollama not reachable - running without LLM review", "warn")
         llm_enabled = False
     else:
         try:
@@ -422,12 +434,12 @@ def _run_scan(session: ScanSession):
             parts = [info["name"]]
             if info.get("parameter_size"): parts.append(info["parameter_size"])
             if info.get("quantization"):   parts.append(info["quantization"])
-            log(f"LLM      : {' Â· '.join(parts)}", "dim")
+            log(f"LLM      : {' | '.join(parts)}", "dim")
         except Exception:
             session.llm_model_info = {"name": session.llm_model}
             log(f"LLM      : {session.llm_model}", "dim")
 
-    log("â”€" * 58, "dim")
+    log("=" * 58, "dim")
 
     # Prefetch repo metadata
     repo_meta: Dict[str, dict] = {}
@@ -444,7 +456,7 @@ def _run_scan(session: ScanSession):
             log(f"  {slug}  metadata error: {e}", "err")
             repo_meta[slug] = {"branch": None, "owner": "Unknown", "url": ""}
 
-    log("â”€" * 58, "dim")
+    log("=" * 58, "dim")
 
     # Worker count
     try:
@@ -519,9 +531,9 @@ def _run_scan(session: ScanSession):
                         log_fn=log,
                         stop_event=stop,
                     )
-                    log(f"  [LLM] Reviewing {len(analyzed)} finding(s)â€¦", "dim")
+                    log(f"  [LLM] Reviewing {len(analyzed)} finding(s)...", "dim")
                     analyzed = reviewer.review(analyzed, file_contents)
-                    log(f"  [LLM] Review done â†’ {len(analyzed)} finding(s)", "dim")
+                    log(f"  [LLM] Review done -> {len(analyzed)} finding(s)", "dim")
                 except Exception as e:
                     log(f"  [LLM] Review skipped: {e}", "dim")
 
@@ -552,17 +564,17 @@ def _run_scan(session: ScanSession):
 
             if analyzed is None:
                 reason_str = f": {skip_reason}" if skip_reason else ""
-                log(f"  âœ— {slug}: skipped{reason_str}", "err")
+                log(f"  SKIP {slug}: skipped{reason_str}", "err")
                 per_repo[slug] = None
                 session.per_repo = dict(per_repo)
                 continue
 
             s1 = sum(1 for f in analyzed if f.get("severity") == 1)
             s2 = sum(1 for f in analyzed if f.get("severity") == 2)
-            log(f"\nâœ“ {slug}  â†’  {len(analyzed)} findings  "
+            log(f"\nOK {slug} -> {len(analyzed)} findings  "
                 f"(Crit:{s1} High:{s2})", "info")
             if s1:
-                log(f"  âš   {s1} Critical finding(s)!", "err")
+                log(f"  WARN {s1} Critical finding(s)!", "err")
 
             total_pre_llm  += pre_llm
             total_post_llm += len(analyzed)
@@ -576,7 +588,7 @@ def _run_scan(session: ScanSession):
             session.per_repo  = dict(per_repo)
             session.findings  = list(all_findings)
 
-    log("\n" + "â”€" * 58, "dim")
+    log("\n" + "=" * 58, "dim")
     final = aggregator.process(all_findings)
     session.findings = final
     log(f"Total findings (deduped): {len(final)}", "hd")
@@ -594,10 +606,10 @@ def _run_scan(session: ScanSession):
         if per_repo.get(slug) is None:
             log(f"  {slug}: skipped (no findings recorded)", "dim")
         elif not [f for f in final if f.get("repo") == slug]:
-            log(f"  {slug}: âœ“ clean â€” no findings", "ok")
+            log(f"  {slug}: clean - no findings", "ok")
 
     if not final:
-        log("  No findings â€” no report generated.", "dim")
+        log("  No findings - no report generated.", "dim")
     else:
         try:
             dt_date   = datetime.now().strftime("%Y%m%d")
@@ -609,12 +621,12 @@ def _run_scan(session: ScanSession):
                                else session.repo_slugs[0]))
             safe_name = f"AI_Scan_Report_{session.project_key}_{label}_{dt_date}_{dt_time}"
 
-            log(f"  Writing CSV reportâ€¦", "dim")
+            log("  Writing CSV report...", "dim")
             cr = CSVReporter(output_dir=OUTPUT_DIR, scan_id=safe_name)
             cp = cr.write_csv(final)
-            log(f"  Writing HTML report ({len(final)} finding(s))â€¦", "dim")
+            log(f"  Writing HTML report ({len(final)} finding(s))...", "dim")
             if session.llm_url and session.llm_model:
-                log(f"  [Report] Generating LLM analysis for {len(final)} finding(s)â€¦", "dim")
+                log(f"  [Report] Generating LLM analysis for {len(final)} finding(s)...", "dim")
 
             if is_multi:
                 # Build per-repo metadata table for header
@@ -679,7 +691,7 @@ def _run_scan(session: ScanSession):
                           ollama_url=session.llm_url,
                           ollama_model=session.llm_model,
                           progress_fn=lambda i, n, cap: log(
-                              f"  [Report] LLM analysis {i}/{n}: {cap[:50]}â€¦", "dim"))
+                              f"  [Report] LLM analysis {i}/{n}: {cap[:50]}...", "dim"))
             report_paths["__all__"] = {
                 "csv":      str(Path(cp).resolve()),
                 "html":     str(Path(hp).resolve()),
@@ -687,9 +699,9 @@ def _run_scan(session: ScanSession):
                 "html_name":Path(hp).name,
             }
             session.report_paths = dict(report_paths)
-            log(f"  âœ“ Report: {Path(hp).name}", "ok")
+            log(f"  OK Report: {Path(hp).name}", "ok")
         except Exception as e:
-            log(f"  âœ— Report error: {e}", "err")
+            log(f"  Report error: {e}", "err")
 
     session.completed_at_utc = _utc_now_iso()
     session.repo_details = {
@@ -711,9 +723,9 @@ def _run_scan(session: ScanSession):
     if stop.is_set():
         log("\nScan stopped.", "hd")
     elif skipped_all:
-        log("\nâ­ All repositories were skipped.", "warn")
+        log("\nAll repositories were skipped.", "warn")
     else:
-        log("\nâœ“ Scan complete.", "hd")
+        log("\nScan complete.", "hd")
     log(f"Duration: {session.scan_duration_s}s  |  "
         f"Findings: {len(final)}", "info")
 
@@ -722,7 +734,7 @@ def _run_scan(session: ScanSession):
     _save_history_record(session, final)
 
 
-# â”€â”€ HTTP handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── HTTP handler ──────────────────────────────────────────────────────────────
 
 _HTML: bytes = b""   # injected at startup
 
@@ -731,7 +743,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args): pass   # silence access log
 
-    # â”€â”€ Routing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Routing ───────────────────────────────────────────────────────────────
 
     def do_GET(self):
         p = self.path.split("?")[0]
@@ -799,7 +811,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._cors()
         self.end_headers()
 
-    # â”€â”€ API handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── API handlers ──────────────────────────────────────────────────────────
 
     def _api_connect(self, body: dict):
         global _client, _projects_cache, _connected_user
@@ -893,14 +905,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _sse_stream(self):
         """Stream log lines as Server-Sent Events."""
         self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Accel-Buffering", "no")
         self._cors()
         self.end_headers()
 
         # Snapshot the backlog and remember its length.
-        # The queue may already contain some of these same entries â€”
+        # The queue may already contain some of these same entries —
         # we skip the first backlog_len items from the queue to avoid duplicates.
         backlog      = list(_session.log_lines)
         backlog_len  = len(backlog)
@@ -1070,7 +1082,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             err = json.dumps({"error": str(exc)}).encode()
             self._send(502, "application/json", err)
 
-    # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _read_body(self) -> dict:
         length = int(self.headers.get("Content-Length", 0))
@@ -1083,7 +1095,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _json(self, data: dict, status: int = 200):
         body = json.dumps(data).encode("utf-8")
-        self._send(status, "application/json", body)
+        self._send(status, "application/json; charset=utf-8", body)
 
     def _err(self, status: int, msg: str):
         self._json({"error": msg}, status)
@@ -1109,7 +1121,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
 
-# â”€â”€ SPA HTML â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── SPA HTML ──────────────────────────────────────────────────────────────────
 
 def _build_spa() -> bytes:
     """Return the full single-page application as UTF-8 bytes."""
@@ -1121,7 +1133,7 @@ def _build_spa() -> bytes:
                         .encode("utf-8")
 
 
-# â”€â”€ SPA Template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── SPA Template ──────────────────────────────────────────────────────────────
 
 _SPA_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
@@ -1145,7 +1157,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
   font-family:var(--sans);font-size:15px;line-height:1.55;
   overflow:hidden;-webkit-font-smoothing:antialiased}
 
-/* â•â•â•â• SHELL â•â•â•â• */
+/* ════ SHELL ════ */
 #app{display:flex;flex-direction:column;height:100vh}
 #topbar{
   display:flex;align-items:center;gap:16px;padding:0 20px;height:50px;flex-shrink:0;
@@ -1161,7 +1173,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 
 #body-wrap{flex:1;display:flex;overflow:hidden}
 
-/* â•â•â•â• SIDEBAR â•â•â•â• */
+/* ════ SIDEBAR ════ */
 #sidebar{
   width:200px;flex-shrink:0;
   background:var(--surface);border-right:1px solid var(--border);
@@ -1183,14 +1195,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .nav-spacer{flex:1}
 .nav-version{padding:12px 14px;font-family:var(--mono);font-size:10px;color:var(--dim)}
 
-/* â•â•â•â• MAIN AREA â•â•â•â• */
+/* ════ MAIN AREA ════ */
 #main{flex:1;overflow:hidden;display:flex;flex-direction:column}
 .view{display:none;overflow:hidden;flex:1;min-height:0}
 .view.active{display:flex;flex-direction:column}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .view.active{animation:fadeIn .16s ease}
 
-/* â•â•â•â• LOGIN â•â•â•â• */
+/* ════ LOGIN ════ */
 #v-login{
   align-items:center;justify-content:center;
   background:linear-gradient(160deg,#f5ede0 0%,#e8d5ba 50%,#f0e0c8 100%);
@@ -1253,7 +1265,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .btn-primary:hover{opacity:.9}
 .btn-primary:active{transform:translateY(1px)}
 .btn-primary:disabled{opacity:.4;cursor:not-allowed}
-/* â•â•â•â• SELECTOR â•â•â•â• */
+/* ════ SELECTOR ════ */
 #v-selector{}
 .sel-body{flex:1;display:grid;grid-template-columns:200px 1fr;overflow:hidden;min-height:0}
 .sel-sidebar{background:var(--surface);border-right:1px solid var(--border);
@@ -1317,7 +1329,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .btn-go:hover{opacity:.88}
 .btn-go:disabled{opacity:.35;cursor:not-allowed}
 
-/* â•â•â•â• SCAN TABS â•â•â•â• */
+/* ════ SCAN TABS ════ */
 #v-scan{flex-direction:column}
 .tab-bar-wrap{
   display:none;align-items:stretch;flex-shrink:0;
@@ -1380,7 +1392,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 }
 .tab-dot.report{background:#a0522d}
 
-/* â•â•â•â• SCAN VIEW â•â•â•â• */
+/* ════ SCAN VIEW ════ */
 .scan-body{flex:1;display:grid;grid-template-columns:1fr 380px;overflow:hidden;min-height:0}
 .log-panel{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
 .log-header{display:flex;align-items:center;gap:12px;padding:11px 18px;
@@ -1420,7 +1432,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .k1 .kpi-n{color:var(--red)} .k2 .kpi-n{color:var(--ora)}
 .k3 .kpi-n{color:var(--yel)} .k4 .kpi-n{color:var(--lgrn)}
 #repo-cards,[id^="repo-cards-"]{max-height:160px;overflow-y:auto;padding:10px;flex-shrink:0}
-/* â”€â”€ Monitor panel (phase timeline + live log) â”€â”€ */
+/* ── Monitor panel (phase timeline + live log) ── */
 .monitor-panel{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0}
 .monitor-spacer{flex:1}
 .phase-timeline{flex-shrink:0;padding:10px 14px 12px;background:var(--surface);border-top:1px solid var(--border)}
@@ -1487,7 +1499,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
   border:1.5px solid var(--border2)}
 .rpt-btn.csv:hover{border-color:var(--pur2);color:var(--text)}
 
-/* â•â•â•â• PAGE HEADER (settings / history) â•â•â•â• */
+/* ════ PAGE HEADER (settings / history) ════ */
 .page-hdr{
   background:linear-gradient(135deg,#3b1a08 0%,#6b2d0a 50%,#4a1a4e 100%);
   padding:16px 28px;border-bottom:2px solid rgba(255,200,120,.2);flex-shrink:0;
@@ -1496,7 +1508,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .page-hdr p{font-size:13px;color:rgba(255,255,255,.45);margin-top:2px}
 .page-body{flex:1;overflow-y:auto;padding:24px 28px}
 
-/* â•â•â•â• SETTINGS â•â•â•â• */
+/* ════ SETTINGS ════ */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:860px}
 .setting-card{background:var(--card);border:1px solid var(--border);
   border-radius:var(--r);padding:20px 22px}
@@ -1520,7 +1532,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .setting-save:hover{opacity:.85}
 #settings-msg{font-size:12px;margin-top:10px;font-family:var(--mono);min-height:18px}
 
-/* â•â•â•â• HISTORY â•â•â•â• */
+/* ════ HISTORY ════ */
 .hist-toolbar{position:sticky;top:0;z-index:3;background:var(--surface);display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;padding-bottom:8px}
 .hist-toolbar input{
   flex:1;min-width:180px;background:var(--card);border:1.5px solid var(--border2);
@@ -1542,8 +1554,8 @@ table.hist th{
   cursor:pointer;user-select:none;white-space:nowrap;
 }
 table.hist th:hover{background:var(--pur);color:#fff}
-table.hist th.sort-asc::after{content:' â–²';font-size:9px}
-table.hist th.sort-desc::after{content:' â–¼';font-size:9px}
+table.hist th.sort-asc::after{content:' ▲';font-size:9px}
+table.hist th.sort-desc::after{content:' ▼';font-size:9px}
 table.hist td{
   padding:9px 13px;border-bottom:1px solid var(--border);
   vertical-align:middle;color:var(--text2);white-space:nowrap;
@@ -1574,7 +1586,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 .state-skipped{color:var(--dim);font-style:italic}
 .state-running{color:var(--pur2);animation:pulse 1.4s ease-in-out infinite}
 
-/* â•â•â•â• SHARED â•â•â•â• */
+/* ════ SHARED ════ */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -1590,7 +1602,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 
 <div id="topbar">
   <div class="logo">
-    <div class="logo-icon">ðŸ”</div>
+    <div class="logo-icon">AI</div>
     AI Security &amp; Compliance Scanner
     <span class="logo-sub">Bitbucket Edition</span>
   </div>
@@ -1602,13 +1614,13 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 <nav id="sidebar">
   <div class="nav-section">Navigation</div>
   <div class="nav-item active" id="nav-scan" onclick="navTo('scan')">
-    <span class="ni-icon">ðŸ”</span> Scan
+    <span class="ni-icon">S</span> Scan
   </div>
   <div class="nav-item" id="nav-history" onclick="navTo('history')">
-    <span class="ni-icon">ðŸ“‹</span> Scan History
+    <span class="ni-icon">H</span> Scan History
   </div>
   <div class="nav-item" id="nav-settings" onclick="navTo('settings')">
-    <span class="ni-icon">âš™ï¸</span> Settings
+    <span class="ni-icon">Cfg</span> Settings
   </div>
   <div class="nav-spacer"></div>
   <div class="nav-version">v19.1</div>
@@ -1616,7 +1628,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 
 <div id="main">
 
-<!-- GLOBAL TAB BAR â€” persists across all pages -->
+<!-- GLOBAL TAB BAR — persists across all pages -->
 <div class="tab-bar-wrap" id="tab-bar-wrap" style="display:none">
   <button class="tab-scroll-btn" id="tab-scroll-left" onclick="_tabScroll(-1)">&#8249;</button>
   <div class="tab-bar" id="tab-bar"></div>
@@ -1627,14 +1639,14 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 <div class="view active" id="v-login">
   <div class="login-wrap">
     <div class="login-hero">
-      <span class="login-hero-icon">ðŸ”</span>
+      <span class="login-hero-icon">AI</span>
       <h1>AI Security &amp; Compliance Scanner</h1>
       <p class="subtitle">Bitbucket Edition</p>
     </div>
     <div class="login-body">
       <div class="field">
         <label>Personal Access Token (PAT)</label>
-        <input type="password" id="pat-input" placeholder="Paste your token hereâ€¦" autocomplete="off">
+        <input type="password" id="pat-input" placeholder="Paste your token here..." autocomplete="off">
       </div>
       <label class="chk-row">
         <input type="checkbox" id="remember-chk" checked>
@@ -1644,7 +1656,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
         A saved token is available on this machine. Leave the field blank to use it.
       </div>
       <div id="login-status"></div>
-      <button class="btn-primary" id="connect-btn">Connect â†’</button>
+      <button class="btn-primary" id="connect-btn">Connect</button>
     </div>
   </div>
 </div>
@@ -1652,10 +1664,10 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 <!-- SCAN (contains selector panel + scan tab panels) -->
 <div class="view" id="v-scan">
   <div class="page-hdr">
-    <h1>ðŸ” Scan</h1>
+    <h1>Scan</h1>
     <p>Scan repositories for AI/LLM usage patterns and security risks</p>
   </div>
-  <!-- Selector panel â€” shown when selecting a new scan -->
+  <!-- Selector panel — shown when selecting a new scan -->
   <div id="v-selector" style="display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0">
     <div class="sel-body">
       <div class="sel-sidebar">
@@ -1665,7 +1677,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
       <div class="sel-content">
         <div class="sel-toolbar">
           <span class="rh" id="repo-hdr">Repositories</span>
-          <input class="search-inp" id="repo-search" placeholder="Filter repositoriesâ€¦">
+          <input class="search-inp" id="repo-search" placeholder="Filter repositories...">
           <button class="btn-xs" onclick="selAll()">All</button>
           <button class="btn-xs" onclick="selNone()">None</button>
         </div>
@@ -1677,15 +1689,15 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
       <input id="llm-url-inp" value="__LLM_URL__" placeholder="http://localhost:11434">
       <span class="lb">Model</span>
       <select id="llm-model-sel"></select>
-      <button class="btn-xs" onclick="refreshModels()">â†º Refresh</button>
-      <span id="llm-ind">checkingâ€¦</span>
+      <button class="btn-xs" onclick="refreshModels()">Refresh</button>
+      <span id="llm-ind">checking...</span>
     </div>
     <div class="sel-footer">
       <span class="sel-count" id="sel-count">Select a project, then tick repositories</span>
-      <button class="btn-go" id="go-btn" disabled onclick="startScan()">â–¶  Start Scan</button>
+      <button class="btn-go" id="go-btn" disabled onclick="startScan()">Start Scan</button>
     </div>
   </div>
-  <!-- Tab panels â€” active when a scan/report tab is selected -->
+  <!-- Tab panels — active when a scan/report tab is selected -->
   <div id="scan-tabs-area" style="display:none;flex:1;overflow:hidden;min-height:0;position:relative">
     <div id="tab-panels" style="position:absolute;inset:0"></div>
   </div>
@@ -1694,13 +1706,13 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 <!-- SETTINGS -->
 <div class="view" id="v-settings">
   <div class="page-hdr">
-    <h1>âš™ï¸ Settings</h1>
+    <h1>Settings</h1>
     <p>Configure scanner connection and LLM review settings</p>
   </div>
   <div class="page-body">
     <div class="settings-grid">
       <div class="setting-card">
-        <h3>ðŸ”— Bitbucket Connection</h3>
+        <h3>Bitbucket Connection</h3>
         <div class="setting-row">
           <label>Server URL</label>
           <input id="s-bb-url" class="readonly" readonly>
@@ -1711,7 +1723,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
         </div>
       </div>
       <div class="setting-card">
-        <h3>ðŸ§  LLM Review (Ollama)</h3>
+        <h3>LLM Review (Ollama)</h3>
         <div class="setting-row">
           <label>Ollama Base URL</label>
           <input id="s-llm-url" placeholder="http://localhost:11434">
@@ -1724,14 +1736,14 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
         <div id="settings-msg"></div>
       </div>
       <div class="setting-card">
-        <h3>ðŸ“ Output</h3>
+        <h3>Output</h3>
         <div class="setting-row">
           <label>Reports Directory</label>
           <div style="display:flex;gap:8px;align-items:center">
             <input id="s-out-dir" placeholder="./output" style="flex:1"
               title="Type a path, e.g. C:\Users\you\scans or ./output">
             <button class="btn-xs" style="padding:7px 12px;flex-shrink:0"
-              title="Browse for directory" onclick="browseOutputDir()">ðŸ“‚ Browse</button>
+              title="Browse for directory" onclick="browseOutputDir()">📂 Browse</button>
           </div>
           <div style="font-size:11px;color:var(--dim);margin-top:4px">
             Type a path directly or use Browse (requires Chrome/Edge).
@@ -1747,12 +1759,12 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 <!-- HISTORY -->
 <div class="view" id="v-history">
   <div class="page-hdr">
-    <h1>ðŸ“‹ Scan History</h1>
+    <h1>Scan History</h1>
     <p>All completed scans, sortable and filterable</p>
   </div>
   <div class="page-body">
     <div class="hist-toolbar">
-      <input id="hist-search" placeholder="Searchâ€¦" oninput="_histPage=0;renderHistory()">
+      <input id="hist-search" placeholder="Search..." oninput="_histPage=0;renderHistory()">
       <select id="hist-filter-project" onchange="_histPage=0;renderHistory()">
         <option value="">All Projects</option>
       </select>
@@ -1768,10 +1780,10 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
       <select id="hist-filter-llm" onchange="_histPage=0;renderHistory()">
         <option value="">All Models</option>
       </select>
-      <button class="btn-xs" onclick="loadHistory()">â†º Refresh</button>
+      <button class="btn-xs" onclick="loadHistory()">Refresh</button>
       <button class="btn-xs" id="hist-del-btn" onclick="deleteSelectedHistory()"
         style="display:none;background:#b91c1c;color:#fff;border-color:#b91c1c"
-        title="Delete selected rows and their files">ðŸ—‘ Delete selected</button>
+        title="Delete selected rows and their files">Delete selected</button>
     </div>
     <div class="hist-table-wrap">
       <table class="hist" id="hist-table">
@@ -1819,7 +1831,7 @@ let _histData=[],_histSortCol='date',_histSortDir='desc';
 let _histPage=0;
 const HIST_PAGE_SIZE=20;
 
-// â”€â”€ NAV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── NAV ───────────────────────────────────────────────────────────
 function show(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -1834,7 +1846,7 @@ function showSelector(){
 function showTabsArea(){
   document.getElementById('v-selector').style.display='none';
   document.getElementById('scan-tabs-area').style.display='flex';
-  // Hide the "ðŸ” Scan" page header â€” it obscures iframe/tab content
+  // Hide the "🔍 Scan" page header — it obscures iframe/tab content
   const hdr=document.querySelector('#v-scan .page-hdr');
   if(hdr) hdr.style.display='none';
 }
@@ -1854,10 +1866,10 @@ function _openSelectorTab(){
   tabEl.onclick=()=>{ _switchTab(tid); show('v-scan'); showSelector(); };
   const lblEl=document.createElement('span');
   lblEl.className='tab-label';
-  lblEl.textContent='ï¼‹ New Scan';
+  lblEl.textContent='＋ New Scan';
   const closeEl=document.createElement('span');
   closeEl.className='tab-close';
-  closeEl.textContent='âœ•';
+  closeEl.textContent='✕';
   closeEl.onclick=e=>{
     e.stopPropagation();
     tabEl.remove();
@@ -1895,7 +1907,7 @@ function navTo(page){
     if(!_curProj){ show('v-login'); return; }
     show('v-scan');
     if(_anyRunning()){
-      showTabsArea();  // running â€” keep focused on active scan
+      showTabsArea();  // running — keep focused on active scan
       return;
     }
     // Open selector as a tab (create once, reuse if already open)
@@ -1906,7 +1918,7 @@ function navTo(page){
 }
 function showSidebar(){document.getElementById('sidebar').classList.add('visible')}
 
-// â”€â”€ LOGIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── LOGIN ─────────────────────────────────────────────────────────
 const HAS_SAVED_PAT = (__HAS_SAVED_PAT__ === true);
 if(HAS_SAVED_PAT){
   document.getElementById('saved-token-note').style.display='block';
@@ -1914,7 +1926,7 @@ if(HAS_SAVED_PAT){
 document.getElementById('pat-input').addEventListener('keydown',e=>{if(e.key==='Enter')connect()});
 document.getElementById('connect-btn').addEventListener('click',connect);
 
-// â”€â”€ Page-load recovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Page-load recovery ────────────────────────────────────────────
 // If the server already has an active or recently completed scan session,
 // restore the UI without requiring a new login (handles page reload + nav-away).
 (async function _recoverSession(){
@@ -1922,7 +1934,7 @@ document.getElementById('connect-btn').addEventListener('click',connect);
     const r = await fetch('/api/scan/status');
     const d = await r.json();
     const activeStates = ['running','done','stopped','skipped','error'];
-    if(!activeStates.includes(d.state)) return;  // idle â€” nothing to recover
+    if(!activeStates.includes(d.state)) return;  // idle — nothing to recover
     const proj = d.project_key || '';
     // Restore client state
     _curProj = proj;
@@ -1932,7 +1944,7 @@ document.getElementById('connect-btn').addEventListener('click',connect);
     // Build a recovery tab that polls the existing session
     const repoList = Object.keys(d.per_repo||{});
     const repoLabel = repoList.length===1 ? repoList[0] : `${repoList.length} repos`;
-    const label = `${proj} Â· ${repoLabel}`;
+    const label = `${proj} | ${repoLabel}`;
     const tab = _createTab(label);
     const tid = tab.id;
     tab.scan_id = d.scan_id;
@@ -1942,13 +1954,13 @@ document.getElementById('connect-btn').addEventListener('click',connect);
       _connectSSE(tab);
       _startPoll(tab);
     } else {
-      // Already finished â€” restore final state immediately
+      // Already finished — restore final state immediately
       showTabsArea();
       _onTabFinished(tab, d);
       _updateScanUI(tid, d);
     }
   }catch(e){
-    // Server unreachable or no session â€” stay on login
+    // Server unreachable or no session — stay on login
   }
 })();
 function setStatus(msg,color){
@@ -1960,7 +1972,7 @@ async function connect(){
   const useSavedToken = !token && HAS_SAVED_PAT;
   if(!token && !useSavedToken){setStatus('Please enter your Personal Access Token.','var(--red)');return}
   const btn=document.getElementById('connect-btn');
-  btn.disabled=true;setStatus(useSavedToken?'Connecting with saved token…':'Connecting…','var(--dim)');
+  btn.disabled=true;setStatus(useSavedToken?'Connecting with saved token�':'Connecting�','var(--dim)');
   try{
     const r=await fetch('/api/connect',{method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -1977,7 +1989,7 @@ async function connect(){
   finally{btn.disabled=false}
 }
 
-// â”€â”€ SELECTOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SELECTOR ──────────────────────────────────────────────────────
 function buildProjectList(){
   const el=document.getElementById('proj-list');el.innerHTML='';
   _projects.forEach(p=>{
@@ -1991,19 +2003,19 @@ function buildProjectList(){
 async function pickProject(key,el){
   document.querySelectorAll('.proj-item').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');_curProj=key;_selVars={};
-  document.getElementById('repo-hdr').textContent=`${key} â€” Loadingâ€¦`;
+  document.getElementById('repo-hdr').textContent=`${key} - Loading...`;
   document.getElementById('repo-list').innerHTML='';updateSelCount();
   if(_repos[key]){buildRepoList(_repos[key]);return}
   try{
     const r=await fetch(`/api/repos?project=${encodeURIComponent(key)}`);
     const d=await r.json();_repos[key]=d.repos||[];buildRepoList(_repos[key]);
-  }catch(e){document.getElementById('repo-hdr').textContent=`${key} â€” Error: ${e.message}`}
+  }catch(e){document.getElementById('repo-hdr').textContent=`${key} - Error: ${e.message}`}
 }
 function buildRepoList(repos,filter=''){
   const el=document.getElementById('repo-list');
   const hdr=document.getElementById('repo-hdr');
   const list=filter?repos.filter(r=>r.slug.toLowerCase().includes(filter.toLowerCase())):repos;
-  hdr.textContent=`${_curProj} â€” ${repos.length} repo${repos.length===1?'':'s'}`;
+  hdr.textContent=`${_curProj} - ${repos.length} repo${repos.length===1?'':'s'}`;
   el.innerHTML='';
   // Choose column count: 1 for <=8, 2 for <=20, 3 for >20
   const cols=repos.length<=8?1:repos.length<=20?2:3;
@@ -2045,10 +2057,10 @@ function updateSelCount(){
   else{el.textContent='Select a project, then tick repositories';el.className='sel-count';btn.disabled=true}
 }
 
-// â”€â”€ OLLAMA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── OLLAMA ────────────────────────────────────────────────────────
 async function _startOllamaAndReload(url){
   const ind=document.getElementById('llm-ind');
-  ind.textContent='Starting Ollamaâ€¦';ind.className='ind-ok';
+  ind.textContent='Starting Ollama...';ind.className='ind-ok';
   try{
     const r=await fetch('/api/ollama/start',{method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -2058,12 +2070,12 @@ async function _startOllamaAndReload(url){
       _populateModelDropdown(d.models);
       ind.textContent=`${d.models.length} model${d.models.length===1?'':'s'}`;ind.className='ind-ok';
     }else if(d.ok&&!d.models.length){
-      ind.textContent='Ollama running, no models â€” run: ollama pull qwen2.5-coder:7b-instruct';ind.className='ind-warn';
+      ind.textContent='Ollama running, no models - run: ollama pull qwen2.5-coder:7b-instruct';ind.className='ind-warn';
     }else{
-      ind.textContent=`âš  ${d.error||'Could not start Ollama'}`;ind.className='ind-err';
+      ind.textContent=`Warning: ${d.error||'Could not start Ollama'}`;ind.className='ind-err';
     }
   }catch(e){
-    ind.textContent='âš  Ollama unreachable â€” install from ollama.com';ind.className='ind-err';
+    ind.textContent='Warning: Ollama unreachable - install from ollama.com';ind.className='ind-err';
   }
 }
 function _populateModelDropdown(models){
@@ -2083,10 +2095,10 @@ function _populateModelDropdown(models){
 }
 
 async function refreshModels(){
-  // Single fast check. If Ollama is reachable and has models â€” done.
+  // Single fast check. If Ollama is reachable and has models — done.
   // Otherwise hand off to _startOllamaAndReload which does the heavy lifting.
   const ind=document.getElementById('llm-ind');
-  ind.textContent='checkingâ€¦';ind.className='';
+  ind.textContent='checking...';ind.className='';
   const url=document.getElementById('llm-url-inp').value.trim()||'http://localhost:11434';
   try{
     const r=await fetch('/api/ollama/models?url='+encodeURIComponent(url));
@@ -2095,11 +2107,11 @@ async function refreshModels(){
       _populateModelDropdown(d.models);
       ind.textContent=`${d.models.length} model${d.models.length===1?'':'s'}`;ind.className='ind-ok';
     }else{
-      // Not running or no models â€” start it
+      // Not running or no models — start it
       _startOllamaAndReload(url);
     }
   }catch(e){
-    // Unreachable â€” start it
+    // Unreachable — start it
     _startOllamaAndReload(url);
   }
 }
@@ -2111,8 +2123,8 @@ document.getElementById('llm-url-inp').addEventListener('input',()=>{
   _urlDebounce=setTimeout(()=>refreshModels(0), 800);
 });
 
-// â”€â”€ SCAN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// â”€â”€ SCAN TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SCAN ──────────────────────────────────────────────────────────
+// ── SCAN TABS ─────────────────────────────────────────────────────
 // Each tab is: { id, scan_id, label, state, sse, pollTimer, el, dotEl, panelEl, logs, statusData }
 let _selectorTabId = null;  // ID of the "New Scan" selector tab (if open)
 let _tabs = [];
@@ -2125,7 +2137,7 @@ function _tabPanelHTML(tid){
     <div class="log-panel">
       <div class="log-header">
         <div class="lh-icon" id="run-dot-${tid}"></div>
-        <span class="lh-title" id="scan-title-${tid}">Scanningâ€¦</span>
+        <span class="lh-title" id="scan-title-${tid}">Scanning...</span>
         <span class="lh-eta" id="scan-eta-${tid}"></span>
       </div>
       <div class="prog-wrap"><div class="prog-fill" id="prog-bar-${tid}"></div></div>
@@ -2134,13 +2146,13 @@ function _tabPanelHTML(tid){
     <div class="findings-panel">
       <div class="fp-header">
         <span class="fp-title">Findings</span>
-        <span class="fp-subtitle" id="fp-total-${tid}">Waiting for scan resultsâ€¦</span>
+        <span class="fp-subtitle" id="fp-total-${tid}">Waiting for scan results...</span>
       </div>
       <div class="kpi-strip">
-        <div class="kpi-cell k1"><div class="kpi-n" id="k-crit-${tid}">â€”</div><div class="kpi-l">Critical</div></div>
-        <div class="kpi-cell k2"><div class="kpi-n" id="k-high-${tid}">â€”</div><div class="kpi-l">High</div></div>
-        <div class="kpi-cell k3"><div class="kpi-n" id="k-med-${tid}" >â€”</div><div class="kpi-l">Medium</div></div>
-        <div class="kpi-cell k4"><div class="kpi-n" id="k-low-${tid}" >â€”</div><div class="kpi-l">Low</div></div>
+        <div class="kpi-cell k1"><div class="kpi-n" id="k-crit-${tid}">-</div><div class="kpi-l">Critical</div></div>
+        <div class="kpi-cell k2"><div class="kpi-n" id="k-high-${tid}">-</div><div class="kpi-l">High</div></div>
+        <div class="kpi-cell k3"><div class="kpi-n" id="k-med-${tid}" >-</div><div class="kpi-l">Medium</div></div>
+        <div class="kpi-cell k4"><div class="kpi-n" id="k-low-${tid}" >-</div><div class="kpi-l">Low</div></div>
       </div>
       <div id="repo-cards-${tid}"></div>
       <div class="monitor-panel">
@@ -2164,7 +2176,7 @@ function _createTab(label){
   tabEl.onclick = ()=>_switchTab(tid);
   const dotEl = document.createElement('div');dotEl.className='tab-dot running';
   const lblEl = document.createElement('span');lblEl.className='tab-label';lblEl.textContent=label;
-  const closeEl = document.createElement('span');closeEl.className='tab-close';closeEl.textContent='âœ•';
+  const closeEl = document.createElement('span');closeEl.className='tab-close';closeEl.textContent='✕';
   closeEl.onclick = e=>{e.stopPropagation();_closeTab(tid)};
   tabEl.append(dotEl, lblEl, closeEl);
 
@@ -2237,10 +2249,10 @@ function _createReportTab(scanLabel, url){
   dotEl.className = 'tab-dot report';
   const lblEl = document.createElement('span');
   lblEl.className = 'tab-label';
-  lblEl.textContent = 'ðŸ“Š ' + scanLabel;
+  lblEl.textContent = 'Report: ' + scanLabel;
   const closeEl = document.createElement('span');
   closeEl.className = 'tab-close';
-  closeEl.textContent = 'âœ•';
+  closeEl.textContent = '✕';
   closeEl.onclick = e => { e.stopPropagation(); _closeReportTab(tid); };
   tabEl.append(dotEl, lblEl, closeEl);
   // Always show close on report tabs
@@ -2299,10 +2311,10 @@ function _openLogTab(scanId, label){
   dotEl.className = 'tab-dot report';
   const lblEl   = document.createElement('span');
   lblEl.className  = 'tab-label';
-  lblEl.textContent = 'ðŸ“‹ ' + (label || scanId);
+  lblEl.textContent = 'Log: ' + (label || scanId);
   const closeEl = document.createElement('span');
   closeEl.className = 'tab-close';
-  closeEl.textContent = 'âœ•';
+  closeEl.textContent = '✕';
   closeEl.style.display = 'block';
   closeEl.onclick = e => { e.stopPropagation(); _closeReportTab(tid); };
   tabEl.append(dotEl, lblEl, closeEl);
@@ -2347,7 +2359,7 @@ function _tabScroll(dir){
   const bar=document.getElementById('tab-bar');
   if(bar) bar.scrollBy({left:dir*180,behavior:'smooth'});
 }
-// â”€â”€ compat: _scanActive/_scanDone still used by navTo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── compat: _scanActive/_scanDone still used by navTo ─────────────
 function _anyRunning(){ return _tabs.some(t=>t.state==='running') }
 function _anyDone()   { return _tabs.some(t=>t.state!=='running') }
 
@@ -2362,7 +2374,7 @@ async function startScan(){
   showTabsArea();
 
   const repoLabel = slugs.length===1 ? slugs[0] : `${slugs.length} repos`;
-  const label = `${_curProj} Â· ${repoLabel}`;
+  const label = `${_curProj} | ${repoLabel}`;
   // Close selector tab if open
   if(_selectorTabId && _getTab(_selectorTabId)){
     const selTab=_getTab(_selectorTabId);
@@ -2392,12 +2404,12 @@ async function startScan(){
   }catch(e){alert('Failed to start scan: '+e.message); _closeTab(tid)}
 }
 
-// â”€â”€ SSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// â”€â”€ PHASE TIMELINE + MONITOR LOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SSE ────────────────────────────────────────────────────────────
+// ── PHASE TIMELINE + MONITOR LOG ─────────────────────────────────
 
 const _PHASES = ['Init','Clone','Detect','LLM Review','Aggregate','Report'];
-const _phaseStartTs = {};  // tid â†’ [startMs, ...]  set when phase goes active
-const _phaseEndTs   = {};  // tid â†’ [endMs, ...]    set when NEXT phase goes active
+const _phaseStartTs = {};  // tid → [startMs, ...]  set when phase goes active
+const _phaseEndTs   = {};  // tid → [endMs, ...]    set when NEXT phase goes active
 
 function _initPhaseTimeline(tid){
   const tl=document.getElementById(`phase-tl-${tid}`);
@@ -2406,7 +2418,7 @@ function _initPhaseTimeline(tid){
   _phaseEndTs[tid]   = new Array(_PHASES.length).fill(null);
   tl.innerHTML=_PHASES.map((p,i)=>
     `<div class="phase-row ph-wait" id="ph-row-${tid}-${i}" data-phase="${p}">
-       <div class="phase-icon">Â·</div>
+       <div class="phase-icon">.</div>
        <span class="phase-label">${p}</span>
        <span class="phase-detail" id="ph-det-${tid}-${i}"></span>
      </div>`
@@ -2427,7 +2439,7 @@ function _setPhase(tid, phaseIdx, state){
   const prevClass=row.className;
   row.className=`phase-row ph-${state}`;
   const icon=row.querySelector('.phase-icon');
-  icon.textContent = state==='done'?'âœ“' : state==='active'?'â–¶' : state==='skip'?'â€”' : 'Â·';
+  icon.textContent = state==='done'?'OK' : state==='active'?'>': state==='skip'?'-' : '.';
 
   const now=Date.now();
   if(!_phaseStartTs[tid]) _phaseStartTs[tid]=new Array(_PHASES.length).fill(null);
@@ -2457,7 +2469,7 @@ function _detectPhaseFromMsg(msg){
   if(/Scanning:|files\)|patterns found/.test(msg))                return 2; // Detect
   if(/\[LLM\]/.test(msg))                                         return 3; // LLM Review
   if(/Total findings|deduped|Aggregat/.test(msg))                 return 4; // Aggregate
-  if(/Generating reports|Writing CSV|Writing HTML|Report\]|âœ“ Report/.test(msg)) return 5; // Report
+  if(/Generating reports|Writing CSV|Writing HTML|Report\]|OK Report/.test(msg)) return 5; // Report
   return -1;
 }
 
@@ -2517,7 +2529,7 @@ function _appendLog(tid, entry){
   row.append(tsEl,msgEl);el.appendChild(row);el.scrollTop=el.scrollHeight;
 }
 
-// â”€â”€ POLL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── POLL ───────────────────────────────────────────────────────────
 function _startPoll(tab){
   if(tab.pollTimer) clearInterval(tab.pollTimer);
   tab.pollTimer = setInterval(()=>_pollTab(tab), 600);
@@ -2548,27 +2560,27 @@ function _updateScanUI(tid, d){
   if(d.current_file){
     const fname=d.current_file.split('/').pop();
     const cnt=d.total_files>0?`${d.file_index}/${d.total_files}`:'';
-    statusText=`${pct}%  Â·  ${fname}${cnt?' ('+cnt+')':''}`;
+    statusText=`${pct}% | ${fname}${cnt?' ('+cnt+')':''}`;
   } else if(d.total_files>0){
-    statusText=`Scanningâ€¦ ${d.file_index}/${d.total_files} files (${pct}%)`;
+    statusText=`Scanning... ${d.file_index}/${d.total_files} files (${pct}%)`;
   } else if(d.current_repo){
     statusText=`Scanning: ${d.current_repo}`;
   } else if(d.state==='running'){
-    statusText='Scanningâ€¦';
+    statusText='Scanning...';
   } else {
-    statusText=d.state||'â€¦';
+    statusText=d.state||'...';
   }
   const title=document.getElementById(`scan-title-${tid}`);
   if(title && d.state==='running') title.textContent=statusText;
   const s=d.sev||{};
   const total=(s.critical||0)+(s.high||0)+(s.medium||0)+(s.low||0);
   const _s=(id,v)=>{const e=document.getElementById(`${id}-${tid}`);if(e)e.textContent=v};
-  _s('k-crit',s.critical!=null?s.critical:'â€”');
-  _s('k-high',s.high!=null?s.high:'â€”');
-  _s('k-med', s.medium!=null?s.medium:'â€”');
-  _s('k-low', s.low!=null?s.low:'â€”');
+  _s('k-crit',s.critical!=null?s.critical:'-');
+  _s('k-high',s.high!=null?s.high:'-');
+  _s('k-med', s.medium!=null?s.medium:'-');
+  _s('k-low', s.low!=null?s.low:'-');
   const fpt=document.getElementById(`fp-total-${tid}`);
-  if(fpt) fpt.textContent=total?`${total} finding${total===1?'':'s'} across ${Object.keys(d.per_repo||{}).length} repo${Object.keys(d.per_repo||{}).length===1?'':'s'}`:'Scanningâ€¦';
+  if(fpt) fpt.textContent=total?`${total} finding${total===1?'':'s'} across ${Object.keys(d.per_repo||{}).length} repo${Object.keys(d.per_repo||{}).length===1?'':'s'}`:'Scanning...';
   _buildRepoCards(tid, d);
 }
 
@@ -2581,7 +2593,7 @@ function _buildRepoCards(tid, d){
     const card=document.createElement('div');card.className='repo-card';
     const head=document.createElement('div');head.className='repo-card-head';
     const icon=document.createElement('span');icon.className='rc-icon';
-    icon.textContent=skipped?'â­':clean?'âœ“':'ðŸ“';
+    icon.textContent=skipped?'SKIP':clean?'OK':'REP';
     const name=document.createElement('span');
     name.className='rc-name'+(skipped?' skip':clean?' clean':'');name.textContent=slug;
     const cnt=document.createElement('span');cnt.className='rc-count';
@@ -2610,7 +2622,7 @@ function _onTabFinished(tab, d){
   _finalisePhases(tab.id);
   const dotEl=document.getElementById(`run-dot-${tab.id}`);
   if(dotEl) dotEl.classList.remove('running');
-  const titleMap={done:'Scan complete âœ“',stopped:'Scan stopped',skipped:'Scan skipped â­'};
+  const titleMap={done:'Scan complete',stopped:'Scan stopped',skipped:'Scan skipped'};
   const titleEl=document.getElementById(`scan-title-${tab.id}`);
   if(titleEl) titleEl.textContent=titleMap[d.state]||'Scan finished';
   const pb=document.getElementById(`prog-bar-${tab.id}`);if(pb) pb.style.width='100%';
@@ -2618,7 +2630,7 @@ function _onTabFinished(tab, d){
   // Update tab label with finding count
   const sev=d.sev||{};
   const total=(sev.critical||0)+(sev.high||0)+(sev.medium||0)+(sev.low||0);
-  _setTabLabel(tab.id, `${tab.label} â€” ${total} finding${total===1?'':'s'}`);
+  _setTabLabel(tab.id, `${tab.label} - ${total} finding${total===1?'':'s'}`);
   // Show prominent report bar
   const rb=document.getElementById(`report-bar-${tab.id}`);
   if(rb){
@@ -2628,7 +2640,7 @@ function _onTabFinished(tab, d){
       if(rp.html_name){
         const b=document.createElement('button');
         b.className='rpt-btn html';
-        b.innerHTML='<span style="font-size:16px">ðŸ“Š</span>&nbsp;Open HTML Report';
+        b.textContent='Open HTML Report';
         b.onclick=()=>_createReportTab(tab.label, `/reports/${encodeURIComponent(rp.html_name)}`);
         rb.appendChild(b);
       }
@@ -2636,7 +2648,7 @@ function _onTabFinished(tab, d){
         const a=document.createElement('a');
         a.className='rpt-btn csv';
         a.href=`/reports/${encodeURIComponent(rp.csv_name)}`;
-        a.innerHTML='ðŸ“„ Open CSV Report';
+        a.textContent='Open CSV Report';
         a.target='_blank';
         rb.appendChild(a);
         // Download Log button (same log file path convention)
@@ -2646,7 +2658,7 @@ function _onTabFinished(tab, d){
           const lb=document.createElement('a');
           lb.className='rpt-btn csv';
           lb.href=`/api/history/log/${encodeURIComponent(d.scan_id)}`;
-          lb.innerHTML='ðŸ“‹ Download Log';
+          lb.textContent='Download Log';
           lb.download=(d.scan_id||'scan')+'.log';
           rb.appendChild(lb);
         }
@@ -2665,7 +2677,7 @@ function goToSelector(){
   _openSelectorTab();
 }
 
-// â”€â”€ SETTINGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── SETTINGS ──────────────────────────────────────────────────────
 async function loadSettings(){
   try{
     const r=await fetch('/api/settings');const d=await r.json();
@@ -2699,7 +2711,7 @@ async function saveSettings(){
       body:JSON.stringify({llm_url:url,llm_model:model})});
     const d=await r.json();
     if(d.ok){
-      msg.textContent='âœ“ LLM settings saved';msg.style.color='#6ee7b7';
+      msg.textContent='LLM settings saved';msg.style.color='#6ee7b7';
       document.getElementById('llm-url-inp').value=url;
       const scanSel=document.getElementById('llm-model-sel');
       for(const opt of scanSel.options) if(opt.value===model) opt.selected=true;
@@ -2723,7 +2735,7 @@ async function browseOutputDir(){
   } else {
     document.getElementById('s-out-dir').focus();
     const msg=document.getElementById('outdir-msg');
-    msg.textContent='Directory picker not supported â€” please type the path directly.';
+    msg.textContent='Directory picker not supported - please type the path directly.';
     msg.style.color='var(--dim)';
     setTimeout(()=>msg.textContent='',4000);
   }
@@ -2744,7 +2756,7 @@ async function saveOutputDir(){
       body:JSON.stringify({output_dir:dir})});
     const d=await r.json();
     if(d.ok){
-      msg.textContent=`âœ“ Reports will be saved to: ${d.output_dir}`;
+      msg.textContent=`Reports will be saved to: ${d.output_dir}`;
       msg.style.color='#6ee7b7';
       document.getElementById('s-out-dir').value=d.output_dir;
     }else{msg.textContent=d.error||'Failed';msg.style.color='var(--red)'}
@@ -2752,10 +2764,10 @@ async function saveOutputDir(){
   setTimeout(()=>msg.textContent='',5000);
 }
 
-// â”€â”€ HISTORY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── HISTORY ───────────────────────────────────────────────────────
 
 function fmtDur(s){
-  if(s==null||s==='') return 'â€”';
+  if(s==null||s==='') return '-';
   const m = Math.floor(s/60);
   const sec = Math.floor(s%60);
   return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
@@ -2869,7 +2881,7 @@ function renderHistory(){
   }
   empty.style.display='none';
 
-  // â”€â”€ Pagination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Pagination ──────────────────────────────────────────────────
   const total  = rows.length;
   const pages  = Math.ceil(total / HIST_PAGE_SIZE);
   _histPage    = Math.max(0, Math.min(_histPage, pages - 1));
@@ -2879,7 +2891,7 @@ function renderHistory(){
 
   // Page info
   document.getElementById('hist-pg-info').textContent =
-    `Showing ${start+1}â€“${end} of ${total} scan${total!==1?'s':''}`;
+    `Showing ${start+1}–${end} of ${total} scan${total!==1?'s':''}`;
 
   // Pagination buttons
   const pgCtrl = document.getElementById('hist-pg-controls');
@@ -2893,9 +2905,9 @@ function renderHistory(){
     b.onclick = () => { _histPage = page; renderHistory(); };
     pgCtrl.appendChild(b);
   }
-  _pgBtn('Â«', 0,          _histPage === 0);
-  _pgBtn('â€¹', _histPage-1, _histPage === 0);
-  // Page number buttons â€” show up to 5 around current
+  _pgBtn('«', 0,          _histPage === 0);
+  _pgBtn('‹', _histPage-1, _histPage === 0);
+  // Page number buttons — show up to 5 around current
   const startP = Math.max(0, _histPage-2);
   const endP   = Math.min(pages-1, _histPage+2);
   for(let p=startP; p<=endP; p++){
@@ -2907,36 +2919,36 @@ function renderHistory(){
     b.onclick = (()=>{ const _p=p; return ()=>{ _histPage=_p; renderHistory(); }; })();
     pgCtrl.appendChild(b);
   }
-  _pgBtn('â€º', _histPage+1, _histPage >= pages-1);
-  _pgBtn('Â»', pages-1,     _histPage >= pages-1);
+  _pgBtn('›', _histPage+1, _histPage >= pages-1);
+  _pgBtn('»', pages-1,     _histPage >= pages-1);
 
   paged.forEach(rec=>{
     const tr=document.createElement('tr');
     const dt=rec.scan_id||'';
-    const dateStr=dt.length>=8?`${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`:'â€”';
+    const dateStr=dt.length>=8?`${dt.slice(0,4)}-${dt.slice(4,6)}-${dt.slice(6,8)}`:'-';
     const timeStr=dt.length>=15?`${dt.slice(9,11)}:${dt.slice(11,13)}:${dt.slice(13,15)}`:'';
-    const repos=(rec.repos||[]).join(', ')||'â€”';
+    const repos=(rec.repos||[]).join(', ')||'-';
     const sv=rec.sev||{};
     const critHtml=sv.critical
       ?`<span class="sp sp-c" style="font-size:13px;padding:3px 10px">${sv.critical}</span>`
-      :'<span style="color:var(--dim)">â€”</span>';
+      :'<span style="color:var(--dim)">-</span>';
     const highHtml=sv.high
       ?`<span class="sp sp-h" style="font-size:13px;padding:3px 10px">${sv.high}</span>`
-      :'<span style="color:var(--dim)">â€”</span>';
+      :'<span style="color:var(--dim)">-</span>';
     const ctx=rec.ctx||{};
     const ctxHtml=Object.entries(ctx).map(([k,v])=>
       `<span class="cp">${k}: ${v}</span>`
-    ).join('')||'<span style="color:var(--dim)">â€”</span>';
+    ).join('')||'<span style="color:var(--dim)">-</span>';
     const llmHtml=rec.llm_model
       ?`<span style="font-family:var(--mono);font-size:11px;color:var(--text2)">${_esc(rec.llm_model)}</span>`
-      :'<span style="color:var(--dim)">â€”</span>';
+      :'<span style="color:var(--dim)">-</span>';
     const stateCls=rec.state==='done'?'state-done'
       :rec.state==='stopped'?'state-stopped'
       :rec.state==='skipped'?'state-skipped':'';
-    const stateIcon=rec.state==='done'?'âœ“':rec.state==='stopped'?'â¹':rec.state==='skipped'?'â­':'â—';
+    const stateIcon=rec.state==='done'?'OK':rec.state==='stopped'?'STOP':rec.state==='skipped'?'SKIP':'RUN';
     const stateLabel=rec.state==='done'?'Done'
       :rec.state==='stopped'?'Stopped'
-      :rec.state==='skipped'?'Skipped':(rec.state||'â€”');
+      :rec.state==='skipped'?'Skipped':(rec.state||'-');
 
     const rp=(rec.reports||{})['__all__']||{};
 
@@ -2962,14 +2974,14 @@ function renderHistory(){
     tr.appendChild(_td(
       `<div style="font-weight:600;color:var(--text)">${dateStr}</div>`+
       `<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">${timeStr}</div>`));
-    tr.appendChild(_td(_esc(rec.project||'â€”'),'font-weight:600;color:var(--text)'));
+    tr.appendChild(_td(_esc(rec.project||'-'),'font-weight:600;color:var(--text)'));
     tr.appendChild(_td(_esc(repos),`max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`));
-    tr.appendChild(_td(rec.total??'â€”','font-size:15px;color:var(--text);text-align:right'));
+    tr.appendChild(_td(rec.total??'-','font-size:15px;color:var(--text);text-align:right'));
     tr.appendChild(_td(critHtml,'text-align:center'));
     tr.appendChild(_td(highHtml,'text-align:center'));
     tr.appendChild(_td(`<div class="ctx-pills">${ctxHtml}</div>`));
     tr.appendChild(_td(llmHtml,'max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'));
-    tr.appendChild(_td(rec.duration_s!=null?fmtDur(rec.duration_s):'â€”','text-align:right;font-family:var(--mono);font-size:12px'));
+    tr.appendChild(_td(rec.duration_s!=null?fmtDur(rec.duration_s):'-','text-align:right;font-family:var(--mono);font-size:12px'));
     tr.appendChild(_td(`<span class="${stateCls}">${stateIcon} ${stateLabel}</span>`));
 
     // HTML report button
@@ -2979,13 +2991,13 @@ function renderHistory(){
       const btn=document.createElement('button');
       btn.className='log-btn';
       btn.title='Open HTML Report';
-      btn.textContent='ðŸ“Š';
+      btn.textContent='HTML';
       const _url=`/reports/${encodeURIComponent(rp.html_name)}`;
       const _lbl=rec.project||'Report';
       btn.addEventListener('click',function(){ _createReportTab(_lbl,_url); });
       htmlTd.appendChild(btn);
     } else {
-      htmlTd.innerHTML='<span style="color:var(--dim)">â€”</span>';
+      htmlTd.innerHTML='<span style="color:var(--dim)">-</span>';
     }
     tr.appendChild(htmlTd);
 
@@ -2998,10 +3010,10 @@ function renderHistory(){
       a.href=`/reports/${encodeURIComponent(rp.csv_name)}`;
       a.download=rp.csv_name;
       a.title='Download CSV';
-      a.textContent='ðŸ“„';
+      a.textContent='CSV';
       csvTd.appendChild(a);
     } else {
-      csvTd.innerHTML='<span style="color:var(--dim)">â€”</span>';
+      csvTd.innerHTML='<span style="color:var(--dim)">-</span>';
     }
     tr.appendChild(csvTd);
 
@@ -3012,13 +3024,13 @@ function renderHistory(){
       const lb=document.createElement('button');
       lb.className='log-btn';
       lb.title='View Log';
-      lb.textContent='ðŸ“‹';
+      lb.textContent='LOG';
       lb.addEventListener('click',function(){
         _openLogTab(rec.scan_id, rec.project||rec.scan_id);
       });
       logTd.appendChild(lb);
     } else {
-      logTd.innerHTML='<span style="color:var(--dim)">â€”</span>';
+      logTd.innerHTML='<span style="color:var(--dim)">-</span>';
     }
     tr.appendChild(logTd);
 
@@ -3076,7 +3088,7 @@ function _esc(s){
 </html>"""
 
 
-# â”€â”€ Add GET /api/repos to handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Add GET /api/repos to handler ─────────────────────────────────────────────
 # Patch _Handler to handle /api/repos
 
 _orig_get = _Handler.do_GET
@@ -3101,7 +3113,7 @@ def _patched_get(self):
 _Handler.do_GET = _patched_get
 
 
-# â”€â”€ Server startup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Server startup ────────────────────────────────────────────────────────────
 
 def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.ThreadingHTTPServer:
     global _HTML
@@ -3117,7 +3129,7 @@ def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.Thread
     t.start()
 
     url = f"http://127.0.0.1:{port}/"
-    print(f"  AI Scanner  â†’  {url}")
+    print(f"  AI Scanner -> {url}")
 
     if open_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
@@ -3133,4 +3145,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         srv.shutdown()
         print("Server stopped.")
+
 

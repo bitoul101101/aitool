@@ -1,0 +1,19 @@
+[00:58:30] Scan ID  : 20260317_005829
+[00:58:30] Project  : COGI
+[00:58:30] Repos    : 1
+[00:58:34] LLM      : llama3:8b Â· 8.0B Â· Q4_0
+[00:58:34] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+[00:58:35]   cogi-rag  branch:master  owner:Shoham, Yarden
+[00:58:35] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+[00:58:36] Starting parallel scan (workers=1)...
+[00:58:37]   âœ— cogi-rag: skipped: clone failed: Git clone failed (rc=128): fatal: could not create work tree dir '\\?\C:\Users\mmilhovitch\OneDrive - COGNYTE\Downloads\AI Tool\review_target\POC - Copy\tmp_clones\cogi-rag': Invalid argument
+[00:58:37] 
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+[00:58:37] Total findings (deduped): 0
+[00:58:37] 
+Generating reports...
+[00:58:37]   cogi-rag: skipped (no findings recorded)
+[00:58:37]   No findings â€” no report generated.
+[00:58:37] 
+â­ All repositories were skipped.
+[00:58:37] Duration: 7s  |  Findings: 0

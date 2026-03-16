@@ -1,0 +1,70 @@
+[
+  {
+    "scan_id": "20260317_005829",
+    "date": "20260317",
+    "time": "005829",
+    "project": "COGI",
+    "repos": [
+      "cogi-rag"
+    ],
+    "operator": "Unknown",
+    "state": "skipped",
+    "duration_s": 7,
+    "started_at_utc": "2026-03-16T22:58:30Z",
+    "completed_at_utc": "2026-03-16T22:58:37Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "llama3:8b",
+    "repo_details": {
+      "cogi-rag": {
+        "owner": "Shoham, Yarden",
+        "branch": "master",
+        "commit": ""
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_005829.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_011701",
+    "date": "20260317",
+    "time": "011701",
+    "project": "COGI",
+    "repos": [
+      "cogi-host-app"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 18,
+    "started_at_utc": "2026-03-16T23:17:01Z",
+    "completed_at_utc": "2026-03-16T23:17:19Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "llama3:8b",
+    "repo_details": {
+      "cogi-host-app": {
+        "owner": "Tatarski, Nikola",
+        "branch": "master",
+        "commit": "484f3ea9e20f8687e6e137a48f475be3513e878e"
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_011701.log",
+    "reports": {}
+  }
+]
