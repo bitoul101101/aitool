@@ -548,22 +548,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   display:grid;grid-template-columns:auto 1fr;
   column-gap:14px;row-gap:4px;align-content:start;
 }
-.hdr-stat-label{
-  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-  color:rgba(255,255,255,.55);white-space:nowrap;padding-top:2px;
-}
-.hdr-stat-val{
-  font-size:12px;font-weight:600;color:rgba(255,255,255,.92);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.hdr-stat-sub{
+.hdr-meta-sub{
   display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.62);
   margin-top:2px;white-space:normal;
 }
-.hdr-stat-val.s-warn { color:#ffcc80; }
-.hdr-stat-val.s-crit { color:#ef9a9a; }
-.hdr-stat-val.s-ok   { color:#81c995; }
-.hdr-stat-val.s-blue { color:#90caf9; }
+.hdr-meta-val.s-warn { color:#ffcc80; }
+.hdr-meta-val.s-crit { color:#ef9a9a; }
+.hdr-meta-val.s-ok   { color:#81c995; }
+.hdr-meta-val.s-blue { color:#90caf9; }
 
 /* ── KPI bar ── */
 .kpis{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:26px;}
@@ -939,10 +931,10 @@ tr.detail-row:hover td{background:#faf9ff !important;}
         )
         # ── Stat rows ─────────────────────────────────────────────
         def stat_row(label, val, sub="", extra_cls=""):
-            sub_html = f'<div class="hdr-stat-sub">{html_mod.escape(sub)}</div>' if sub else ""
+            sub_html = f'<div class="hdr-meta-sub">{html_mod.escape(sub)}</div>' if sub else ""
             return (
-                f'<div class="hdr-stat-label">{label}</div>'
-                f'<div class="hdr-stat-val {extra_cls}">{val}{sub_html}</div>'
+                f'<div class="hdr-meta-key">{label}</div>'
+                f'<div class="hdr-meta-val {extra_cls}">{val}{sub_html}</div>'
             )
 
         stats_html = (
