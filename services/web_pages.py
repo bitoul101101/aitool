@@ -463,10 +463,12 @@ def render_scan_page(
       </div>
     </div>
   </section>
-  <aside class="card">
-    <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
-    <div class="timeline" id="phase-timeline">{timeline_html}</div>
-    {report_actions}
+  <aside class="stack">
+    <section class="card">
+      <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
+      <div class="timeline" id="phase-timeline">{timeline_html}</div>
+    </section>
+    {"<section class=\"card\"><h2 style=\"margin:0 0 8px;font-size:16px\">Reports</h2>" + report_actions + "</section>" if report_actions else ""}
   </aside>
 </section>
 <form method="post" action="/scan/stop" id="stop-form"></form>"""
