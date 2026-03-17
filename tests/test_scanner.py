@@ -709,6 +709,18 @@ def test_build_spa_uses_plain_nav_labels_and_project_reload_hook():
     assert "fetch('/api/projects')" in html
 
 
+def test_build_spa_includes_history_triage_and_delta_controls():
+    import app_server as srv
+
+    html = srv._build_spa().decode("utf-8")
+
+    assert 'id="hist-filter-triage"' in html
+    assert 'id="hist-filter-delta"' in html
+    assert ">Needs Attention</th>" in html
+    assert ">Triage</th>" in html
+    assert ">Delta</th>" in html
+
+
 def test_allowed_origin_only_permits_local_app_hosts():
     import app_server as srv
 
