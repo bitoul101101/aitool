@@ -19,6 +19,7 @@ from scanner.suppressions import TRIAGE_REVIEWED, list_suppressions, list_triage
 from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
 from reports.html_report import HTMLReporter
+from services.access_control import ROLE_ADMIN, ROLE_SCANNER, ROLE_VIEWER, UserContext
 
 
 # ── Detector tests ────────────────────────────────────────────────
@@ -759,6 +760,45 @@ def test_api_projects_returns_cached_projects():
         srv._connected_user = orig_owner
 
 
+def test_api_projects_filters_by_user_scope():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/api/projects"
+
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    orig_projects = srv._projects_cache
+    orig_owner = srv._connected_user
+    orig_ctx = srv._user_ctx
+    srv._projects_cache = [{"key": "COGI"}, {"key": "APPSEC"}]
+    srv._connected_user = "Security Engineer"
+    srv._user_ctx = UserContext(
+        username="Security Engineer",
+        roles=(ROLE_VIEWER,),
+        allowed_projects=("COGI",),
+    )
+
+    try:
+        handler = DummyHandler()
+        srv._Handler.do_GET(handler)
+
+        assert handler.payload[0] == 200
+        assert handler.payload[1]["projects"] == [{"key": "COGI"}]
+    finally:
+        srv._projects_cache = orig_projects
+        srv._connected_user = orig_owner
+        srv._user_ctx = orig_ctx
+
+
 def test_default_temp_dir_prefers_system_temp_on_windows():
     import app_server as srv
 
@@ -956,6 +996,131 @@ def test_api_finding_suppress_moves_finding_and_invalidates_reports():
         srv._session = orig_session
         srv._connected_user = orig_user
         srv._invalidate_history_cache()
+
+
+def test_api_scan_start_requires_scanner_role():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    orig_ctx = srv._user_ctx
+    try:
+        srv._user_ctx = UserContext(
+            username="Viewer",
+            roles=(ROLE_VIEWER,),
+            allowed_projects=("*",),
+        )
+        handler = DummyHandler()
+        srv._Handler._api_scan_start(
+            handler,
+            {"project_key": "COGI", "repo_slugs": ["repo1"]},
+        )
+        assert handler.payload[0] == 403
+        assert "scanner role required" in handler.payload[1]["error"]
+    finally:
+        srv._user_ctx = orig_ctx
+
+
+def test_api_repos_rejects_project_outside_scope():
+    import app_server as srv
+
+    class DummyClient:
+        def list_repos(self, project_key):
+            return [{"slug": "repo1", "project": project_key}]
+
+    class DummyHandler:
+        path = "/api/repos?project=APPSEC"
+
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    orig_client = srv._client
+    orig_ctx = srv._user_ctx
+    try:
+        srv._client = DummyClient()
+        srv._user_ctx = UserContext(
+            username="Analyst",
+            roles=(ROLE_VIEWER, ROLE_SCANNER),
+            allowed_projects=("COGI",),
+        )
+        handler = DummyHandler()
+        srv._Handler.do_GET(handler)
+        assert handler.payload[0] == 403
+        assert "project access denied" in handler.payload[1]["error"]
+    finally:
+        srv._client = orig_client
+        srv._user_ctx = orig_ctx
+
+
+def test_settings_save_writes_audit_record():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    orig_audit = srv.AUDIT_FILE
+    orig_ctx = srv._user_ctx
+    orig_llm_cfg = Path(srv.LLM_CFG_FILE).read_text(encoding="utf-8")
+    try:
+        srv.OUTPUT_DIR = str(d)
+        srv.HISTORY_FILE = str(d / "scan_history.json")
+        srv.LOG_DIR = str(d / "logs")
+        srv.DB_FILE = str(d / "scan_jobs.db")
+        srv.AUDIT_FILE = str(d / "audit_events.jsonl")
+        srv._sync_scan_service_paths()
+        srv._user_ctx = UserContext(
+            username="Admin",
+            roles=(ROLE_ADMIN,),
+            allowed_projects=("*",),
+        )
+        handler = DummyHandler()
+        srv._Handler._api_settings_save(
+            handler,
+            {"llm_url": "http://localhost:11434", "llm_model": "demo-model"},
+        )
+
+        lines = Path(srv.AUDIT_FILE).read_text(encoding="utf-8").strip().splitlines()
+        assert handler.payload[0] == 200
+        assert any("settings_llm_update" in line for line in lines)
+        assert any('"actor": "Admin"' in line for line in lines)
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv.AUDIT_FILE = orig_audit
+        srv._user_ctx = orig_ctx
+        Path(srv.LLM_CFG_FILE).write_text(orig_llm_cfg, encoding="utf-8")
+        srv._sync_scan_service_paths()
 
 
 def test_api_finding_triage_marks_reviewed_and_reset_clears_it():

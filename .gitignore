@@ -4,6 +4,7 @@ __pycache__/
 output/*.db
 output/ai_scan_*.csv
 output/ai_scan_*.html
+output/audit_events.jsonl
 output/scan_history.json
 output/logs/
 

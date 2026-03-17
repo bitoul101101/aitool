@@ -30,6 +30,8 @@ import queue
 import threading
 import tempfile
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -52,6 +54,16 @@ from scanner.suppressions import (
     triage_by_hash,
     upsert_triage,
 )
+from services.access_control import (
+    ROLE_ADMIN,
+    ROLE_SCANNER,
+    ROLE_TRIAGE,
+    ROLE_VIEWER,
+    UserContext,
+    filter_projects,
+    resolve_user_context,
+)
+from services.audit_log import AuditLogService
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.runtime_support import (
     ensure_ollama_running,
@@ -69,6 +81,7 @@ POLICY_FILE   = str(_BASE_DIR / "policy.json")
 OWNER_MAP_FILE = str(_BASE_DIR / "owner_map.json")
 SUPPRESSIONS_FILE = str(_BASE_DIR / "ai_scanner_suppressions.json")
 LLM_CFG_FILE  = str(_BASE_DIR / "ai_scanner_llm_config.json")
+ACCESS_FILE   = str(_BASE_DIR / "access_control.json")
 APP_PORT      = 5757   # fixed port for the app (report servers use random ports)
 APP_VERSION   = "19.1"
 
@@ -165,6 +178,11 @@ _session: ScanSession = ScanSession()
 _projects_cache: List[dict] = []
 _repos_cache: Dict[str, List[dict]] = {}
 _connected_user: str = "Unknown"
+_user_ctx: UserContext = UserContext(
+    username="Unknown",
+    roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_TRIAGE, ROLE_ADMIN),
+    allowed_projects=("*",),
+)
 _state_lock = threading.Lock()
 _app_exit_event = threading.Event()
 _server_instance: Optional[http.server.ThreadingHTTPServer] = None
@@ -175,6 +193,8 @@ _server_instance: Optional[http.server.ThreadingHTTPServer] = None
 HISTORY_FILE = str(_BASE_DIR / "output" / "scan_history.json")
 LOG_DIR = str(_BASE_DIR / "output" / "logs")
 DB_FILE = str(_BASE_DIR / "output" / "scan_jobs.db")
+AUDIT_FILE = str(_BASE_DIR / "output" / "audit_events.jsonl")
+_audit_log = AuditLogService(AUDIT_FILE)
 
 _scan_service = ScanJobService(
     app_version=APP_VERSION,
@@ -208,6 +228,31 @@ def _sync_scan_service_paths() -> None:
         log_dir=LOG_DIR,
         db_file=DB_FILE,
     )
+    _audit_log.update_path(AUDIT_FILE)
+
+
+def _audit_event(action: str, **details) -> None:
+    _audit_log.record({
+        "ts": _utc_now_iso(),
+        "action": action,
+        "actor": _user_ctx.username,
+        "roles": list(_user_ctx.roles),
+        **details,
+    })
+
+
+def _require_role(handler, role: str):
+    if not _user_ctx.can(role):
+        handler._err(403, f"{role} role required")
+        return True
+    return False
+
+
+def _require_project_access(handler, project_key: str):
+    if not _user_ctx.can_access_project(project_key):
+        handler._err(403, f"project access denied: {project_key}")
+        return True
+    return False
 
 
 def _save_history_record(session, findings):
@@ -254,6 +299,31 @@ def _delete_managed_history_file(path_str: str, *, roots: List[Path]) -> str | N
         return f"refused to delete unmanaged path: {path}"
     if path.exists():
         path.unlink()
+    return None
+
+
+def _history_records_for_user() -> list[dict]:
+    return [
+        record for record in _load_history()
+        if _user_ctx.can_access_project(str(record.get("project", "")))
+    ]
+
+
+def _find_history_record_by_scan_id(scan_id: str) -> dict | None:
+    for record in _history_records_for_user():
+        if record.get("scan_id") == scan_id:
+            return record
+    return None
+
+
+def _find_history_record_by_report_name(filename: str) -> dict | None:
+    safe = Path(filename).name
+    for record in _history_records_for_user():
+        reports = (record.get("reports") or {}).get("__all__", {})
+        for key in ("html", "csv", "html_name", "csv_name"):
+            value = str(reports.get(key, "") or "")
+            if value and Path(value).name == safe:
+                return record
     return None
 
 
@@ -397,26 +467,47 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "version": APP_VERSION,
                 "llm": load_llm_config(),
                 "has_saved_pat": bool(load_pat()),
+                "auth": {
+                    "user": _user_ctx.username,
+                    "roles": list(_user_ctx.roles),
+                    "projects": list(_user_ctx.allowed_projects),
+                },
             })
         elif p == "/api/scan/status":
+            if _require_role(self, ROLE_VIEWER):
+                return
             self._json(_session.to_status())
         elif p == "/api/history":
-            self._json({"history": list(reversed(_load_history()))})
+            if _require_role(self, ROLE_VIEWER):
+                return
+            self._json({"history": list(reversed(_history_records_for_user()))})
         elif p == "/api/suppressions":
+            if _require_role(self, ROLE_VIEWER):
+                return
             self._json({"suppressions": list_suppressions(SUPPRESSIONS_FILE)})
         elif p == "/api/triage":
+            if _require_role(self, ROLE_VIEWER):
+                return
             self._json({"triage": list_triage(SUPPRESSIONS_FILE)})
         elif p.startswith("/api/history/log/"):
+            if _require_role(self, ROLE_VIEWER):
+                return
             self._serve_log(p[17:])
         elif p == "/api/settings":
+            if _require_role(self, ROLE_ADMIN):
+                return
             self._json({
                 "bitbucket_url": BITBUCKET_URL,
                 "output_dir":    str(Path(OUTPUT_DIR).resolve()),
                 "llm":           load_llm_config(),
             })
         elif p == "/api/scan/stream":
+            if _require_role(self, ROLE_VIEWER):
+                return
             self._sse_stream()
         elif p == "/api/ollama/models":
+            if _require_role(self, ROLE_ADMIN):
+                return
             # Accept ?url=... so the UI can pass the current input value
             from urllib.parse import urlparse, parse_qs
             qs  = parse_qs(urlparse(self.path).query)
@@ -426,6 +517,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json({"models": _ollama_list_models(url),
                         "base_url": url})
         elif p.startswith("/reports/"):
+            if _require_role(self, ROLE_VIEWER):
+                return
             self._serve_report(p[9:])
         else:
             self._404()
@@ -470,7 +563,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     # ── API handlers ──────────────────────────────────────────────────────────
 
     def _api_connect(self, body: dict):
-        global _client, _projects_cache, _connected_user
+        global _client, _projects_cache, _connected_user, _user_ctx
         token = body.get("token", "").strip()
         remember = body.get("remember", False)
         use_saved_token = bool(body.get("use_saved_token"))
@@ -484,20 +577,34 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 verify_ssl=False, verbose=False)
             owner    = client.get_pat_owner()
             projects = client.list_projects()
+            _user_ctx = resolve_user_context(ACCESS_FILE, owner or "Unknown")
             _client         = client
-            _projects_cache = projects
+            _projects_cache = filter_projects(projects, _user_ctx)
             _connected_user = owner or "Unknown"
             if remember:
                 save_pat(token)
             else:
                 delete_pat()
+            _audit_event(
+                "connect",
+                outcome="success",
+                project_count=len(_projects_cache),
+            )
             self._json({"ok": True, "owner": owner,
-                        "projects": projects})
+                        "projects": _projects_cache,
+                        "auth": {
+                            "user": _user_ctx.username,
+                            "roles": list(_user_ctx.roles),
+                            "projects": list(_user_ctx.allowed_projects),
+                        }})
         except Exception as e:
+            _audit_event("connect", outcome="error", error=str(e))
             self._err(401, str(e))
 
     def _api_scan_start(self, body: dict):
         global _session
+        if _require_role(self, ROLE_SCANNER):
+            return
         project_key = body.get("project_key", "").strip()
         repo_slugs  = body.get("repo_slugs", [])
         llm_url     = body.get("llm_url", "http://localhost:11434").strip()
@@ -505,6 +612,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         if not project_key or not repo_slugs:
             return self._err(400, "project_key and repo_slugs required")
+        if _require_project_access(self, project_key):
+            return
         if not _client:
             return self._err(401, "Not connected")
         if _session.state == "running":
@@ -522,24 +631,43 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         _session.operator     = _connected_user or "Unknown"
         _session.state        = "running"
 
+        _audit_event(
+            "scan_start",
+            scan_id=_session.scan_id,
+            project_key=project_key,
+            repo_slugs=list(repo_slugs),
+        )
         threading.Thread(target=_run_scan, args=(_session,),
                          daemon=True).start()
         self._json({"ok": True, "scan_id": _session.scan_id})
 
     def _api_scan_stop(self):
+        if _require_role(self, ROLE_SCANNER):
+            return
         stopped = _stop_active_scan()
+        _audit_event(
+            "scan_stop",
+            scan_id=_session.scan_id,
+            stopped=bool(stopped),
+        )
         self._json({"ok": True, "stopped": stopped})
 
     def _api_app_shutdown(self):
+        if _require_role(self, ROLE_ADMIN):
+            return
+        _audit_event("app_shutdown_requested")
         _request_app_shutdown()
         self._json({"ok": True})
 
 
     def _api_llm_config(self, body: dict):
+        if _require_role(self, ROLE_ADMIN):
+            return
         url   = body.get("base_url", "").strip()
         model = body.get("model", "").strip()
         if url and model:
             save_llm_config({"base_url": url, "model": model})
+            _audit_event("llm_config_update", base_url=url, model=model)
         models = _ollama_list_models(url or "http://localhost:11434")
         self._json({"ok": True, "models": models})
 
@@ -598,6 +726,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _serve_report(self, filename: str):
         """Serve a file from OUTPUT_DIR by name."""
         safe = Path(filename).name   # strip any path traversal
+        if _find_history_record_by_report_name(safe) is None:
+            return self._err(403, "Report access denied")
         path = Path(OUTPUT_DIR).resolve() / safe
         if not path.exists():
             return self._404()
@@ -607,18 +737,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _serve_log(self, scan_id: str):
         """Serve a scan log file by scan_id."""
         safe = Path(scan_id.replace("/","").replace("\\","")).name
+        if _find_history_record_by_scan_id(safe) is None:
+            return self._err(403, "Log access denied")
         log_text = _get_log_text(safe)
         if not log_text:
             return self._err(404, "Log not found")
         self._send(200, "text/plain; charset=utf-8", log_text.encode("utf-8"))
 
     def _api_settings_save(self, body: dict):
-        global OUTPUT_DIR, HISTORY_FILE, LOG_DIR, DB_FILE
+        global OUTPUT_DIR, HISTORY_FILE, LOG_DIR, DB_FILE, AUDIT_FILE
+        if _require_role(self, ROLE_ADMIN):
+            return
         llm_url    = body.get("llm_url", "").strip()
         llm_model  = body.get("llm_model", "").strip()
         output_dir = body.get("output_dir", "").strip()
         if llm_url and llm_model:
             save_llm_config({"base_url": llm_url, "model": llm_model})
+            _audit_event("settings_llm_update", base_url=llm_url, model=llm_model)
         if output_dir:
             if _session.state == "running":
                 return self._err(409, "Cannot change output directory while a scan is running")
@@ -629,19 +764,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 HISTORY_FILE = str(p / "scan_history.json")
                 LOG_DIR      = str(p / "logs")
                 DB_FILE      = str(p / "scan_jobs.db")
+                AUDIT_FILE   = str(p / "audit_events.jsonl")
                 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
                 _sync_scan_service_paths()
+                _audit_event("settings_output_dir_update", output_dir=OUTPUT_DIR)
             except Exception as e:
                 return self._err(400, f"Invalid output directory: {e}")
         self._json({"ok": True, "output_dir": str(Path(OUTPUT_DIR).resolve())})
 
     def _api_history_delete(self, body: dict):
         """Delete one or more history records plus their associated files."""
+        if _require_role(self, ROLE_ADMIN):
+            return
         scan_ids = body.get("scan_ids", [])
         if not scan_ids or not isinstance(scan_ids, list):
             return self._err(400, "scan_ids list required")
 
-        hist = _load_history()
+        hist = _history_records_for_user()
         deleted, errors = [], []
         managed_roots = [Path(OUTPUT_DIR).resolve(), Path(LOG_DIR).resolve()]
 
@@ -681,9 +820,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 return self._err(500, f"Failed to update stored history: {e}")
 
+        _audit_event("history_delete", scan_ids=list(deleted), errors=list(errors))
         self._json({"ok": True, "deleted": deleted, "errors": errors})
 
     def _api_finding_triage(self, body: dict):
+        if _require_role(self, ROLE_TRIAGE):
+            return
         hash_ = body.get("hash", "").strip()
         status = body.get("status", "").strip()
         note = body.get("note", "").strip()
@@ -707,6 +849,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             note=note,
             marked_by=_connected_user,
         )
+        _audit_event(
+            "finding_triage",
+            scan_id=_session.scan_id,
+            finding_hash=hash_,
+            triage_status=status,
+            note=note,
+        )
         triage_meta = _triage_by_hash().get(hash_, {})
         updated = _apply_triage_metadata(target, triage_meta)
 
@@ -725,10 +874,18 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._json({"ok": True, "status": _session.to_status()})
 
     def _api_finding_reset(self, body: dict):
+        if _require_role(self, ROLE_TRIAGE):
+            return
         hash_ = body.get("hash", "").strip()
         if not hash_:
             return self._err(400, "hash required")
         removed = remove_triage(SUPPRESSIONS_FILE, hash_)
+        _audit_event(
+            "finding_reset",
+            scan_id=_session.scan_id,
+            finding_hash=hash_,
+            removed=bool(removed),
+        )
         finding = next((f for f in _session.findings if f.get("_hash") == hash_), None)
         if finding is not None:
             updated = _clear_finding_triage(finding)
@@ -763,8 +920,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _api_ollama_start(self, body: dict):
         """Start Ollama if not running, then return available models."""
+        if _require_role(self, ROLE_ADMIN):
+            return
         url = body.get("url", "").strip() or               load_llm_config().get("base_url", "http://localhost:11434")
         result = _ollama_ensure_running(url)
+        _audit_event("ollama_start", base_url=url, ok=bool(result["ok"]))
         if result["ok"]:
             models = _ollama_list_models(url)
             self._json({"ok": True, "status": result.get("status","running"),
@@ -3174,16 +3334,27 @@ _orig_get = _Handler.do_GET
 def _patched_get(self):
     p = self.path.split("?")[0]
     if p == "/api/projects":
+        if _require_role(self, ROLE_VIEWER):
+            return
         self._json({
-            "projects": _projects_cache,
+            "projects": filter_projects(_projects_cache, _user_ctx),
             "owner": _connected_user,
+            "auth": {
+                "user": _user_ctx.username,
+                "roles": list(_user_ctx.roles),
+                "projects": list(_user_ctx.allowed_projects),
+            },
         })
     elif p == "/api/repos":
+        if _require_role(self, ROLE_VIEWER):
+            return
         from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
         key = qs.get("project", [""])[0]
         if not key or not _client:
             return self._json({"repos": []})
+        if _require_project_access(self, key):
+            return
         try:
             repos = _repos_cache.get(key)
             if repos is None:
