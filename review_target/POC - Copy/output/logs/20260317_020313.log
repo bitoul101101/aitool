@@ -1,0 +1,24 @@
+[02:03:13] Scan ID  : 20260317_020313
+[02:03:13] Project  : DT
+[02:03:13] Repos    : 1
+[02:03:18] LLM      : llama3:8b | 8.0B | Q4_0
+[02:03:18] ==========================================================
+[02:03:18]   3rdparty  branch:master  owner:Baadany, Einav
+[02:03:18] ==========================================================
+[02:03:18] Starting parallel scan (workers=1)...
+[02:03:35]   [3rdparty] Scanning: 25% (1/4 files)
+[02:03:35]   [3rdparty] Scanning: 50% (2/4 files)
+[02:03:35]   [3rdparty] Scanning: 75% (3/4 files)
+[02:03:35]   [3rdparty] Scanning: 100% (4/4 files)
+[02:03:36] 
+OK 3rdparty -> 0 findings  (Crit:0 High:0)
+[02:03:36] 
+==========================================================
+[02:03:36] Total findings (deduped): 0
+[02:03:36] 
+Generating reports...
+[02:03:36]   3rdparty: clean - no findings
+[02:03:36]   No findings - no report generated.
+[02:03:36] 
+Scan complete.
+[02:03:36] Duration: 22s  |  Findings: 0

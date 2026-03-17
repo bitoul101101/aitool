@@ -523,11 +523,13 @@ def test_save_history_record_creates_file():
     orig_out  = srv.OUTPUT_DIR
     orig_hist = srv.HISTORY_FILE
     orig_log  = srv.LOG_DIR
+    orig_db   = srv.DB_FILE
 
     d = Path(tempfile.mkdtemp())
     srv.OUTPUT_DIR   = str(d)
     srv.HISTORY_FILE = str(d / "scan_history.json")
     srv.LOG_DIR      = str(d / "logs")
+    srv.DB_FILE      = str(d / "scan_jobs.db")
     srv._invalidate_history_cache()
 
     try:
@@ -585,6 +587,7 @@ def test_save_history_record_creates_file():
         srv.OUTPUT_DIR   = orig_out
         srv.HISTORY_FILE = orig_hist
         srv.LOG_DIR      = orig_log
+        srv.DB_FILE      = orig_db
         srv._invalidate_history_cache()
 
 
@@ -596,9 +599,11 @@ def test_history_cache_invalidated_after_write():
     orig_out  = srv.OUTPUT_DIR
     orig_hist = srv.HISTORY_FILE
     orig_log  = srv.LOG_DIR
+    orig_db   = srv.DB_FILE
     srv.OUTPUT_DIR   = str(d)
     srv.HISTORY_FILE = str(d / "scan_history.json")
     srv.LOG_DIR      = str(d / "logs")
+    srv.DB_FILE      = str(d / "scan_jobs.db")
     srv._invalidate_history_cache()
 
     try:
@@ -624,6 +629,7 @@ def test_history_cache_invalidated_after_write():
         srv.OUTPUT_DIR   = orig_out
         srv.HISTORY_FILE = orig_hist
         srv.LOG_DIR      = orig_log
+        srv.DB_FILE      = orig_db
         srv._invalidate_history_cache()
 
 
@@ -633,7 +639,9 @@ def test_atomic_history_write():
 
     d = Path(tempfile.mkdtemp())
     orig_hist = srv.HISTORY_FILE
+    orig_db   = srv.DB_FILE
     srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.DB_FILE      = str(d / "scan_jobs.db")
     srv._invalidate_history_cache()
 
     try:
@@ -655,6 +663,7 @@ def test_atomic_history_write():
         assert Path(srv.HISTORY_FILE).exists(), "scan_history.json not created"
     finally:
         srv.HISTORY_FILE = orig_hist
+        srv.DB_FILE      = orig_db
         srv._invalidate_history_cache()
 
 
@@ -683,6 +692,83 @@ def test_default_temp_dir_prefers_system_temp_on_windows():
     temp_dir = srv._default_temp_dir(os_name="nt", temp_root=r"C:\Temp")
 
     assert temp_dir == Path(r"C:\Temp") / "ai_scanner_tmp"
+
+
+def test_get_log_text_reads_from_sqlite_when_file_missing():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(d / "logs")
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv._invalidate_history_cache()
+
+    try:
+        session = srv.ScanSession()
+        session.scan_id = "20250316_020202"
+        session.project_key = "TEST"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.llm_model = "test-model"
+        session.llm_model_info = {"name": "test-model"}
+        session.log("SQLite-backed log entry", "info")
+        srv._save_history_record(session, [])
+
+        log_path = Path(srv.LOG_DIR) / "20250316_020202.log"
+        if log_path.exists():
+            log_path.unlink()
+
+        log_text = srv._get_log_text("20250316_020202")
+        assert "SQLite-backed log entry" in log_text
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv._invalidate_history_cache()
+
+
+def test_delete_history_removes_sqlite_record():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(d / "logs")
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv._invalidate_history_cache()
+
+    try:
+        session = srv.ScanSession()
+        session.scan_id = "20250316_030303"
+        session.project_key = "TEST"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.llm_model = "test-model"
+        session.llm_model_info = {"name": "test-model"}
+        session.log("To be deleted", "info")
+        srv._save_history_record(session, [])
+
+        assert any(r["scan_id"] == "20250316_030303" for r in srv._load_history())
+
+        srv._delete_history(["20250316_030303"])
+
+        assert all(r["scan_id"] != "20250316_030303" for r in srv._load_history())
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv._invalidate_history_cache()
 
 
 def test_run_scan_with_no_repos_completes_cleanly():

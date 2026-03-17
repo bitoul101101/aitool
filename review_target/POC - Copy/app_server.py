@@ -204,6 +204,7 @@ _state_lock = threading.Lock()
 
 HISTORY_FILE = str(_BASE_DIR / "output" / "scan_history.json")
 LOG_DIR = str(_BASE_DIR / "output" / "logs")
+DB_FILE = str(_BASE_DIR / "output" / "scan_jobs.db")
 
 _scan_service = ScanJobService(
     app_version=APP_VERSION,
@@ -214,6 +215,7 @@ _scan_service = ScanJobService(
         owner_map_file=OWNER_MAP_FILE,
         history_file=HISTORY_FILE,
         log_dir=LOG_DIR,
+        db_file=DB_FILE,
     ),
     load_policy=load_policy,
     load_owner_map=load_owner_map,
@@ -232,6 +234,7 @@ def _sync_scan_service_paths() -> None:
         owner_map_file=OWNER_MAP_FILE,
         history_file=HISTORY_FILE,
         log_dir=LOG_DIR,
+        db_file=DB_FILE,
     )
 
 
@@ -247,6 +250,16 @@ def _load_history() -> list:
 
 def _invalidate_history_cache() -> None:
     _scan_service.invalidate_history_cache()
+
+
+def _get_log_text(scan_id: str) -> str:
+    _sync_scan_service_paths()
+    return _scan_service.get_log_text(scan_id)
+
+
+def _delete_history(scan_ids: List[str]) -> None:
+    _sync_scan_service_paths()
+    _scan_service.delete_history(scan_ids)
 
 
 def _run_scan(session: ScanSession):
@@ -490,13 +503,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _serve_log(self, scan_id: str):
         """Serve a scan log file by scan_id."""
         safe = Path(scan_id.replace("/","").replace("\\","")).name
-        path = Path(LOG_DIR) / f"{safe}.log"
-        if not path.exists():
+        log_text = _get_log_text(safe)
+        if not log_text:
             return self._err(404, "Log not found")
-        self._send(200, "text/plain; charset=utf-8", path.read_bytes())
+        self._send(200, "text/plain; charset=utf-8", log_text.encode("utf-8"))
 
     def _api_settings_save(self, body: dict):
-        global OUTPUT_DIR, HISTORY_FILE, LOG_DIR
+        global OUTPUT_DIR, HISTORY_FILE, LOG_DIR, DB_FILE
         llm_url    = body.get("llm_url", "").strip()
         llm_model  = body.get("llm_model", "").strip()
         output_dir = body.get("output_dir", "").strip()
@@ -511,6 +524,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 OUTPUT_DIR   = str(p)
                 HISTORY_FILE = str(p / "scan_history.json")
                 LOG_DIR      = str(p / "logs")
+                DB_FILE      = str(p / "scan_jobs.db")
                 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
                 _sync_scan_service_paths()
             except Exception as e:
@@ -556,17 +570,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
             deleted.append(sid)
 
-        # Rewrite history JSON without deleted records
         if deleted:
-            hist = [r for r in hist if r.get("scan_id") not in deleted]
             try:
-                tmp = HISTORY_FILE + ".tmp"
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump(hist, f, indent=2)
-                os.replace(tmp, HISTORY_FILE)
-                _invalidate_history_cache()
+                _delete_history(deleted)
             except Exception as e:
-                return self._err(500, f"Failed to update history file: {e}")
+                return self._err(500, f"Failed to update stored history: {e}")
 
         self._json({"ok": True, "deleted": deleted, "errors": errors})
 

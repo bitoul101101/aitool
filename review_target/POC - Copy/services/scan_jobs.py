@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import sqlite3
 import threading
 import time
 from collections import Counter
@@ -108,6 +109,7 @@ class ScanJobPaths:
     owner_map_file: str
     history_file: str
     log_dir: str
+    db_file: str
 
 
 class ScanJobService:
@@ -131,8 +133,7 @@ class ScanJobService:
         self._utc_now_iso = utc_now_iso
         self._git_head_commit = git_head_commit
         self._ollama_ping = ollama_ping
-        self._history_cache: list = []
-        self._history_cache_mtime: float = 0.0
+        self._ensure_db()
 
     def update_paths(
         self,
@@ -143,6 +144,7 @@ class ScanJobService:
         owner_map_file: Optional[str] = None,
         history_file: Optional[str] = None,
         log_dir: Optional[str] = None,
+        db_file: Optional[str] = None,
     ) -> None:
         if output_dir is not None:
             self.paths.output_dir = output_dir
@@ -156,22 +158,204 @@ class ScanJobService:
             self.paths.history_file = history_file
         if log_dir is not None:
             self.paths.log_dir = log_dir
+        if db_file is not None:
+            self.paths.db_file = db_file
+        self._ensure_db()
 
-    def load_history(self) -> list:
+    def _connect(self) -> sqlite3.Connection:
+        db_path = Path(self.paths.db_file)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _ensure_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS scan_jobs (
+                    scan_id TEXT PRIMARY KEY,
+                    state TEXT NOT NULL,
+                    updated_at REAL NOT NULL,
+                    record_json TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS scan_logs (
+                    scan_id TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    ts REAL NOT NULL,
+                    level TEXT NOT NULL,
+                    msg TEXT NOT NULL,
+                    PRIMARY KEY (scan_id, seq)
+                )
+                """
+            )
+            conn.commit()
+
+    def invalidate_history_cache(self) -> None:
+        # DB-backed reads are already fresh; wrapper kept for compatibility.
+        return None
+
+    def _build_record(
+        self,
+        session: ScanSession,
+        findings: list,
+        *,
+        log_file: str = "",
+    ) -> dict:
+        sev = Counter(f.get("severity", 4) for f in findings)
+        ctx = Counter(f.get("context", "production") for f in findings)
+        llm_name = (session.llm_model_info or {}).get("name", session.llm_model)
+        return {
+            "scan_id": session.scan_id,
+            "date": session.scan_id[:8],
+            "time": session.scan_id[9:] if len(session.scan_id) > 8 else "",
+            "project": session.project_key,
+            "repos": session.repo_slugs,
+            "operator": session.operator,
+            "state": session.state,
+            "duration_s": session.scan_duration_s,
+            "started_at_utc": session.started_at_utc,
+            "completed_at_utc": session.completed_at_utc,
+            "policy_version": session.policy_version,
+            "tool_version": session.tool_version,
+            "total": len(findings),
+            "sev": {
+                "critical": sev.get(1, 0),
+                "high": sev.get(2, 0),
+                "medium": sev.get(3, 0),
+                "low": sev.get(4, 0),
+            },
+            "ctx": dict(ctx),
+            "llm_model": llm_name,
+            "repo_details": session.repo_details,
+            "log_file": log_file,
+            "reports": session.report_paths,
+        }
+
+    def _upsert_job_record(self, record: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO scan_jobs(scan_id, state, updated_at, record_json)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(scan_id) DO UPDATE SET
+                    state=excluded.state,
+                    updated_at=excluded.updated_at,
+                    record_json=excluded.record_json
+                """,
+                (
+                    record["scan_id"],
+                    record.get("state", "unknown"),
+                    time.time(),
+                    json.dumps(record, ensure_ascii=False),
+                ),
+            )
+            conn.commit()
+
+    def _replace_scan_logs(self, scan_id: str, log_lines: list[dict]) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM scan_logs WHERE scan_id = ?", (scan_id,))
+            if log_lines:
+                conn.executemany(
+                    """
+                    INSERT INTO scan_logs(scan_id, seq, ts, level, msg)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            scan_id,
+                            idx,
+                            float(entry.get("ts", 0.0)),
+                            str(entry.get("level", "info")),
+                            str(entry.get("msg", "")),
+                        )
+                        for idx, entry in enumerate(log_lines)
+                    ],
+                )
+            conn.commit()
+
+    def _read_legacy_history(self) -> list:
         try:
             path = Path(self.paths.history_file)
             if not path.exists():
                 return []
-            mtime = path.stat().st_mtime
-            if mtime != self._history_cache_mtime:
-                self._history_cache = json.loads(path.read_text("utf-8"))
-                self._history_cache_mtime = mtime
-            return list(self._history_cache)
+            return json.loads(path.read_text("utf-8"))
         except Exception:
             return []
 
-    def invalidate_history_cache(self) -> None:
-        self._history_cache_mtime = 0.0
+    def _write_legacy_history(self, record: dict) -> None:
+        history = [r for r in self._read_legacy_history() if r.get("scan_id") != record["scan_id"]]
+        history.append(record)
+        history = history[-500:]
+        tmp_path = self.paths.history_file + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(history, fh, indent=2)
+        os.replace(tmp_path, self.paths.history_file)
+
+    def record_job_snapshot(self, session: ScanSession, findings: Optional[list] = None) -> None:
+        snapshot = self._build_record(session, findings if findings is not None else session.findings)
+        self._upsert_job_record(snapshot)
+
+    def load_history(self) -> list:
+        try:
+            self._ensure_db()
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT record_json FROM scan_jobs ORDER BY updated_at ASC, scan_id ASC"
+                ).fetchall()
+            if rows:
+                return [json.loads(row["record_json"]) for row in rows]
+        except Exception:
+            pass
+        return self._read_legacy_history()
+
+    def get_log_text(self, scan_id: str) -> str:
+        try:
+            self._ensure_db()
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT ts, msg FROM scan_logs WHERE scan_id = ? ORDER BY seq ASC",
+                    (scan_id,),
+                ).fetchall()
+            if rows:
+                lines = []
+                for row in rows:
+                    ts = datetime.fromtimestamp(row["ts"]).strftime("%H:%M:%S")
+                    lines.append(f"[{ts}] {row['msg']}")
+                return "\n".join(lines) + "\n"
+        except Exception:
+            pass
+        path = Path(self.paths.log_dir) / f"{scan_id}.log"
+        if path.exists():
+            return path.read_text("utf-8")
+        return ""
+
+    def delete_history(self, scan_ids: list[str]) -> None:
+        if not scan_ids:
+            return
+        try:
+            with self._connect() as conn:
+                conn.executemany(
+                    "DELETE FROM scan_logs WHERE scan_id = ?",
+                    [(scan_id,) for scan_id in scan_ids],
+                )
+                conn.executemany(
+                    "DELETE FROM scan_jobs WHERE scan_id = ?",
+                    [(scan_id,) for scan_id in scan_ids],
+                )
+                conn.commit()
+        except Exception:
+            pass
+        history = [r for r in self._read_legacy_history() if r.get("scan_id") not in set(scan_ids)]
+        tmp_path = self.paths.history_file + ".tmp"
+        Path(self.paths.history_file).parent.mkdir(parents=True, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(history, fh, indent=2)
+        os.replace(tmp_path, self.paths.history_file)
 
     def save_history_record(self, session: ScanSession, findings: list) -> None:
         try:
@@ -186,43 +370,10 @@ class ScanJobService:
             except Exception:
                 log_path = None
 
-            sev = Counter(f.get("severity", 4) for f in findings)
-            ctx = Counter(f.get("context", "production") for f in findings)
-            llm_name = (session.llm_model_info or {}).get("name", session.llm_model)
-            record = {
-                "scan_id": session.scan_id,
-                "date": session.scan_id[:8],
-                "time": session.scan_id[9:] if len(session.scan_id) > 8 else "",
-                "project": session.project_key,
-                "repos": session.repo_slugs,
-                "operator": session.operator,
-                "state": session.state,
-                "duration_s": session.scan_duration_s,
-                "started_at_utc": session.started_at_utc,
-                "completed_at_utc": session.completed_at_utc,
-                "policy_version": session.policy_version,
-                "tool_version": session.tool_version,
-                "total": len(findings),
-                "sev": {
-                    "critical": sev.get(1, 0),
-                    "high": sev.get(2, 0),
-                    "medium": sev.get(3, 0),
-                    "low": sev.get(4, 0),
-                },
-                "ctx": dict(ctx),
-                "llm_model": llm_name,
-                "repo_details": session.repo_details,
-                "log_file": str(log_path) if log_path else "",
-                "reports": session.report_paths,
-            }
-            history = [r for r in self.load_history() if r.get("scan_id") != record["scan_id"]]
-            history.append(record)
-            history = history[-500:]
-            tmp_path = self.paths.history_file + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as fh:
-                json.dump(history, fh, indent=2)
-            os.replace(tmp_path, self.paths.history_file)
-            self.invalidate_history_cache()
+            record = self._build_record(session, findings, log_file=str(log_path) if log_path else "")
+            self._upsert_job_record(record)
+            self._replace_scan_logs(session.scan_id, session.log_lines)
+            self._write_legacy_history(record)
         except Exception as exc:
             print(f"[WARN] Could not save history: {exc}")
 
@@ -257,6 +408,7 @@ class ScanJobService:
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
+        self.record_job_snapshot(session, [])
 
         log(f"Scan ID  : {session.scan_id}", "hd")
         log(f"Project  : {session.project_key}", "dim")
@@ -421,6 +573,7 @@ class ScanJobService:
                     log(f"  SKIP {slug}: skipped{reason_str}", "err")
                     per_repo[slug] = None
                     session.per_repo = dict(per_repo)
+                    self.record_job_snapshot(session, session.findings)
                     continue
 
                 sev_critical = sum(1 for f in analyzed if f.get("severity") == 1)
@@ -443,6 +596,7 @@ class ScanJobService:
                 per_repo[slug] = analyzed
                 session.per_repo = dict(per_repo)
                 session.findings = list(all_findings)
+                self.record_job_snapshot(session, session.findings)
 
         log("\n" + "=" * 58, "dim")
         final = aggregator.process(all_findings)
@@ -578,6 +732,7 @@ class ScanJobService:
             session.state = "skipped"
         else:
             session.state = "done"
+        self.record_job_snapshot(session, final)
 
         if stop.is_set():
             log("\nScan stopped.", "hd")

@@ -109,5 +109,82 @@
         "html_name": "ai_scan_AI_Scan_Report_COGI_cogi-agent-evaluator_20260317_011857.html"
       }
     }
+  },
+  {
+    "scan_id": "20260317_013723",
+    "date": "20260317",
+    "time": "013723",
+    "project": "FIL",
+    "repos": [
+      "filterprovisioningservice"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 40,
+    "started_at_utc": "2026-03-16T23:37:23Z",
+    "completed_at_utc": "2026-03-16T23:38:45Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 3,
+    "sev": {
+      "critical": 3,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {
+      "production": 3
+    },
+    "llm_model": "llama3:8b",
+    "repo_details": {
+      "filterprovisioningservice": {
+        "owner": "Ovadia, Heny",
+        "branch": "master",
+        "commit": "8c3eae699c97e88c08f83be27a94bfbddac12a75"
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_013723.log",
+    "reports": {
+      "__all__": {
+        "csv": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_FIL_filterprovisioningservice_20260317_013803.csv",
+        "html": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_FIL_filterprovisioningservice_20260317_013803.html",
+        "csv_name": "ai_scan_AI_Scan_Report_FIL_filterprovisioningservice_20260317_013803.csv",
+        "html_name": "ai_scan_AI_Scan_Report_FIL_filterprovisioningservice_20260317_013803.html"
+      }
+    }
+  },
+  {
+    "scan_id": "20260317_020313",
+    "date": "20260317",
+    "time": "020313",
+    "project": "DT",
+    "repos": [
+      "3rdparty"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 22,
+    "started_at_utc": "2026-03-17T00:03:13Z",
+    "completed_at_utc": "2026-03-17T00:03:36Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "llama3:8b",
+    "repo_details": {
+      "3rdparty": {
+        "owner": "Baadany, Einav",
+        "branch": "master",
+        "commit": "05f82897825c39d4ef89efcc3116a4a524a7645a"
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_020313.log",
+    "reports": {}
   }
 ]
