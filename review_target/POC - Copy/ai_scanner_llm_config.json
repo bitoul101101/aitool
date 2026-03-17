@@ -1,4 +1,4 @@
 {
   "base_url": "http://localhost:11434",
-  "model": "llama3:8b"
+  "model": "gemma3:270m"
 }

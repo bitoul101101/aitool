@@ -1,0 +1,26 @@
+[02:51:53] Scan ID  : 20260317_025153
+[02:51:53] Project  : COGI
+[02:51:53] Repos    : 1
+[02:51:58] LLM      : llama3:8b | 8.0B | Q4_0
+[02:51:58] ==========================================================
+[02:51:58]   cogi-automation  branch:master  owner:nexyte.jenkins Service
+[02:51:58] ==========================================================
+[02:51:58] Starting parallel scan (workers=1)...
+[02:52:05]   [cogi-automation] Scanning: 25% (7/27 files)
+[02:52:05]   [cogi-automation] Scanning: 40% (11/27 files)
+[02:52:05]   [cogi-automation] Scanning: 55% (15/27 files)
+[02:52:05]   [cogi-automation] Scanning: 70% (19/27 files)
+[02:52:06]   [cogi-automation] Scanning: 85% (23/27 files)
+[02:52:06]   [cogi-automation] Scanning: 100% (27/27 files)
+[02:52:07] 
+OK cogi-automation -> 0 findings  (Crit:0 High:0)
+[02:52:07] 
+==========================================================
+[02:52:07] Total findings (deduped): 0
+[02:52:07] 
+Generating reports...
+[02:52:07]   cogi-automation: clean - no findings
+[02:52:07]   No findings - no report generated.
+[02:52:07] 
+Scan complete.
+[02:52:07] Duration: 13s  |  Findings: 0

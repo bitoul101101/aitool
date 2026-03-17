@@ -1,0 +1,34 @@
+[02:52:34] Scan ID  : 20260317_025234
+[02:52:34] Project  : COGI
+[02:52:34] Repos    : 1
+[02:52:38] LLM      : llama3:8b | 8.0B | Q4_0
+[02:52:38] ==========================================================
+[02:52:39]   cogy-api-gw  branch:master  owner:cyber-jenkins
+[02:52:39] ==========================================================
+[02:52:39] Starting parallel scan (workers=1)...
+[02:52:46]   [cogy-api-gw] Scanning: 25% (7/27 files)
+[02:52:46]   [cogy-api-gw] Scanning: 40% (11/27 files)
+[02:52:46]   [cogy-api-gw] Scanning: 55% (15/27 files)
+[02:52:46]   [cogy-api-gw] Scanning: 70% (19/27 files)
+[02:52:46]   [cogy-api-gw] Scanning: 85% (23/27 files)
+[02:52:46]   [cogy-api-gw] Scanning: 100% (27/27 files)
+[02:52:47]   [LLM] Reviewing 18 finding(s)...
+[02:52:47]   [LLM] Reviewing 18 finding(s) via llama3:8b (0 skipped — high-confidence) batch=3 vram=1.1GB
+[02:52:47]   [LLM] Batch 1/6 (3 finding(s))...
+[02:52:54]   [LLM] [schema] Connection error: scan stopped by user
+[02:52:54]   [LLM] Batch 1 failed — keeping as-is
+[02:52:54]   [LLM] Batch 2/6 (3 finding(s))...
+[02:52:54]   [LLM] Stopped by user — keeping remaining findings as-is
+[02:52:54]   [LLM] Done — dismissed:0  reinstated:0  downgraded:0  kept:18  errors:3
+[02:52:54]   [LLM] Debug log: logs/llm_reviewer_debug.log
+[02:52:54]   [LLM] Review done -> 18 finding(s)
+[02:52:54] 
+==========================================================
+[02:52:54] Total findings (deduped): 0
+[02:52:54] 
+Generating reports...
+[02:52:54]   cogy-api-gw: skipped (no findings recorded)
+[02:52:54]   No findings - no report generated.
+[02:52:54] 
+Scan stopped.
+[02:52:54] Duration: 19s  |  Findings: 0

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "suppressions": [
+    {
+      "hash": "d83cfa1a1ae1a8ab4bb4173555786e05",
+      "file": "src\\elasticsearch_imp\\elastic_vector_db.py",
+      "capability": "Env Variables → LLM (multi-line)",
+      "repo": "cogi-rag",
+      "reason": "test",
+      "marked_by": "Unknown",
+      "marked_at": "2026-03-17"
+    }
+  ]
+}

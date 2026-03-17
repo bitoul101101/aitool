@@ -1,0 +1,33 @@
+[02:53:10] Scan ID  : 20260317_025310
+[02:53:10] Project  : COGI
+[02:53:10] Repos    : 1
+[02:53:14] LLM      : llama3:8b | 8.0B | Q4_0
+[02:53:14] ==========================================================
+[02:53:15]   cogi-model-common  branch:master  owner:Segal, Sarit
+[02:53:15] ==========================================================
+[02:53:15] Starting parallel scan (workers=1)...
+[02:53:22]   [cogi-model-common] Scanning: 5% (5/92 files)
+[02:53:22]   [cogi-model-common] Scanning: 10% (10/92 files)
+[02:53:25]   [cogi-model-common] Scanning: 15% (14/92 files)
+[02:53:26]   [cogi-model-common] Scanning: 20% (19/92 files)
+[02:53:26]   [cogi-model-common] Scanning: 25% (23/92 files)
+[02:53:29]   [cogi-model-common] Scanning: 30% (28/92 files)
+[02:53:29]   [cogi-model-common] Scanning: 35% (33/92 files)
+[02:53:30]   [cogi-model-common] Scanning: 40% (37/92 files)
+[02:53:31]   [LLM] Reviewing 7 finding(s)...
+[02:53:31]   [LLM] Reviewing 7 finding(s) via llama3:8b (0 skipped — high-confidence) batch=3 vram=0.9GB
+[02:53:31]   [LLM] Batch 1/3 (3 finding(s))...
+[02:53:31]   [LLM] Stopped by user — keeping remaining findings as-is
+[02:53:31]   [LLM] Done — dismissed:0  reinstated:0  downgraded:0  kept:7
+[02:53:31]   [LLM] Debug log: logs/llm_reviewer_debug.log
+[02:53:31]   [LLM] Review done -> 7 finding(s)
+[02:53:31] 
+==========================================================
+[02:53:31] Total findings (deduped): 0
+[02:53:31] 
+Generating reports...
+[02:53:31]   cogi-model-common: skipped (no findings recorded)
+[02:53:31]   No findings - no report generated.
+[02:53:31] 
+Scan stopped.
+[02:53:31] Duration: 21s  |  Findings: 0

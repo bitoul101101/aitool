@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from scanner.bitbucket import BitbucketClient
 from scanner.pat_store import save_pat, load_pat, delete_pat, is_available
+from scanner.suppressions import add_suppression, list_suppressions, remove_suppression
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ _BASE_DIR     = Path(__file__).parent          # always relative to script
 OUTPUT_DIR    = str(_BASE_DIR / "output")      # mutable at runtime via settings
 POLICY_FILE   = str(_BASE_DIR / "policy.json")
 OWNER_MAP_FILE = str(_BASE_DIR / "owner_map.json")
+SUPPRESSIONS_FILE = str(_BASE_DIR / "ai_scanner_suppressions.json")
 LLM_CFG_FILE  = str(_BASE_DIR / "ai_scanner_llm_config.json")
 APP_PORT      = 5757   # fixed port for the app (report servers use random ports)
 APP_VERSION   = "19.1"
@@ -215,6 +217,7 @@ _scan_service = ScanJobService(
         temp_dir=TEMP_DIR,
         policy_file=POLICY_FILE,
         owner_map_file=OWNER_MAP_FILE,
+        suppressions_file=SUPPRESSIONS_FILE,
         history_file=HISTORY_FILE,
         log_dir=LOG_DIR,
         db_file=DB_FILE,
@@ -234,6 +237,7 @@ def _sync_scan_service_paths() -> None:
         temp_dir=TEMP_DIR,
         policy_file=POLICY_FILE,
         owner_map_file=OWNER_MAP_FILE,
+        suppressions_file=SUPPRESSIONS_FILE,
         history_file=HISTORY_FILE,
         log_dir=LOG_DIR,
         db_file=DB_FILE,
@@ -262,6 +266,51 @@ def _get_log_text(scan_id: str) -> str:
 def _delete_history(scan_ids: List[str]) -> None:
     _sync_scan_service_paths()
     _scan_service.delete_history(scan_ids)
+
+
+def _suppressions_by_hash() -> Dict[str, dict]:
+    return {
+        rec.get("hash", ""): rec
+        for rec in list_suppressions(SUPPRESSIONS_FILE)
+        if rec.get("hash")
+    }
+
+
+def _rebuild_session_per_repo() -> None:
+    rebuilt: Dict[str, Any] = {}
+    for slug, data in _session.per_repo.items():
+        rebuilt[slug] = None if data is None else []
+    for slug in _session.repo_slugs:
+        rebuilt.setdefault(slug, [])
+    for finding in _session.findings:
+        slug = finding.get("repo", "")
+        if rebuilt.get(slug) is not None:
+            rebuilt.setdefault(slug, []).append(finding)
+    _session.per_repo = rebuilt
+
+
+def _invalidate_session_reports() -> None:
+    for report in (_session.report_paths or {}).values():
+        if not isinstance(report, dict):
+            continue
+        for key in ("html", "csv"):
+            fpath = report.get(key, "")
+            if not fpath:
+                continue
+            try:
+                path = Path(fpath)
+                if path.exists():
+                    path.unlink()
+            except Exception:
+                pass
+    _session.report_paths = {}
+
+
+def _persist_session_state() -> None:
+    _rebuild_session_per_repo()
+    _invalidate_session_reports()
+    if _session.scan_id:
+        _save_history_record(_session, _session.findings)
 
 
 def _cleanup_stale_temp_clones() -> None:
@@ -336,6 +385,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(_session.to_status())
         elif p == "/api/history":
             self._json({"history": list(reversed(_load_history()))})
+        elif p == "/api/suppressions":
+            self._json({"suppressions": list_suppressions(SUPPRESSIONS_FILE)})
         elif p.startswith("/api/history/log/"):
             self._serve_log(p[17:])
         elif p == "/api/settings":
@@ -379,6 +430,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._api_settings_save(body)
         elif p == "/api/history/delete":
             self._api_history_delete(body)
+        elif p == "/api/findings/suppress":
+            self._api_finding_suppress(body)
+        elif p == "/api/findings/unsuppress":
+            self._api_finding_unsuppress(body)
         elif p == "/api/app/shutdown":
             self._api_app_shutdown()
         else:
@@ -603,6 +658,50 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return self._err(500, f"Failed to update stored history: {e}")
 
         self._json({"ok": True, "deleted": deleted, "errors": errors})
+
+    def _api_finding_suppress(self, body: dict):
+        hash_ = body.get("hash", "").strip()
+        reason = body.get("reason", "").strip()
+        if not hash_:
+            return self._err(400, "hash required")
+        if not reason:
+            return self._err(400, "reason required")
+
+        target = next((f for f in _session.findings if f.get("_hash") == hash_), None)
+        if not target:
+            return self._err(404, "Finding not found in current session")
+
+        add_suppression(SUPPRESSIONS_FILE, target, reason=reason, marked_by=_connected_user)
+        suppression_meta = _suppressions_by_hash().get(hash_, {})
+        updated = dict(target)
+        updated["suppressed_reason"] = suppression_meta.get("reason", reason)
+        updated["suppressed_by"] = suppression_meta.get("marked_by", _connected_user)
+        updated["suppressed_at"] = suppression_meta.get("marked_at", "")
+        _session.findings = [f for f in _session.findings if f.get("_hash") != hash_]
+        _session.suppressed_findings.append(updated)
+        _persist_session_state()
+        self._json({"ok": True, "status": _session.to_status()})
+
+    def _api_finding_unsuppress(self, body: dict):
+        hash_ = body.get("hash", "").strip()
+        if not hash_:
+            return self._err(400, "hash required")
+        removed = remove_suppression(SUPPRESSIONS_FILE, hash_)
+        finding = next((f for f in _session.suppressed_findings if f.get("_hash") == hash_), None)
+        _session.suppressed_findings = [
+            f for f in _session.suppressed_findings if f.get("_hash") != hash_
+        ]
+        if finding:
+            finding = dict(finding)
+            finding.pop("suppressed_reason", None)
+            finding.pop("suppressed_by", None)
+            finding.pop("suppressed_at", None)
+            _session.findings.append(finding)
+            _session.findings.sort(
+                key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", ""))
+            )
+            _persist_session_state()
+        self._json({"ok": True, "removed": removed, "status": _session.to_status()})
 
     def _api_ollama_start(self, body: dict):
         """Start Ollama if not running, then return available models."""
@@ -995,6 +1094,28 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .k1 .kpi-n{color:var(--red)} .k2 .kpi-n{color:var(--ora)}
 .k3 .kpi-n{color:var(--yel)} .k4 .kpi-n{color:var(--lgrn)}
 #repo-cards,[id^="repo-cards-"]{max-height:160px;overflow-y:auto;padding:10px;flex-shrink:0}
+.finding-groups{padding:0 10px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;min-height:0}
+.finding-group{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.finding-group-head{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(0,0,0,.04);font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
+.finding-group-count{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.finding-list{max-height:220px;overflow-y:auto}
+.finding-empty{padding:10px 12px;color:var(--dim);font-size:12px}
+.finding-item{padding:10px 12px;border-top:1px solid rgba(0,0,0,.06)}
+.finding-item:first-child{border-top:none}
+.finding-main{display:flex;align-items:flex-start;gap:10px}
+.finding-badge{padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em;color:#fff;flex-shrink:0}
+.finding-badge.sev-1{background:var(--red)} .finding-badge.sev-2{background:var(--ora)}
+.finding-badge.sev-3{background:var(--yel);color:#1a1c24} .finding-badge.sev-4{background:var(--lgrn)}
+.finding-body{flex:1;min-width:0}
+.finding-title{font-size:12px;font-weight:700;color:var(--text)}
+.finding-meta{font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:2px}
+.finding-desc{font-size:11px;color:var(--text2);margin-top:4px}
+.finding-actions{display:flex;gap:8px;margin-top:8px}
+.finding-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer}
+.finding-btn:hover{border-color:var(--pur2);color:var(--text)}
+.finding-btn.warn{background:#fff4d6;border-color:#e0b050}
+.finding-btn.safe{background:#e7f6ea;border-color:#6fb07a}
+.finding-note{font-size:11px;color:var(--dim);margin-top:4px}
 /* ── Monitor panel (phase timeline + live log) ── */
 .monitor-panel{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0}
 .monitor-spacer{flex:1}
@@ -1362,6 +1483,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
           <th onclick="histSort('project')" id="hth-project" class="sortable" style="cursor:pointer">Project</th>
           <th onclick="histSort('repos')" id="hth-repos" class="sortable" style="cursor:pointer">Repositories</th>
           <th onclick="histSort('total')" id="hth-total" class="sortable" style="cursor:pointer">Total</th>
+          <th>Suppressed</th>
           <th onclick="histSort('critical')" id="hth-critical" class="sortable" style="cursor:pointer">Critical</th>
           <th>High</th>
           <th>By Context</th>
@@ -1722,6 +1844,22 @@ function _tabPanelHTML(tid){
         <div class="kpi-cell k4"><div class="kpi-n" id="k-low-${tid}" >-</div><div class="kpi-l">Low</div></div>
       </div>
       <div id="repo-cards-${tid}"></div>
+      <div class="finding-groups">
+        <div class="finding-group">
+          <div class="finding-group-head">
+            <span>Active Findings</span>
+            <span class="finding-group-count" id="finding-count-${tid}">0</span>
+          </div>
+          <div class="finding-list" id="finding-list-${tid}"></div>
+        </div>
+        <div class="finding-group">
+          <div class="finding-group-head">
+            <span>Suppressed</span>
+            <span class="finding-group-count" id="suppressed-count-${tid}">0</span>
+          </div>
+          <div class="finding-list" id="suppressed-list-${tid}"></div>
+        </div>
+      </div>
       <div class="monitor-panel">
         <div class="monitor-spacer"></div>
         <div class="phase-timeline" id="phase-tl-${tid}"></div>
@@ -1999,6 +2137,69 @@ async function exitTool(){
   setTimeout(()=>window.close(), 300);
 }
 
+function _fmtFindingLoc(f){
+  const file=f.file||'';
+  const line=f.line?`:${f.line}`:'';
+  return `${f.repo||'-'} | ${file}${line}`;
+}
+
+function _renderFindingCard(f, suppressed, tid){
+  const sev=f.severity||4;
+  const title=_esc(f.capability||f.provider_or_lib||'Finding');
+  const meta=_esc(_fmtFindingLoc(f));
+  const desc=_esc(f.description||'');
+  const policy=f.policy_status?`<div class="finding-note">Policy: ${_esc(f.policy_status)}</div>`:'';
+  const note=suppressed
+    ? `<div class="finding-note">Reason: ${_esc(f.reason||'')} ${f.marked_by?`| By: ${_esc(f.marked_by)}`:''} ${f.marked_at?`| At: ${_esc(f.marked_at)}`:''}</div>`
+    : '';
+  const action=suppressed
+    ? `<button class="finding-btn safe" onclick="unsuppressFinding('${tid}','${_esc(f.hash)}')">Unsuppress</button>`
+    : `<button class="finding-btn warn" onclick="suppressFinding('${tid}','${_esc(f.hash)}')">Suppress</button>`;
+  return `<div class="finding-item">
+    <div class="finding-main">
+      <span class="finding-badge sev-${sev}">Sev-${sev}</span>
+      <div class="finding-body">
+        <div class="finding-title">${title}</div>
+        <div class="finding-meta">${meta}</div>
+        ${desc?`<div class="finding-desc">${desc}</div>`:''}
+        ${policy}
+        ${note}
+        <div class="finding-actions">${action}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function suppressFinding(tid, hash){
+  const reason=prompt('Enter a suppression reason for this finding:');
+  if(reason==null) return;
+  const trimmed=reason.trim();
+  if(!trimmed){ alert('Suppression reason is required.'); return; }
+  try{
+    const r=await fetch('/api/findings/suppress',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({hash, reason:trimmed})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed to suppress finding');
+    const tab=_getTab(Number(tid)); if(tab){ tab.statusData=d.status; _updateScanUI(Number(tid), d.status); }
+  }catch(e){
+    alert('Failed to suppress finding: '+e.message);
+  }
+}
+
+async function unsuppressFinding(tid, hash){
+  try{
+    const r=await fetch('/api/findings/unsuppress',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({hash})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed to unsuppress finding');
+    const tab=_getTab(Number(tid)); if(tab){ tab.statusData=d.status; _updateScanUI(Number(tid), d.status); }
+  }catch(e){
+    alert('Failed to unsuppress finding: '+e.message);
+  }
+}
+
 // ── SSE ────────────────────────────────────────────────────────────
 // ── PHASE TIMELINE + MONITOR LOG ─────────────────────────────────
 
@@ -2177,8 +2378,17 @@ function _updateScanUI(tid, d){
   _s('k-med', s.medium!=null?s.medium:'-');
   _s('k-low', s.low!=null?s.low:'-');
   const fpt=document.getElementById(`fp-total-${tid}`);
-  if(fpt) fpt.textContent=total?`${total} finding${total===1?'':'s'} across ${Object.keys(d.per_repo||{}).length} repo${Object.keys(d.per_repo||{}).length===1?'':'s'}`:'Scanning...';
+  if(fpt){
+    const repoCount=Object.keys(d.per_repo||{}).length;
+    const sup=d.suppressed_count||0;
+    if(total){
+      fpt.textContent=`${total} active finding${total===1?'':'s'} across ${repoCount} repo${repoCount===1?'':'s'}${sup?` | ${sup} suppressed`:''}`;
+    }else{
+      fpt.textContent=sup?`${sup} suppressed finding${sup===1?'':'s'}`:'Scanning...';
+    }
+  }
   _buildRepoCards(tid, d);
+  _buildFindingLists(tid, d);
 }
 
 function _buildRepoCards(tid, d){
@@ -2212,6 +2422,24 @@ function _buildRepoCards(tid, d){
 
     el.appendChild(card);
   });
+}
+
+function _buildFindingLists(tid, d){
+  const activeEl=document.getElementById(`finding-list-${tid}`);
+  const suppressedEl=document.getElementById(`suppressed-list-${tid}`);
+  const activeCount=document.getElementById(`finding-count-${tid}`);
+  const suppressedCount=document.getElementById(`suppressed-count-${tid}`);
+  if(!activeEl || !suppressedEl) return;
+  const active=d.finding_details||[];
+  const suppressed=d.suppressed_details||[];
+  if(activeCount) activeCount.textContent=String(d.active_count ?? active.length);
+  if(suppressedCount) suppressedCount.textContent=String(d.suppressed_count ?? suppressed.length);
+  activeEl.innerHTML=active.length
+    ? active.map(f=>_renderFindingCard(f,false,tid)).join('')
+    : '<div class="finding-empty">No active findings.</div>';
+  suppressedEl.innerHTML=suppressed.length
+    ? suppressed.map(f=>_renderFindingCard(f,true,tid)).join('')
+    : '<div class="finding-empty">No suppressed findings.</div>';
 }
 
 function _onTabFinished(tab, d){
@@ -2576,6 +2804,7 @@ function renderHistory(){
     tr.appendChild(_td(_esc(rec.project||'-'),'font-weight:600;color:var(--text)'));
     tr.appendChild(_td(_esc(repos),`max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`));
     tr.appendChild(_td(rec.total??'-','font-size:15px;color:var(--text);text-align:right'));
+    tr.appendChild(_td(rec.suppressed_total??'0','font-size:15px;color:var(--text2);text-align:right'));
     tr.appendChild(_td(critHtml,'text-align:center'));
     tr.appendChild(_td(highHtml,'text-align:center'));
     tr.appendChild(_td(`<div class="ctx-pills">${ctxHtml}</div>`));

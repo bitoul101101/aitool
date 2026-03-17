@@ -19,6 +19,7 @@ from reports.csv_report import CSVReporter
 from reports.delta import build_delta_meta
 from reports.html_report import HTMLReporter
 from scanner.detector import AIUsageDetector
+from scanner.suppressions import apply_suppressions, list_suppressions
 
 
 class ScanSession:
@@ -53,10 +54,29 @@ class ScanSession:
         self._active_pool = None
 
         self.findings: List[dict] = []
+        self.suppressed_findings: List[dict] = []
         self.per_repo: Dict[str, Any] = {}
         self.report_paths: Dict[str, dict] = {}
         self.scan_duration_s: int = 0
         self.llm_model_info: dict = {}
+
+    @staticmethod
+    def _finding_detail(finding: dict) -> dict:
+        return {
+            "hash": finding.get("_hash", ""),
+            "repo": finding.get("repo", ""),
+            "file": finding.get("file", ""),
+            "line": finding.get("line", ""),
+            "severity": finding.get("severity", 4),
+            "severity_label": finding.get("severity_label", ""),
+            "policy_status": finding.get("policy_status", ""),
+            "provider_or_lib": finding.get("provider_or_lib", ""),
+            "capability": finding.get("capability", ""),
+            "description": finding.get("description", ""),
+            "reason": finding.get("suppressed_reason", ""),
+            "marked_by": finding.get("suppressed_by", ""),
+            "marked_at": finding.get("suppressed_at", ""),
+        }
 
     def log(self, msg: str, level: str = "info") -> None:
         entry = {"msg": msg, "level": level, "ts": time.time()}
@@ -81,6 +101,8 @@ class ScanSession:
             "file_index": self.file_index,
             "total_files": self.total_files,
             "findings": len(self.findings),
+            "active_count": len(self.findings),
+            "suppressed_count": len(self.suppressed_findings),
             "sev": {
                 "critical": sev.get(1, 0),
                 "high": sev.get(2, 0),
@@ -98,6 +120,20 @@ class ScanSession:
             },
             "report": self.report_paths.get("__all__", {}),
             "duration_s": self.scan_duration_s,
+            "finding_details": [
+                self._finding_detail(f)
+                for f in sorted(
+                    self.findings,
+                    key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")),
+                )[:60]
+            ],
+            "suppressed_details": [
+                self._finding_detail(f)
+                for f in sorted(
+                    self.suppressed_findings,
+                    key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")),
+                )[:30]
+            ],
         }
 
 
@@ -107,6 +143,7 @@ class ScanJobPaths:
     temp_dir: str
     policy_file: str
     owner_map_file: str
+    suppressions_file: str
     history_file: str
     log_dir: str
     db_file: str
@@ -142,6 +179,7 @@ class ScanJobService:
         temp_dir: Optional[str] = None,
         policy_file: Optional[str] = None,
         owner_map_file: Optional[str] = None,
+        suppressions_file: Optional[str] = None,
         history_file: Optional[str] = None,
         log_dir: Optional[str] = None,
         db_file: Optional[str] = None,
@@ -154,6 +192,8 @@ class ScanJobService:
             self.paths.policy_file = policy_file
         if owner_map_file is not None:
             self.paths.owner_map_file = owner_map_file
+        if suppressions_file is not None:
+            self.paths.suppressions_file = suppressions_file
         if history_file is not None:
             self.paths.history_file = history_file
         if log_dir is not None:
@@ -223,6 +263,8 @@ class ScanJobService:
             "policy_version": session.policy_version,
             "tool_version": session.tool_version,
             "total": len(findings),
+            "active_total": len(findings),
+            "suppressed_total": len(session.suppressed_findings),
             "sev": {
                 "critical": sev.get(1, 0),
                 "high": sev.get(2, 0),
@@ -421,9 +463,16 @@ class ScanJobService:
         session.completed_at_utc = ""
         session.policy_version = self._policy_version(self.paths.policy_file)
         session.tool_version = self.app_version
+        session.suppressed_findings = []
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
+        suppression_records = {
+            rec.get("hash", ""): rec
+            for rec in list_suppressions(self.paths.suppressions_file)
+            if rec.get("hash")
+        }
+        suppressed_hashes = set(suppression_records)
         self.record_job_snapshot(session, [])
 
         log(f"Scan ID  : {session.scan_id}", "hd")
@@ -602,14 +651,26 @@ class ScanJobService:
                     log(f"  WARN {sev_critical} Critical finding(s)!", "err")
 
                 total_pre_llm += pre_llm
-                total_post_llm += len(analyzed)
+                active_findings, suppressed_findings = apply_suppressions(
+                    analyzed, suppressed_hashes
+                )
+                for finding in suppressed_findings:
+                    meta = suppression_records.get(finding.get("_hash", ""), {})
+                    if meta:
+                        finding["suppressed_reason"] = meta.get("reason", "")
+                        finding["suppressed_by"] = meta.get("marked_by", "")
+                        finding["suppressed_at"] = meta.get("marked_at", "")
+                if suppressed_findings:
+                    session.suppressed_findings.extend(suppressed_findings)
+                    log(f"  [FP] Suppressed {len(suppressed_findings)} finding(s)", "dim")
+                total_post_llm += len(active_findings)
 
-                for finding in analyzed:
+                for finding in active_findings:
                     finding["project_key"] = session.project_key
                     finding["owner"] = bb_owner
                     finding["last_seen"] = session.scan_id
-                all_findings.extend(analyzed)
-                per_repo[slug] = analyzed
+                all_findings.extend(active_findings)
+                per_repo[slug] = active_findings
                 session.per_repo = dict(per_repo)
                 session.findings = list(all_findings)
                 self.record_job_snapshot(session, session.findings)
@@ -675,6 +736,7 @@ class ScanJobService:
                         "scan_duration_s": session.scan_duration_s,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,
+                        "suppressed_count": len(session.suppressed_findings),
                     }
                 else:
                     single_slug = label
@@ -702,6 +764,7 @@ class ScanJobService:
                         "scan_duration_s": session.scan_duration_s,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,
+                        "suppressed_count": len(session.suppressed_findings),
                     }
 
                 html_reporter = HTMLReporter(

@@ -746,6 +746,7 @@ tr.detail-row:hover td{background:#faf9ff !important;}
         operator = html_mod.escape(self.meta.get("operator", ""))
         started_at = self.meta.get("started_at_utc", "")
         completed_at = self.meta.get("completed_at_utc", "")
+        suppressed_count = int(self.meta.get("suppressed_count", 0) or 0)
         policy_version = html_mod.escape(self.meta.get("policy_version", ""))
         tool_version = html_mod.escape(self.meta.get("tool_version", ""))
         repo       = html_mod.escape(self.meta.get("repo", "—"))
@@ -967,13 +968,15 @@ tr.detail-row:hover td{background:#faf9ff !important;}
             return (f'<div class="hdr-stat {extra_cls}">'
                     f'<div class="hdr-stat-label">{label}</div>'
                     f'<div class="hdr-stat-val">{val}</div>'
+                    f'{sub_html}'
                     f'</div>')
 
         stats_html = (
             stat("Files Scanned",       files_str,    "unique files with findings", "s-blue") +
             stat("Pattern Matches",     matches_str,  matches_sub) +
             stat("Policy Violations",   policy_str,   policy_sub_str, policy_cls) +
-            stat("LLM Dismissal Rate",  dismiss_str,  dismiss_sub,    dismiss_cls)
+            stat("LLM Dismissal Rate",  dismiss_str,  dismiss_sub,    dismiss_cls) +
+            stat("Suppressed",          str(suppressed_count), "suppressed by analyst workflow")
         )
 
         return f"""<div class="hdr {risk_cls}">

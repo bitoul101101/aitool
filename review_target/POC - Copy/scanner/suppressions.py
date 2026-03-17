@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, List
 
 _VERSION = 1
 _DEFAULT_FILE = "ai_scanner_suppressions.json"
@@ -64,6 +64,12 @@ def load_suppressions(path: str | Path) -> Set[str]:
     """Return the set of suppressed finding hashes from *path*."""
     data = _read(Path(path))
     return {s["hash"] for s in data["suppressions"] if s.get("hash")}
+
+
+def list_suppressions(path: str | Path) -> List[Dict[str, Any]]:
+    """Return the stored suppression records."""
+    data = _read(Path(path))
+    return list(data["suppressions"])
 
 
 def add_suppression(

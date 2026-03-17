@@ -14,8 +14,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scanner.detector import AIUsageDetector
+from scanner.suppressions import list_suppressions
 from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
+from reports.html_report import HTMLReporter
 
 
 # ── Detector tests ────────────────────────────────────────────────
@@ -550,6 +552,9 @@ def test_save_history_record_creates_file():
         session.repo_details = {
             "my-repo": {"owner": "alice", "branch": "main", "commit": "deadbeefcafebabe"}
         }
+        session.suppressed_findings = [
+            {"_hash": "suppressed-1", "repo": "my-repo", "file": "docs.md"}
+        ]
         session.log("Test log entry", "info")
 
         findings = [
@@ -577,6 +582,7 @@ def test_save_history_record_creates_file():
         assert r["policy_version"] == "abc123def456"
         assert r["tool_version"] == "19.1"
         assert r["repo_details"]["my-repo"]["branch"] == "main"
+        assert r["suppressed_total"] == 1
 
         # Log file should exist
         log_path = Path(srv.LOG_DIR) / "20250315_120000.log"
@@ -695,6 +701,36 @@ def test_default_temp_dir_prefers_system_temp_on_windows():
     assert temp_dir == Path(r"C:\Temp") / "ai_scanner_tmp"
 
 
+def test_scan_session_status_includes_suppressed_details():
+    from services.scan_jobs import ScanSession
+
+    session = ScanSession()
+    session.scan_id = "20250316_040404"
+    session.findings = [
+        {"_hash": "a1", "repo": "repo1", "file": "app.py", "line": 12, "severity": 2, "capability": "OpenAI API"}
+    ]
+    session.suppressed_findings = [
+        {
+            "_hash": "b2",
+            "repo": "repo1",
+            "file": "docs.md",
+            "line": 3,
+            "severity": 4,
+            "capability": "Example",
+            "suppressed_reason": "Documentation example",
+            "suppressed_by": "analyst",
+            "suppressed_at": "2026-03-17",
+        }
+    ]
+
+    status = session.to_status()
+
+    assert status["active_count"] == 1
+    assert status["suppressed_count"] == 1
+    assert status["finding_details"][0]["hash"] == "a1"
+    assert status["suppressed_details"][0]["reason"] == "Documentation example"
+
+
 def test_get_log_text_reads_from_sqlite_when_file_missing():
     import app_server as srv
 
@@ -770,6 +806,118 @@ def test_delete_history_removes_sqlite_record():
         srv.LOG_DIR = orig_log
         srv.DB_FILE = orig_db
         srv._invalidate_history_cache()
+
+
+def test_api_finding_suppress_moves_finding_and_invalidates_reports():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    orig_sup = srv.SUPPRESSIONS_FILE
+    orig_session = srv._session
+    orig_user = srv._connected_user
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(d / "logs")
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv.SUPPRESSIONS_FILE = str(d / "ai_scanner_suppressions.json")
+    srv._connected_user = "Security Engineer"
+    srv._invalidate_history_cache()
+
+    try:
+        html_path = d / "report.html"
+        csv_path = d / "report.csv"
+        html_path.write_text("html")
+        csv_path.write_text("csv")
+
+        session = srv.ScanSession()
+        finding = {
+            "_hash": "hash-1",
+            "repo": "repo1",
+            "file": "app.py",
+            "line": 9,
+            "severity": 2,
+            "capability": "OpenAI API",
+            "description": "Detected usage",
+        }
+        session.scan_id = "20250316_050505"
+        session.project_key = "TEST"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.findings = [finding]
+        session.per_repo = {"repo1": [finding]}
+        session.report_paths = {
+            "__all__": {
+                "html": str(html_path),
+                "csv": str(csv_path),
+                "html_name": html_path.name,
+                "csv_name": csv_path.name,
+            }
+        }
+        srv._session = session
+
+        handler = DummyHandler()
+        srv._Handler._api_finding_suppress(handler, {"hash": "hash-1", "reason": "Expected internal example"})
+
+        assert handler.payload[0] == 200
+        assert handler.payload[1]["ok"] is True
+        assert srv._session.findings == []
+        assert len(srv._session.suppressed_findings) == 1
+        assert srv._session.report_paths == {}
+        assert not html_path.exists()
+        assert not csv_path.exists()
+        assert any(rec["hash"] == "hash-1" for rec in list_suppressions(srv.SUPPRESSIONS_FILE))
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv.SUPPRESSIONS_FILE = orig_sup
+        srv._session = orig_session
+        srv._connected_user = orig_user
+        srv._invalidate_history_cache()
+
+
+def test_html_report_renders_suppressed_stat():
+    reporter = HTMLReporter(
+        output_dir=tempfile.mkdtemp(),
+        scan_id="20260317_024619",
+        meta={"suppressed_count": 2},
+    )
+    findings = [
+        {
+            "severity": 1,
+            "ai_category": "Secrets",
+            "repo": "cogi-rag",
+            "project_key": "COGI",
+            "file": "app.py",
+            "line": 12,
+            "policy_status": "BANNED",
+            "provider_or_lib": "hardcoded_key",
+            "capability": "api key",
+            "description": "Hardcoded credential",
+            "context": "production",
+        }
+    ]
+
+    html = reporter._render(findings, policy={})
+
+    assert "Suppressed" in html
+    assert "suppressed by analyst workflow" in html
 
 
 def test_cleanup_stale_temp_clones_removes_leftovers():

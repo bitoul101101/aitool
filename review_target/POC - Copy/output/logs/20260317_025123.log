@@ -1,0 +1,25 @@
+[02:51:23] Scan ID  : 20260317_025123
+[02:51:23] Project  : DOW
+[02:51:23] Repos    : 1
+[02:51:27] LLM      : llama3:8b | 8.0B | Q4_0
+[02:51:27] ==========================================================
+[02:51:28]   adapterinfra  branch:master  owner:DBS_Build
+[02:51:28] ==========================================================
+[02:51:28] Starting parallel scan (workers=1)...
+[02:51:36]   [adapterinfra] Scanning: 30% (7/23 files)
+[02:51:36]   [adapterinfra] Scanning: 60% (14/23 files)
+[02:51:36]   [adapterinfra] Scanning: 65% (15/23 files)
+[02:51:37]   [adapterinfra] Scanning: 95% (22/23 files)
+[02:51:37]   [adapterinfra] Scanning: 100% (23/23 files)
+[02:51:37] 
+OK adapterinfra -> 0 findings  (Crit:0 High:0)
+[02:51:37] 
+==========================================================
+[02:51:37] Total findings (deduped): 0
+[02:51:37] 
+Generating reports...
+[02:51:37]   adapterinfra: clean - no findings
+[02:51:37]   No findings - no report generated.
+[02:51:37] 
+Scan complete.
+[02:51:37] Duration: 14s  |  Findings: 0
