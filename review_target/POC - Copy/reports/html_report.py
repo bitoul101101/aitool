@@ -747,6 +747,8 @@ tr.detail-row:hover td{background:#faf9ff !important;}
         started_at = self.meta.get("started_at_utc", "")
         completed_at = self.meta.get("completed_at_utc", "")
         suppressed_count = int(self.meta.get("suppressed_count", 0) or 0)
+        reviewed_count = int(self.meta.get("reviewed_count", 0) or 0)
+        accepted_risk_count = int(self.meta.get("accepted_risk_count", 0) or 0)
         policy_version = html_mod.escape(self.meta.get("policy_version", ""))
         tool_version = html_mod.escape(self.meta.get("tool_version", ""))
         repo       = html_mod.escape(self.meta.get("repo", "—"))
@@ -976,6 +978,8 @@ tr.detail-row:hover td{background:#faf9ff !important;}
             stat("Pattern Matches",     matches_str,  matches_sub) +
             stat("Policy Violations",   policy_str,   policy_sub_str, policy_cls) +
             stat("LLM Dismissal Rate",  dismiss_str,  dismiss_sub,    dismiss_cls) +
+            stat("Reviewed",            str(reviewed_count), "analyst-reviewed findings") +
+            stat("Accepted Risk",       str(accepted_risk_count), "documented accepted risk") +
             stat("Suppressed",          str(suppressed_count), "suppressed by analyst workflow")
         )
 

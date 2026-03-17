@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scanner.detector import AIUsageDetector
-from scanner.suppressions import list_suppressions
+from scanner.suppressions import TRIAGE_REVIEWED, list_suppressions, list_triage
 from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
 from reports.html_report import HTMLReporter
@@ -934,6 +934,82 @@ def test_api_finding_suppress_moves_finding_and_invalidates_reports():
         assert not html_path.exists()
         assert not csv_path.exists()
         assert any(rec["hash"] == "hash-1" for rec in list_suppressions(srv.SUPPRESSIONS_FILE))
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv.SUPPRESSIONS_FILE = orig_sup
+        srv._session = orig_session
+        srv._connected_user = orig_user
+        srv._invalidate_history_cache()
+
+
+def test_api_finding_triage_marks_reviewed_and_reset_clears_it():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    orig_sup = srv.SUPPRESSIONS_FILE
+    orig_session = srv._session
+    orig_user = srv._connected_user
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(d / "logs")
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv.SUPPRESSIONS_FILE = str(d / "ai_scanner_suppressions.json")
+    srv._connected_user = "Security Engineer"
+    srv._invalidate_history_cache()
+
+    try:
+        session = srv.ScanSession()
+        finding = {
+            "_hash": "hash-2",
+            "repo": "repo1",
+            "file": "service.py",
+            "line": 21,
+            "severity": 3,
+            "capability": "LLM Orchestration",
+            "description": "Detected orchestration usage",
+        }
+        session.scan_id = "20250316_060606"
+        session.project_key = "TEST"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.findings = [finding]
+        session.per_repo = {"repo1": [finding]}
+        srv._session = session
+
+        handler = DummyHandler()
+        srv._Handler._api_finding_triage(
+            handler,
+            {"hash": "hash-2", "status": TRIAGE_REVIEWED, "note": "Manually reviewed"},
+        )
+
+        assert handler.payload[0] == 200
+        assert srv._session.findings[0]["triage_status"] == TRIAGE_REVIEWED
+        assert srv._session.findings[0]["triage_note"] == "Manually reviewed"
+        assert any(rec["hash"] == "hash-2" and rec["status"] == TRIAGE_REVIEWED for rec in list_triage(srv.SUPPRESSIONS_FILE))
+
+        srv._Handler._api_finding_reset(handler, {"hash": "hash-2"})
+
+        assert handler.payload[0] == 200
+        assert "triage_status" not in srv._session.findings[0]
+        assert all(rec["hash"] != "hash-2" for rec in list_triage(srv.SUPPRESSIONS_FILE))
     finally:
         srv.OUTPUT_DIR = orig_out
         srv.HISTORY_FILE = orig_hist

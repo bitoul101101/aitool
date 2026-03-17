@@ -19,7 +19,13 @@ from reports.csv_report import CSVReporter
 from reports.delta import build_delta_meta
 from reports.html_report import HTMLReporter
 from scanner.detector import AIUsageDetector
-from scanner.suppressions import apply_suppressions, list_suppressions
+from scanner.suppressions import (
+    TRIAGE_ACCEPTED_RISK,
+    TRIAGE_FALSE_POSITIVE,
+    TRIAGE_REVIEWED,
+    apply_suppressions,
+    list_triage,
+)
 
 
 class ScanSession:
@@ -59,6 +65,7 @@ class ScanSession:
         self.report_paths: Dict[str, dict] = {}
         self.scan_duration_s: int = 0
         self.llm_model_info: dict = {}
+        self.delta: dict = {}
 
     @staticmethod
     def _finding_detail(finding: dict) -> dict:
@@ -73,9 +80,14 @@ class ScanSession:
             "provider_or_lib": finding.get("provider_or_lib", ""),
             "capability": finding.get("capability", ""),
             "description": finding.get("description", ""),
-            "reason": finding.get("suppressed_reason", ""),
-            "marked_by": finding.get("suppressed_by", ""),
-            "marked_at": finding.get("suppressed_at", ""),
+            "triage_status": finding.get("triage_status", ""),
+            "triage_note": finding.get("triage_note", ""),
+            "triage_by": finding.get("triage_by", ""),
+            "triage_at": finding.get("triage_at", ""),
+            "reason": finding.get("triage_note", finding.get("suppressed_reason", "")),
+            "marked_by": finding.get("triage_by", finding.get("suppressed_by", "")),
+            "marked_at": finding.get("triage_at", finding.get("suppressed_at", "")),
+            "delta_status": finding.get("delta_status", ""),
         }
 
     def log(self, msg: str, level: str = "info") -> None:
@@ -85,6 +97,7 @@ class ScanSession:
 
     def to_status(self) -> dict:
         sev = Counter(f.get("severity", 4) for f in self.findings)
+        triage_counts = Counter(f.get("triage_status", "") or "new" for f in self.findings)
         return {
             "state": self.state,
             "scan_id": self.scan_id,
@@ -103,12 +116,15 @@ class ScanSession:
             "findings": len(self.findings),
             "active_count": len(self.findings),
             "suppressed_count": len(self.suppressed_findings),
+            "reviewed_count": triage_counts.get(TRIAGE_REVIEWED, 0),
+            "accepted_risk_count": triage_counts.get(TRIAGE_ACCEPTED_RISK, 0),
             "sev": {
                 "critical": sev.get(1, 0),
                 "high": sev.get(2, 0),
                 "medium": sev.get(3, 0),
                 "low": sev.get(4, 0),
             },
+            "delta": self.delta,
             "per_repo": {
                 slug: {
                     "skipped": data is None,
@@ -265,6 +281,9 @@ class ScanJobService:
             "total": len(findings),
             "active_total": len(findings),
             "suppressed_total": len(session.suppressed_findings),
+            "reviewed_total": sum(1 for f in findings if f.get("triage_status") == TRIAGE_REVIEWED),
+            "accepted_risk_total": sum(1 for f in findings if f.get("triage_status") == TRIAGE_ACCEPTED_RISK),
+            "delta": session.delta,
             "sev": {
                 "critical": sev.get(1, 0),
                 "high": sev.get(2, 0),
@@ -277,6 +296,63 @@ class ScanJobService:
             "log_file": log_file,
             "reports": session.report_paths,
         }
+
+    def _build_scan_delta(
+        self,
+        findings: list,
+        *,
+        project_key: str,
+        repo_slugs: list[str],
+    ) -> dict:
+        def _serialise_delta(delta: dict) -> dict:
+            return {
+                **delta,
+                "new_hashes": sorted(delta.get("new_hashes", set())),
+                "fixed_hashes": sorted(delta.get("fixed_hashes", set())),
+            }
+
+        if not repo_slugs:
+            return _serialise_delta({
+                "has_baseline": False,
+                "new_count": len(findings),
+                "fixed_count": 0,
+                "unchanged_count": 0,
+                "new_hashes": {f.get("_hash", "") for f in findings},
+                "fixed_hashes": set(),
+            })
+
+        if len(repo_slugs) == 1:
+            return _serialise_delta(
+                build_delta_meta(findings, self.paths.output_dir, project_key, repo_slugs[0])
+            )
+
+        new_hashes = set()
+        fixed_hashes = set()
+        new_count = 0
+        fixed_count = 0
+        unchanged_count = 0
+        has_baseline = False
+
+        for slug in repo_slugs:
+            repo_findings = [f for f in findings if f.get("repo") == slug]
+            repo_delta = build_delta_meta(repo_findings, self.paths.output_dir, project_key, slug)
+            if repo_delta.get("has_baseline"):
+                has_baseline = True
+            new_count += repo_delta.get("new_count", 0)
+            fixed_count += repo_delta.get("fixed_count", 0)
+            unchanged_count += repo_delta.get("unchanged_count", 0)
+            new_hashes.update(repo_delta.get("new_hashes", set()))
+            fixed_hashes.update(repo_delta.get("fixed_hashes", set()))
+
+        return _serialise_delta({
+            "has_baseline": has_baseline,
+            "baseline_file": "multiple baselines",
+            "new_count": new_count,
+            "fixed_count": fixed_count,
+            "unchanged_count": unchanged_count,
+            "new_hashes": new_hashes,
+            "fixed_hashes": fixed_hashes,
+        })
 
     def _upsert_job_record(self, record: dict) -> None:
         with self._connect() as conn:
@@ -464,15 +540,20 @@ class ScanJobService:
         session.policy_version = self._policy_version(self.paths.policy_file)
         session.tool_version = self.app_version
         session.suppressed_findings = []
+        session.delta = {}
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
-        suppression_records = {
+        triage_records = {
             rec.get("hash", ""): rec
-            for rec in list_suppressions(self.paths.suppressions_file)
+            for rec in list_triage(self.paths.suppressions_file)
             if rec.get("hash")
         }
-        suppressed_hashes = set(suppression_records)
+        suppressed_hashes = {
+            hash_
+            for hash_, rec in triage_records.items()
+            if rec.get("status") == TRIAGE_FALSE_POSITIVE
+        }
         self.record_job_snapshot(session, [])
 
         log(f"Scan ID  : {session.scan_id}", "hd")
@@ -655,11 +736,22 @@ class ScanJobService:
                     analyzed, suppressed_hashes
                 )
                 for finding in suppressed_findings:
-                    meta = suppression_records.get(finding.get("_hash", ""), {})
+                    meta = triage_records.get(finding.get("_hash", ""), {})
                     if meta:
-                        finding["suppressed_reason"] = meta.get("reason", "")
+                        finding["triage_status"] = meta.get("status", TRIAGE_FALSE_POSITIVE)
+                        finding["triage_note"] = meta.get("note", "")
+                        finding["triage_by"] = meta.get("marked_by", "")
+                        finding["triage_at"] = meta.get("marked_at", "")
+                        finding["suppressed_reason"] = meta.get("note", "")
                         finding["suppressed_by"] = meta.get("marked_by", "")
                         finding["suppressed_at"] = meta.get("marked_at", "")
+                for finding in active_findings:
+                    meta = triage_records.get(finding.get("_hash", ""), {})
+                    if meta and meta.get("status") != TRIAGE_FALSE_POSITIVE:
+                        finding["triage_status"] = meta.get("status", "")
+                        finding["triage_note"] = meta.get("note", "")
+                        finding["triage_by"] = meta.get("marked_by", "")
+                        finding["triage_at"] = meta.get("marked_at", "")
                 if suppressed_findings:
                     session.suppressed_findings.extend(suppressed_findings)
                     log(f"  [FP] Suppressed {len(suppressed_findings)} finding(s)", "dim")
@@ -678,13 +770,21 @@ class ScanJobService:
         log("\n" + "=" * 58, "dim")
         final = aggregator.process(all_findings)
         session.findings = final
+        scanned_slugs = [slug for slug in session.repo_slugs if per_repo.get(slug) is not None]
+        session.delta = self._build_scan_delta(
+            final,
+            project_key=session.project_key,
+            repo_slugs=scanned_slugs,
+        )
+        new_hashes = session.delta.get("new_hashes", set())
+        for finding in final:
+            finding["delta_status"] = "new" if finding.get("_hash", "") in new_hashes else "unchanged"
         log(f"Total findings (deduped): {len(final)}", "hd")
 
         session.scan_duration_s = int(time.time() - t_start)
         log("\nGenerating reports...", "dim")
         report_paths: Dict[str, dict] = {}
 
-        scanned_slugs = [slug for slug in session.repo_slugs if per_repo.get(slug) is not None]
         for slug in session.repo_slugs:
             if per_repo.get(slug) is None:
                 log(f"  {slug}: skipped (no findings recorded)", "dim")
@@ -731,22 +831,18 @@ class ScanJobService:
                         "tool_version": session.tool_version,
                         "repos_meta": repos_meta_list,
                         "scan_id": session.scan_id,
-                        "delta": {},
+                        "delta": session.delta,
                         "llm_model_info": session.llm_model_info,
                         "scan_duration_s": session.scan_duration_s,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,
                         "suppressed_count": len(session.suppressed_findings),
+                        "reviewed_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_REVIEWED),
+                        "accepted_risk_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_ACCEPTED_RISK),
                     }
                 else:
                     single_slug = label
                     single_owner = next((finding.get("owner", "") for finding in final), "Unknown")
-                    delta_meta = build_delta_meta(
-                        final,
-                        self.paths.output_dir,
-                        session.project_key,
-                        single_slug,
-                    )
                     report_meta = {
                         "repo": single_slug,
                         "project_key": session.project_key,
@@ -759,12 +855,14 @@ class ScanJobService:
                         "policy_version": session.policy_version,
                         "tool_version": session.tool_version,
                         "scan_id": session.scan_id,
-                        "delta": delta_meta,
+                        "delta": session.delta,
                         "llm_model_info": session.llm_model_info,
                         "scan_duration_s": session.scan_duration_s,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,
                         "suppressed_count": len(session.suppressed_findings),
+                        "reviewed_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_REVIEWED),
+                        "accepted_risk_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_ACCEPTED_RISK),
                     }
 
                 html_reporter = HTMLReporter(

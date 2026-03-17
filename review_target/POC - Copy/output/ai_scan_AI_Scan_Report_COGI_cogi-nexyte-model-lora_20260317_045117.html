@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AI Security &amp; Compliance Monitoring — AI_Scan_Report_COGI_cogi-nexyte-model-lora_20260317_045117</title>
+<style>
+:root{
+  --red:#C00000;--ora:#e05c00;--yel:#c87800;--grn:#2e7d32;--lgrn:#5a8a3a;
+  --pur:#3b2a7a;--pur2:#5540aa;--pur3:#e8e4ff;
+  --bg:#f3f4f8;--card:#fff;--bdr:#dde1ea;--txt:#1a1d2e;--dim:#6b7280;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
+     color:var(--txt);font-size:14px;line-height:1.5;}
+.wrap{max-width:1380px;margin:0 auto;padding:26px 22px;}
+
+/* ══════════════════════════════════════════════════════
+   HEADER
+   ══════════════════════════════════════════════════════ */
+.hdr{
+  background:linear-gradient(135deg,#1a0545 0%,#2d0e7a 50%,#3d1599 100%);
+  border-radius:12px;margin-bottom:24px;overflow:hidden;
+  box-shadow:0 4px 20px rgba(30,5,100,.5);
+  border:1px solid rgba(255,255,255,.12);
+}
+
+/* risk accent bar */
+.hdr-accent{height:3px;background:#7c4dff;}
+.hdr.risk-crit .hdr-accent{background:linear-gradient(90deg,#e53935,#ff6f60);}
+.hdr.risk-high .hdr-accent{background:linear-gradient(90deg,#fb8c00,#ffd54f);}
+.hdr.risk-med  .hdr-accent{background:linear-gradient(90deg,#fdd835,#fff59d);}
+
+/* title band — compact single row */
+.hdr-band{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:11px 22px 10px;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.hdr-band-icon{font-size:20px;line-height:1;flex-shrink:0;}
+.hdr-band-title{
+  font-size:19px;font-weight:800;color:#fff;
+  letter-spacing:-.3px;line-height:1;text-align:center;
+}
+
+/* body: meta + stats side by side */
+.hdr-body{display:flex;align-items:stretch;gap:0;}
+
+/* ── Left: scan context ── */
+.hdr-meta{
+  flex:1;min-width:0;padding:10px 22px;
+  display:grid;grid-template-columns:auto 1fr;
+  column-gap:14px;row-gap:4px;align-content:start;
+  border-right:1px solid rgba(255,255,255,.1);
+}
+.hdr-meta-key{
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:rgba(255,255,255,.55);white-space:nowrap;padding-top:2px;
+}
+.hdr-meta-val{
+  font-size:12px;font-weight:600;color:rgba(255,255,255,.92);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.hdr-meta-val.mono{
+  font-family:'Cascadia Code',Consolas,monospace;
+  font-size:11px;font-weight:400;color:rgba(255,255,255,.78);
+}
+/* language chips */
+.lang-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.lang-chip{
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);
+  border-radius:4px;padding:1px 7px;
+  font-size:10px;font-weight:600;color:rgba(255,255,255,.88);
+  font-family:'Cascadia Code',Consolas,monospace;white-space:nowrap;
+}
+
+/* ── Right: stat strip — 4 horizontal counters ── */
+.hdr-stats{
+  flex-shrink:0;width:360px;
+  padding:10px 16px;
+  display:flex;flex-direction:column;justify-content:center;gap:6px;
+}
+.hdr-stat{
+  display:flex;align-items:center;gap:10px;
+  padding:5px 10px 5px 12px;
+  border-left:3px solid rgba(255,255,255,.18);
+  border-radius:0 6px 6px 0;
+  background:rgba(255,255,255,.05);
+}
+.hdr-stat-label{
+  flex:1;font-size:11px;font-weight:500;
+  color:rgba(255,255,255,.7);white-space:nowrap;
+}
+.hdr-stat-val{
+  font-size:20px;font-weight:800;line-height:1;color:#fff;
+  white-space:nowrap;text-align:right;min-width:36px;
+}
+.hdr-stat-sub{
+  font-size:10px;color:rgba(255,255,255,.5);white-space:nowrap;
+  text-align:right;margin-top:1px;display:none;
+}
+/* accent colours */
+.hdr-stat.s-warn { border-left-color:#ffb74d; }
+.hdr-stat.s-warn .hdr-stat-val { color:#ffb74d; }
+.hdr-stat.s-crit { border-left-color:#ef9a9a; }
+.hdr-stat.s-crit .hdr-stat-val { color:#ef9a9a; }
+.hdr-stat.s-ok   { border-left-color:#81c995; }
+.hdr-stat.s-ok   .hdr-stat-val { color:#81c995; }
+.hdr-stat.s-blue { border-left-color:#90caf9; }
+.hdr-stat.s-blue .hdr-stat-val { color:#90caf9; }
+
+/* ── KPI bar ── */
+.kpis{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:26px;}
+.kpi{background:var(--card);border-radius:11px;padding:16px 20px;flex:1;
+     min-width:120px;box-shadow:0 1px 5px rgba(0,0,0,.07);
+     border-top:4px solid var(--pur);}
+.kpi.k1{border-color:var(--red);}
+.kpi.k2{border-color:var(--ora);}
+.kpi.k3{border-color:var(--yel);}
+.kpi.k4{border-color:var(--lgrn);}
+.kpi .n{font-size:32px;font-weight:700;line-height:1.1;}
+.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+         color:var(--dim);margin-top:3px;}
+
+/* ── Cards ── */
+.card{background:var(--card);border-radius:11px;padding:20px 24px;
+      margin-bottom:20px;box-shadow:0 1px 5px rgba(0,0,0,.07);}
+h2{font-size:19px;font-weight:700;margin:0 0 16px;color:var(--txt);}
+h3{font-size:15px;font-weight:600;margin:12px 0 9px;color:var(--txt);}
+section{margin-bottom:28px;}
+
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+th{background:var(--pur);color:#fff;padding:9px 13px;text-align:left;
+   font-size:11px;font-weight:600;text-transform:uppercase;
+   letter-spacing:.4px;white-space:nowrap;}
+td{padding:8px 13px;border-bottom:1px solid var(--bdr);vertical-align:top;
+   word-wrap:break-word;overflow-wrap:break-word;}
+tr:nth-child(even) td{background:#fafbfd;}
+tr:hover td{background:#f0eeff;}
+/* Header repo table — no zebra, no hover highlight */
+.hdr tr:nth-child(even) td{background:transparent;}
+.hdr tr:hover td{background:transparent;}
+.num-cell{text-align:center;font-weight:600;}
+
+/* ── Badges ── */
+.b{display:inline-block;padding:2px 8px;border-radius:4px;
+   font-size:11px;font-weight:700;letter-spacing:.2px;color:#fff;}
+.b1{background:var(--red);}  .b2{background:var(--ora);}
+.b3{background:var(--yel);}  .b4{background:var(--lgrn);}
+.b-CRITICAL,.b-BANNED{background:var(--red);}
+.b-RESTRICTED{background:var(--ora);}
+.b-REVIEW{background:var(--yel);}
+.b-ALLOWED,.b-APPROVED{background:var(--grn);}
+
+/* ── Policy status cards (summary) ── */
+.ps-card{border-radius:8px;padding:7px 12px;flex:1;min-width:100px;
+         border:2px solid transparent;text-align:center;}
+.ps-card .psc{font-size:20px;font-weight:700;line-height:1.1;}
+.ps-card .psl{font-size:10px;font-weight:700;text-transform:uppercase;
+              letter-spacing:.5px;margin-top:2px;}
+.ps-card .psd{font-size:10px;color:var(--dim);margin-top:3px;line-height:1.3;}
+
+/* ── Provider tags (compact) ── */
+.tag-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+.tag-a{background:#e8f5e9;border:1px solid #a5d6a7;color:#2e7d32;
+       padding:2px 9px;border-radius:12px;font-size:11px;font-weight:500;}
+.tag-r{background:#fff3e0;border:1px solid #ffcc80;color:#bf4000;
+       padding:2px 9px;border-radius:12px;font-size:11px;font-weight:500;}
+
+/* ── Compact table (summary section) ── */
+table.compact{table-layout:fixed;width:100%;}
+table.compact td{padding:2px 8px;border-bottom:1px solid #f0f1f5;overflow:hidden;}
+table.compact tr:nth-child(even) td{background:none;}
+table.compact tr:hover td{background:#f7f5ff;}
+table.compact tr:last-child td{border-top:2px solid var(--bdr);border-bottom:none;
+                                padding-top:5px;padding-bottom:4px;}
+
+/* ── Sortable column headers ── */
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+th.sortable:hover{background:var(--pur2);}
+th.sort-asc::after{content:' ▲';font-size:9px;opacity:.85;}
+th.sort-desc::after{content:' ▼';font-size:9px;opacity:.85;}
+.snip{background:#1e1e2e;color:#cdd6f4;padding:9px 13px;border-radius:6px;
+      font-family:'Cascadia Code',Consolas,monospace;font-size:11px;
+      overflow-x:auto;overflow-y:auto;white-space:pre;
+      max-height:180px;min-width:320px;margin-top:5px;display:block;}
+.snip-hl{background:#ffdd57;color:#1e1e2e;border-radius:2px;padding:0 1px;
+         font-weight:700;}
+.fp{font-family:'Cascadia Code',Consolas,monospace;font-size:11px;color:var(--dim);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fp .snip{white-space:pre;overflow-x:auto;max-width:100%;}
+
+/* ── Clickable finding row ── */
+#ft-body tr[data-sev]{cursor:pointer;}
+#ft-body tr[data-sev]:hover td{background:#ede9ff !important;}
+#ft-body tr.row-expanded td{background:#f0eeff !important;}
+
+/* ── Detail panel row ── */
+tr.detail-row td{
+  padding:0 !important;
+  border-bottom:2px solid var(--pur2) !important;
+  background:#faf9ff !important;
+}
+tr.detail-row:hover td{background:#faf9ff !important;}
+.detail-panel{
+  padding:18px 24px;
+  font-size:13px;line-height:1.65;
+  border-left:4px solid var(--pur2);
+  background:#faf9ff;
+}
+.detail-panel h4{
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--pur2);margin:14px 0 5px;
+}
+.detail-panel h4:first-child{margin-top:0;}
+.detail-panel ul{list-style:disc;margin:4px 0 8px 18px;padding:0;}
+.detail-panel li{margin-bottom:3px;}
+.detail-panel pre{
+  display:inline-block;min-width:200px;max-width:100%;
+  background:#1e1e2e;color:#cdd6f4;
+  font-family:'Cascadia Code',Consolas,monospace;font-size:11px;
+  padding:10px 14px;border-radius:7px;overflow-x:auto;
+  margin:6px 0 8px;white-space:pre;
+}
+.detail-loading{
+  display:flex;align-items:center;gap:10px;
+  padding:16px 24px;font-size:12px;color:var(--dim);
+}
+.det-spinner{
+  width:16px;height:16px;border-radius:50%;
+  border:2px solid var(--bdr);border-top-color:var(--pur2);
+  animation:spin .7s linear infinite;flex-shrink:0;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Filter bar ── */
+.fbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.fbar input,.fbar select{padding:6px 10px;border:1px solid var(--bdr);
+  border-radius:7px;font-size:12px;background:#fff;color:var(--txt);}
+.fbar input:focus,.fbar select:focus{outline:none;border-color:var(--pur2);}
+
+/* ── Remediation ── */
+.ri{background:#f7f5ff;border-left:4px solid var(--pur2);
+    padding:12px 15px;border-radius:0 8px 8px 0;margin-bottom:10px;}
+.ri-ref{font-size:11px;color:var(--dim);margin-bottom:4px;}
+.ri-txt{font-size:13px;color:#2d2d2d;line-height:1.6;}
+
+/* ── Footer ── */
+.foot{text-align:center;padding:20px;color:var(--dim);font-size:12px;
+      border-top:1px solid var(--bdr);margin-top:12px;}
+
+.divider{border:0;border-top:1px solid var(--bdr);margin:14px 0;}
+@media(max-width:700px){.kpis{flex-direction:column;}}
+
+/* ── Tool description popover ── */
+.tip-wrap{position:relative;display:inline-block;cursor:default;}
+.tip-wrap .tip{
+  visibility:hidden;opacity:0;
+  position:absolute;z-index:999;left:0;top:calc(100% + 6px);
+  width:300px;background:#1e1e2e;color:#cdd6f4;
+  font-size:11px;font-weight:400;line-height:1.55;
+  padding:9px 13px;border-radius:7px;
+  box-shadow:0 4px 18px rgba(0,0,0,.35);
+  white-space:normal;pointer-events:none;
+  transition:opacity .15s ease;
+}
+.tip-wrap:hover .tip{visibility:visible;opacity:1;}
+
+/* ── Pagination controls ── */
+#pg-controls button:hover{filter:brightness(0.92);}
+#pg-controls button:disabled{opacity:.45;cursor:not-allowed;}
+
+
+</style>
+<script>
+window.OLLAMA_URL    = "/ollama";
+window.OLLAMA_MODEL  = "gemma3:270m";
+window._LLM_DETAILS  = {"ci\\download-model-artifacts.py:42:http_response_to_llm": "<div class=\"detail-panel\"><h4>\u26a0\ufe0f Why It's Problematic</h4><p style=\"font-size:13px;line-height:1.6;margin:6px 0 12px\">Write 2-3 sentences only. State the attack class (e.g. SQL injection, RCE). Reference the specific code pattern. Do not repeat.</p><h4>\ud83d\udd27 How to Fix It</h4><h4>\u2705 Secure Code Example</h4><pre>def verify_connection_to_mlflow():\n  try:\n  # Set \n  requests.get(args.mlflow_url, timeout=30)\n  except:\n  print(f&#x27;please check you connection to mlflow server {args.mlflow_url}&#x27;)\n  logger.error(f&#x27;please check you connection to mlflow server {args.mlflow_url}&#x27;)\n  exit()\n  # Set</pre></div>", "requirements.txt:2:dependency_declaration": "<div class=\"detail-panel\"><h4>\u26a0\ufe0f Why It's Problematic</h4><p style=\"font-size:13px;line-height:1.6;margin:6px 0 12px\">The dependency declaration in `requirements.txt` is a security risk because it indicates that the library is intended to be used as part of an external AI API. This makes users vulnerable if they attempt to access the library through untrusted sources, potentially leading to data breaches or other malicious activities. The code pattern also suggests potential vulnerabilities related to SQL injection and RCE attacks.</p><h4>\ud83d\udd27 How to Fix It</h4></div>"};
+</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr risk-crit">
+  <div class="hdr-accent"></div>
+  <div class="hdr-band">
+    <div class="hdr-band-icon">🔍</div>
+    <div class="hdr-band-title">AI Security &amp; Compliance Scan Report</div>
+  </div>
+  <div class="hdr-body">
+    <div class="hdr-meta"><div class="hdr-meta-key">Project</div><div class="hdr-meta-val">COGI</div><div class="hdr-meta-key">Repository</div><div class="hdr-meta-val">cogi-nexyte-model-lora</div><div class="hdr-meta-key">Owner</div><div class="hdr-meta-val">Shoham, Yarden</div><div class="hdr-meta-key">Branch</div><div class="hdr-meta-val mono">master</div><div class="hdr-meta-key">Commit</div><div class="hdr-meta-val mono">293130dd0425</div><div class="hdr-meta-key">Operator</div><div class="hdr-meta-val">Unknown</div><div class="hdr-meta-key">Scan Date</div><div class="hdr-meta-val">17 Mar 2026  04:50:51</div><div class="hdr-meta-key">Started</div><div class="hdr-meta-val">17 Mar 2026  02:50:51 UTC</div><div class="hdr-meta-key">Completed</div><div class="hdr-meta-val">17 Mar 2026  02:51:17 UTC</div><div class="hdr-meta-key">Duration</div><div class="hdr-meta-val">25s</div><div class="hdr-meta-key">Tool Version</div><div class="hdr-meta-val mono">19.1</div><div class="hdr-meta-key">Policy Version</div><div class="hdr-meta-val mono">d74de0a026ce</div><div class="hdr-meta-key">Model Used</div><div class="hdr-meta-val">gemma3:270m &thinsp;·&thinsp; 268.10M &thinsp;·&thinsp; Q8_0</div><div class="hdr-meta-key">Languages</div><div class="hdr-meta-val"><div class="lang-chips"><span class="lang-chip">Python</span></div></div></div>
+    <div class="hdr-stats"><div class="hdr-stat s-blue"><div class="hdr-stat-label">Files Scanned</div><div class="hdr-stat-val">2</div><div class="hdr-stat-sub" title="unique files with findings">unique files with findings</div></div><div class="hdr-stat "><div class="hdr-stat-label">Pattern Matches</div><div class="hdr-stat-val">2</div><div class="hdr-stat-sub" title="→ 2 after LLM review">→ 2 after LLM review</div></div><div class="hdr-stat s-crit"><div class="hdr-stat-label">Policy Violations</div><div class="hdr-stat-val">1</div><div class="hdr-stat-sub" title="1 banned">1 banned</div></div><div class="hdr-stat s-blue"><div class="hdr-stat-label">LLM Dismissal Rate</div><div class="hdr-stat-val">0%</div><div class="hdr-stat-sub" title="0 of 2 dismissed">0 of 2 dismissed</div></div><div class="hdr-stat "><div class="hdr-stat-label">Suppressed</div><div class="hdr-stat-val">0</div><div class="hdr-stat-sub" title="suppressed by analyst workflow">suppressed by analyst workflow</div></div></div>
+  </div>
+</div>
+  
+  <section id="summary">
+<h2>🔐 Findings Summary</h2>
+<div style="display:grid;grid-template-columns:1fr minmax(0,500px) 1fr;gap:18px;margin-bottom:18px;">
+  <div class="card">
+    <h3>Findings by Category</h3>
+    <table class="compact" style="font-size:13px"><colgroup><col style="width:140px"><col style="width:100px"><col style="width:30px"></colgroup><tbody><tr><td style='width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px'>Security</td><td style='width:100px;vertical-align:middle;overflow:hidden;padding-right:8px'><div style="background:var(--pur2);height:7px;border-radius:3px;width:50%;min-width:3px;"></div></td><td class='num-cell' style='width:30px'>1</td></tr><tr><td style='width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px'>External AI API</td><td style='width:100px;vertical-align:middle;overflow:hidden;padding-right:8px'><div style="background:var(--pur2);height:7px;border-radius:3px;width:50%;min-width:3px;"></div></td><td class='num-cell' style='width:30px'>1</td></tr><tr style='border-top:2px solid var(--bdr);font-weight:700'><td>Total</td><td></td><td class='num-cell'>2</td></tr></tbody></table>
+  </div>
+  <div class="card">
+    <h3>Findings by Severity and Context</h3>
+    <table class="compact" style="font-size:13px">
+      <thead><tr>
+        <th style="color:#fff">Severity</th><th style='color:#fff;font-size:11px;text-align:center'>Prod</th><th style='color:#fff;font-size:11px;text-align:center'>Docs</th><th class="num-cell" style="color:#fff">Total</th>
+      </tr></thead>
+      <tbody><tr><td><span class='b b1'>Critical</span></td><td class='num-cell' style='color:var(--txt)'>1</td><td class='num-cell' style='color:#4db6e8'>—</td><td class='num-cell'>1</td></tr><tr><td><span class='b b4'>Low</span></td><td class='num-cell' style='color:var(--txt)'>—</td><td class='num-cell' style='color:#4db6e8'>1</td><td class='num-cell'>1</td></tr><tr style='border-top:2px solid var(--bdr);font-weight:700'><td>Total</td><td class='num-cell'>1</td><td class='num-cell'>1</td><td class='num-cell'>2</td></tr></tbody>
+    </table>
+  </div>
+  <div class="card" style="display:flex;flex-direction:column;padding:16px">
+  <h3 style="margin-bottom:12px;font-size:13px;letter-spacing:.2px">Findings by Severity in Prod</h3>
+  <div style="display:flex;align-items:center;gap:18px;flex:1">
+    <div style="position:relative;width:134px;height:134px;flex-shrink:0">
+      <canvas id="sev-pie" width="134" height="134" style="display:block"></canvas>
+      <div id="sev-pie-centre" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none">
+        <div style="font-size:18px;font-weight:800;color:#fff;line-height:1">1</div>
+        <div style="font-size:8px;color:rgba(255,255,255,.5);margin-top:1px">findings</div>
+      </div>
+    </div>
+    <div id="sev-pie-legend" style="display:flex;flex-direction:column;gap:7px;flex:1;min-width:0"></div>
+  </div>
+  <script>
+  (function(){
+    const data = [{label:'Critical',value:1,color:'#C00000'}];
+    const total = 1;
+    const canvas = document.getElementById('sev-pie');
+    const legend = document.getElementById('sev-pie-legend');
+    if (!canvas || !total) {
+      document.getElementById('sev-pie-centre').innerHTML = '<span style="font-size:11px;color:var(--dim)">No prod findings</span>';
+      return;
+    }
+
+    // Build legend immediately
+    data.forEach(d => {
+      if (!d.value) return;
+      const pct = Math.round(d.value / total * 100);
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:5px;';
+      row.innerHTML = `
+        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${d.color};flex-shrink:0"></span>
+        <span style="font-size:12px;color:#333;white-space:nowrap">${d.label}</span>
+        <span style="font-size:12px;font-weight:700;color:${d.color};white-space:nowrap">${d.value}<span style="font-weight:400;color:#888;font-size:11px"> (${pct}%)</span></span>`;
+      legend.appendChild(row);
+    });
+
+    const ctx = canvas.getContext('2d');
+    const W = 134, H = 134, cx = W/2, cy = H/2;
+    const R = 54, ir = 31, GAP = 0.025;
+    // Label radius = midpoint between inner and outer edge (inside the donut band)
+    const LR = (ir + R) / 2;
+
+    function draw(progress) {
+      ctx.clearRect(0, 0, W, H);
+      let start = -Math.PI / 2;
+
+      data.forEach(d => {
+        const full  = (d.value / total) * 2 * Math.PI * progress;
+        const slice = Math.max(0, full - GAP);
+        if (slice <= 0) { start += full; return; }
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur  = 5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, R, start + GAP/2, start + GAP/2 + slice);
+        ctx.closePath();
+        ctx.fillStyle = d.color;
+        ctx.fill();
+        ctx.restore();
+
+        // % label at midpoint of donut band — only for slices wide enough
+        if (progress >= 1 && full > 0.45) {
+          const mid = start + GAP/2 + slice/2;
+          const pct = Math.round(d.value / total * 100);
+          const lx  = cx + Math.cos(mid) * LR;
+          const ly  = cy + Math.sin(mid) * LR;
+          ctx.save();
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle    = 'rgba(255,255,255,0.95)';
+          ctx.font         = 'bold 10px sans-serif';
+          ctx.fillText(pct + '%', lx, ly);
+          ctx.restore();
+        }
+
+        start += full;
+      });
+
+      // Donut hole
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, ir, 0, 2*Math.PI);
+      ctx.fillStyle = '#1e2235';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    let t = 0;
+    const FRAMES = 40;
+    function step() {
+      t++;
+      const ease = t < FRAMES ? 1 - Math.pow(1 - t/FRAMES, 3) : 1;
+      draw(ease);
+      if (t < FRAMES) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  })();
+  </script>
+</div>
+</div>
+<div class="card" style="margin-top:0;padding:12px 16px">
+  <div style="font-weight:700;color:var(--grn);margin-bottom:9px;font-size:12px;">
+    ✅ Approved AI Tools Registry
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 20px;">
+    <div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=microsoft.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Microsoft 365 Copilot Chat</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=microsoft.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Microsoft Copilot Studio</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=github.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">GitHub Copilot – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=openai.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">OpenAI API – Enterprise</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=openai.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">ChatGPT – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=google.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Google Gemini – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=aistudio.google.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Google AI Studio – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=grammarly.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Grammarly – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=synthesia.io&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Synthesia – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=cursor.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Cursor AI – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=gamma.app&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Gamma AI – Business Plan</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=adobe.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Adobe Firefly – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=notion.so&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Notion – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=anthropic.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Anthropic Claude – Enterprise Edition</div><div style="display:flex;align-items:center;padding:2px 0;font-size:11px;color:var(--txt)"><img src="https://www.google.com/s2/favicons?domain=anthropic.com&sz=16" width="14" height="14" style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">Anthropic Claude Code – Enterprise Edition</div>
+  </div>
+  <p style="font-size:13px;color:#1a1a1a;margin:12px 0 0;padding-top:10px;border-top:1px solid var(--bdr);line-height:1.6">⚠️ &nbsp;All tools not on the Approved list require CISO security assessment and approval before use.</p>
+</div>
+</section>
+  <section id="findings">
+<h2>🗂 All Findings for: COGI / cogi-nexyte-model-lora (2)</h2>
+<div class="card">
+  <div class="fbar">
+    <input type="text" id="fs" placeholder="🔍 Search..." oninput="ff()">
+    <select id="fv" onchange="ff()">
+      <option value="">All Severities</option>
+      <option value="1">Critical</option>
+      <option value="2">High</option>
+      <option value="3">Medium</option>
+      <option value="4">Low</option>
+    </select>
+    <select id="fcat" onchange="ff()">
+      <option value="">All Categories</option>
+      <option value="External AI API">External AI API</option>
+      <option value="Security">Security</option>
+    </select>
+    <select id="frisk" onchange="ff()">
+      <option value="">All Risks</option>
+      <option value="AI library dependency">AI library dependency</option>
+      <option value="HTTP response → LLM (injection risk)">HTTP response → LLM (injection risk)</option>
+    </select>
+    <select id="fc" onchange="ff()">
+      <option value="">All Contexts</option>
+      <option value="production">Production</option>
+      <option value="test">Test</option>
+      <option value="docs">Docs</option>
+      <option value="deleted_file">History (deleted)</option>
+    </select>
+
+  </div>
+  <div id="pg-info-top" style="font-size:12px;color:var(--dim);margin-bottom:6px"></div>
+  <div style="width:100%;overflow-x:auto">
+  <table id="ft" style="width:100%;min-width:640px;table-layout:fixed">
+    <colgroup>
+      <col style="width:90px">
+      
+      <col style="width:120px">
+      <col style="width:17%">
+      <col style="width:12%">
+      <col style="width:72px">
+      <col style="width:auto;min-width:200px">
+    </colgroup>
+    <thead><tr>
+      <th data-col="0" class="sortable" style="white-space:nowrap">Severity</th>
+      
+      <th data-col="1" class="sortable">Category</th>
+      <th data-col="2" class="sortable">Potential Risk</th>
+      <th data-col="3" class="sortable">Capability</th>
+      <th data-col="4" class="sortable" style="text-align:center">Context</th>
+      <th data-col="5">File : Line / Code</th>
+    </tr></thead>
+    <tbody id="ft-body"><tr data-sev="1" data-ctx="production" data-cat="Security" data-risk="HTTP response → LLM (injection risk)" data-cap="HTTP Response → LLM (multi-line)" data-repo="cogi-nexyte-model-lora" data-desc="An HTTP response body appears within the same code block as an LLM call — external data sources can contain adversarial content that causes prompt injection." data-file="ci\download-model-artifacts.py" data-line="42" data-sevlabel="Critical" data-snippet="def verify_connection_to_mlflow():
+    try:
+        requests.get(args.mlflow_url, timeout=30)
+    except:
+        print(f&#x27;please check you connection to mlflow server {args.mlflow_url}&#x27;)
+        logger.error(f&#x27;please check you connection to mlflow server {args.mlflow_url}&#x27;)
+        exit()
+    # Set " data-llm-key="ci\download-model-artifacts.py:42:http_response_to_llm" onclick="toggleDetail(event,this)" style="background:rgba(192,0,0,0.07)"><td style='white-space:nowrap'><span class='b b1'>Critical</span></td><td>Security</td><td><strong style='font-size:12px'>HTTP response → LLM (injection risk)</strong></td><td>HTTP Response → LLM (multi-line)</td><td style='text-align:center'><span style='font-size:10px;font-weight:600;color:var(--dim);background:transparent;border:1px solid var(--dim);border-radius:3px;padding:2px 6px;white-space:nowrap'>Prod</span></td><td class='fp'>ci\download-model-artifacts.py<span style='color:var(--dim)'> :42</span><div class="snip">def verify_connection_to_mlflow():
+    try:
+        <mark class='snip-hl'>requests.get(</mark>args.mlflow_url, timeout=30)
+    except:
+        print(f&#x27;please check you connection to mlflow server {args.mlflow_url}&#x27;)
+        logger.error(f&#x27;please check you connection to mlflow server {args.mlflow_url}&#x27;)
+        exit()
+    # Set the MLflow tracking URI
+    mlflow.set_tracking_uri(args.mlflow_url)
+    # Get the client for managi</div></td></tr><tr data-sev="4" data-ctx="docs" data-cat="External AI API" data-risk="AI library dependency" data-cap="AI Dependency" data-repo="cogi-nexyte-model-lora" data-desc="An AI library is declared as a project dependency — confirm the version is pinned and the library is on the approved list." data-file="requirements.txt" data-line="2" data-sevlabel="Low" data-snippet="vllm==0.10.0
+transformers==4.54.0" data-llm-key="requirements.txt:2:dependency_declaration" onclick="toggleDetail(event,this)" style="background:rgba(192,0,0,0.07)"><td style='white-space:nowrap'><span class='b b4'>Low</span></td><td>External AI API</td><td><strong style='font-size:12px'>AI library dependency</strong></td><td>AI Dependency</td><td style='text-align:center'><span style='font-size:10px;font-weight:600;color:#0277bd;background:rgba(2,119,189,0.12);border:1px solid #0277bd;border-radius:3px;padding:2px 6px;white-space:nowrap'>Docs</span></td><td class='fp'>requirements.txt<span style='color:var(--dim)'> :2</span><div class="snip">vllm==0.10.0
+<mark class='snip-hl'>transformers==</mark>4.54.0</div></td></tr></tbody>
+  </table>
+  </div>
+  <div id="pg-controls" style="display:flex;gap:6px;align-items:center;
+       flex-wrap:wrap;margin-top:10px;font-size:12px"></div>
+</div>
+</section>
+  <section id="remediation">
+<h2>🔧 Remediation Checklist — Critical &amp; High</h2>
+<div class="card"><div class="ri"><div class="ri-ref" style="margin-bottom:6px"><span class="b b1">Critical</span> &nbsp;<strong style="font-size:13px">HTTP response → LLM (injection risk)</strong><span style="font-size:11px;color:var(--dim);margin-left:10px">Security &nbsp;·&nbsp; HTTP Response → LLM (multi-line) &nbsp;·&nbsp; <strong>1</strong> occurrence</span></div><div class="ri-txt" style="margin-bottom:8px">An HTTP response body appears within the same code block as an LLM call — external data sources can contain adversarial content that causes prompt injection.</div><div class="ri-txt" style="background:#f0eeff;border-left:3px solid var(--pur2);padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:8px"><strong>Remediation:</strong> Review this AI usage against the internal AI policy. Ensure the provider/library is approved, data handling is documented, and usage is logged.</div><details style="margin-top:4px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">▸ 1 affected location</summary><ul style="margin:6px 0 2px 14px;padding:0;list-style:none"><li style='margin-bottom:3px'><span class='b b1' style='font-size:9px;padding:1px 5px'>Critical</span> <code style='font-size:11px'>ci\download-model-artifacts.py :42</code></li></ul></details></div></div>
+</section>
+  <div class="foot">AI Security &amp; Compliance Monitoring &nbsp;·&nbsp; Scan: AI_Scan_Report_COGI_cogi-nexyte-model-lora_20260317_045117 &nbsp;·&nbsp; Internal use only</div>
+</div>
+<script>
+// ── Pagination + filter engine ───────────────────────────────────
+const PAGE_SIZE = 20;
+let allRows     = [];
+let visRows     = [];
+let curPage     = 1;
+
+document.addEventListener('DOMContentLoaded', function(){
+  allRows = Array.from(document.querySelectorAll('#ft-body tr[data-sev]'));
+  // Wire up sortable headers
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => sortBy(parseInt(th.getAttribute('data-col'))));
+  });
+  ff();
+});
+
+// ── Filter ───────────────────────────────────────────────────────
+function ff(){
+  const s    = (document.getElementById('fs')     || {value:''}).value.toLowerCase();
+  const v    = (document.getElementById('fv')     || {value:''}).value;
+  const cat  = (document.getElementById('fcat')   || {value:''}).value;
+  const risk = (document.getElementById('frisk')  || {value:''}).value;
+  const c    = (document.getElementById('fc')     || {value:''}).value;
+  const repo = (document.getElementById('frepo')  || {value:''}).value;
+
+  visRows = allRows.filter(r => {
+    const txt     = r.textContent.toLowerCase();
+    const sev     = r.getAttribute('data-sev')  || '';
+    const ctx     = r.getAttribute('data-ctx')  || '';
+    const rowCat  = r.getAttribute('data-cat')  || '';
+    const rowRisk = r.getAttribute('data-risk') || '';
+    const rowRepo = r.getAttribute('data-repo') || '';
+    return (!s    || txt.includes(s))
+        && (!v    || sev     === v)
+        && (!cat  || rowCat  === cat)
+        && (!risk || rowRisk === risk)
+        && (!c    || ctx     === c)
+        && (!repo || rowRepo === repo);
+  });
+
+  allRows.forEach(r => r.style.display = 'none');
+  curPage = 1;
+  renderPage();
+}
+
+// ── Render a single page ─────────────────────────────────────────
+function renderPage(){
+  const total = visRows.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  curPage     = Math.min(Math.max(1, curPage), pages);
+
+  const start = (curPage - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+
+  allRows.forEach(r => {
+    r.style.display = 'none';
+    // also hide any open detail row
+    const dr = r.nextElementSibling;
+    if (dr && dr.classList.contains('detail-row')) dr.style.display = 'none';
+  });
+  visRows.slice(start, end).forEach(r => {
+    r.style.display = '';
+    // restore visible detail row if one was open
+    const dr = r.nextElementSibling;
+    if (dr && dr.classList.contains('detail-row')) dr.style.display = '';
+  });
+
+  const info = total === 0
+    ? 'No matching findings'
+    : `Showing ${start + 1}–${end} of ${total} finding${total !== 1 ? 's' : ''}`;
+  ['pg-info-top'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = info;
+  });
+
+  const ctrl = document.getElementById('pg-controls');
+  if (!ctrl) return;
+  ctrl.innerHTML = '';
+  if (pages <= 1) return;
+
+  const btnStyle   = 'padding:3px 10px;border-radius:5px;border:1px solid var(--bdr);'
+                   + 'background:#fff;cursor:pointer;font-size:12px;';
+  const activeStyle = btnStyle + 'background:var(--pur);color:#fff;border-color:var(--pur);';
+
+  const prev = document.createElement('button');
+  prev.textContent = '← Prev';
+  prev.setAttribute('style', btnStyle);
+  prev.disabled = (curPage === 1);
+  prev.onclick = () => { curPage--; renderPage(); };
+  ctrl.appendChild(prev);
+
+  const WING = 3;
+  let lo = Math.max(1, curPage - WING);
+  let hi = Math.min(pages, curPage + WING);
+  if (lo > 1) {
+    ctrl.appendChild(pageBtn(1, btnStyle, activeStyle));
+    if (lo > 2) ctrl.appendChild(ellipsis());
+  }
+  for (let p = lo; p <= hi; p++) ctrl.appendChild(pageBtn(p, btnStyle, activeStyle));
+  if (hi < pages) {
+    if (hi < pages - 1) ctrl.appendChild(ellipsis());
+    ctrl.appendChild(pageBtn(pages, btnStyle, activeStyle));
+  }
+
+  const next = document.createElement('button');
+  next.textContent = 'Next →';
+  next.setAttribute('style', btnStyle);
+  next.disabled = (curPage === pages);
+  next.onclick = () => { curPage++; renderPage(); };
+  ctrl.appendChild(next);
+
+  const info2 = document.createElement('span');
+  info2.style.marginLeft = '12px';
+  info2.style.color = 'var(--dim)';
+  info2.textContent = `Page ${curPage} / ${pages}`;
+  ctrl.appendChild(info2);
+}
+
+function pageBtn(p, base, active){
+  const b = document.createElement('button');
+  b.textContent = p;
+  b.setAttribute('style', p === curPage ? active : base);
+  b.onclick = () => { curPage = p; renderPage(); };
+  return b;
+}
+function ellipsis(){
+  const s = document.createElement('span');
+  s.textContent = '…';
+  s.style.padding = '0 4px';
+  s.style.color = 'var(--dim)';
+  return s;
+}
+
+// ── Column sort ──────────────────────────────────────────────────
+let _sortCol = -1;
+let _sortAsc = true;
+
+function _cellText(row, col){
+  const td = row.querySelectorAll('td')[col];
+  return td ? td.textContent.trim().toLowerCase() : '';
+}
+
+function sortBy(col){
+  if (_sortCol === col){
+    _sortAsc = !_sortAsc;
+  } else {
+    _sortCol = col;
+    _sortAsc = true;
+  }
+
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (parseInt(th.getAttribute('data-col')) === _sortCol){
+      th.classList.add(_sortAsc ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  // Context sort order: production < test < docs < deleted_file
+  const _ctxOrder = {production:0, test:1, docs:2, deleted_file:3};
+
+  allRows.sort((a, b) => {
+    if (col === 0){
+      const an = parseInt(a.getAttribute('data-sev')) || 99;
+      const bn = parseInt(b.getAttribute('data-sev')) || 99;
+      return _sortAsc ? an - bn : bn - an;
+    }
+    if (col === 4){
+      const ac = _ctxOrder[a.getAttribute('data-ctx')] ?? 99;
+      const bc = _ctxOrder[b.getAttribute('data-ctx')] ?? 99;
+      return _sortAsc ? ac - bc : bc - ac;
+    }
+    const av = _cellText(a, col);
+    const bv = _cellText(b, col);
+    return _sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+
+  const tbody = document.getElementById('ft-body');
+  if (tbody) allRows.forEach(r => tbody.appendChild(r));
+
+  curPage = 1;
+  renderPage();
+}
+
+// ════════════════════════════════════════════════════════════════
+// FINDING DETAIL PANEL  —  click row → expand, click again → close
+// Pre-baked LLM answers embedded at report-write time in window._LLM_DETAILS
+// ════════════════════════════════════════════════════════════════
+
+function toggleDetail(evt, row) {
+  // Ignore text-selection gestures
+  const sel = window.getSelection();
+  if (sel && sel.toString().length > 0) return;
+
+  // Ignore clicks that originated inside the detail panel itself
+  if (evt.target.closest('tr.detail-row')) return;
+
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains('detail-row')) {
+    // Close
+    existing.remove();
+    row.classList.remove('row-expanded');
+    return;
+  }
+
+  // Close any other open panel first
+  document.querySelectorAll('tr.detail-row').forEach(r => r.remove());
+  document.querySelectorAll('tr.row-expanded').forEach(r => r.classList.remove('row-expanded'));
+
+  row.classList.add('row-expanded');
+
+  // Build the detail row
+  const colCount = row.querySelectorAll('td').length;
+  const detRow = document.createElement('tr');
+  detRow.className = 'detail-row';
+  detRow.addEventListener('click', e => e.stopPropagation());
+  const detTd = document.createElement('td');
+  detTd.colSpan = colCount;
+
+  // Look up pre-baked HTML
+  const llmKey = row.getAttribute('data-llm-key') || '';
+  const details = (window._LLM_DETAILS || {});
+  const prebaked = details[llmKey];
+
+  if (prebaked) {
+    detTd.innerHTML = prebaked;
+  } else {
+    // No pre-baked answer — show informational message (no live fetch)
+    const model = (window.OLLAMA_MODEL || '').trim();
+    const msg = model
+      ? `<p style="color:#f97316;font-size:12px">⚠ LLM analysis was not generated for this finding. ` +
+        `Re-run the scan with LLM enabled to embed answers in the report.</p>`
+      : `<p style="color:var(--dim);font-size:12px">ℹ LLM analysis not available — no model was configured when this report was generated.</p>`;
+    detTd.innerHTML = `<div class="detail-panel">${msg}</div>`;
+  }
+
+  detRow.appendChild(detTd);
+  row.after(detRow);
+}
+
+
+function _esc(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

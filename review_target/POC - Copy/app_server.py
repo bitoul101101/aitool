@@ -44,7 +44,16 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from scanner.bitbucket import BitbucketClient
 from scanner.pat_store import save_pat, load_pat, delete_pat, is_available
-from scanner.suppressions import add_suppression, list_suppressions, remove_suppression
+from scanner.suppressions import (
+    TRIAGE_ACCEPTED_RISK,
+    TRIAGE_FALSE_POSITIVE,
+    TRIAGE_REVIEWED,
+    list_suppressions,
+    list_triage,
+    remove_triage,
+    triage_by_hash,
+    upsert_triage,
+)
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -268,12 +277,40 @@ def _delete_history(scan_ids: List[str]) -> None:
     _scan_service.delete_history(scan_ids)
 
 
-def _suppressions_by_hash() -> Dict[str, dict]:
-    return {
-        rec.get("hash", ""): rec
-        for rec in list_suppressions(SUPPRESSIONS_FILE)
-        if rec.get("hash")
-    }
+def _triage_by_hash() -> Dict[str, dict]:
+    return triage_by_hash(SUPPRESSIONS_FILE)
+
+
+def _clear_finding_triage(finding: dict) -> dict:
+    updated = dict(finding)
+    for key in (
+        "triage_status",
+        "triage_note",
+        "triage_by",
+        "triage_at",
+        "suppressed_reason",
+        "suppressed_by",
+        "suppressed_at",
+    ):
+        updated.pop(key, None)
+    return updated
+
+
+def _apply_triage_metadata(finding: dict, meta: dict) -> dict:
+    updated = dict(finding)
+    status = meta.get("status", "")
+    note = meta.get("note", "")
+    marked_by = meta.get("marked_by", "")
+    marked_at = meta.get("marked_at", "")
+    updated["triage_status"] = status
+    updated["triage_note"] = note
+    updated["triage_by"] = marked_by
+    updated["triage_at"] = marked_at
+    if status == TRIAGE_FALSE_POSITIVE:
+        updated["suppressed_reason"] = note
+        updated["suppressed_by"] = marked_by
+        updated["suppressed_at"] = marked_at
+    return updated
 
 
 def _rebuild_session_per_repo() -> None:
@@ -387,6 +424,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json({"history": list(reversed(_load_history()))})
         elif p == "/api/suppressions":
             self._json({"suppressions": list_suppressions(SUPPRESSIONS_FILE)})
+        elif p == "/api/triage":
+            self._json({"triage": list_triage(SUPPRESSIONS_FILE)})
         elif p.startswith("/api/history/log/"):
             self._serve_log(p[17:])
         elif p == "/api/settings":
@@ -434,6 +473,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._api_finding_suppress(body)
         elif p == "/api/findings/unsuppress":
             self._api_finding_unsuppress(body)
+        elif p == "/api/findings/triage":
+            self._api_finding_triage(body)
+        elif p == "/api/findings/reset":
+            self._api_finding_reset(body)
         elif p == "/api/app/shutdown":
             self._api_app_shutdown()
         else:
@@ -659,49 +702,83 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         self._json({"ok": True, "deleted": deleted, "errors": errors})
 
-    def _api_finding_suppress(self, body: dict):
+    def _api_finding_triage(self, body: dict):
         hash_ = body.get("hash", "").strip()
-        reason = body.get("reason", "").strip()
+        status = body.get("status", "").strip()
+        note = body.get("note", "").strip()
         if not hash_:
             return self._err(400, "hash required")
-        if not reason:
-            return self._err(400, "reason required")
+        if status not in {TRIAGE_REVIEWED, TRIAGE_ACCEPTED_RISK, TRIAGE_FALSE_POSITIVE}:
+            return self._err(400, "invalid triage status")
+        if status in {TRIAGE_ACCEPTED_RISK, TRIAGE_FALSE_POSITIVE} and not note:
+            return self._err(400, "note required")
 
         target = next((f for f in _session.findings if f.get("_hash") == hash_), None)
+        if target is None:
+            target = next((f for f in _session.suppressed_findings if f.get("_hash") == hash_), None)
         if not target:
             return self._err(404, "Finding not found in current session")
 
-        add_suppression(SUPPRESSIONS_FILE, target, reason=reason, marked_by=_connected_user)
-        suppression_meta = _suppressions_by_hash().get(hash_, {})
-        updated = dict(target)
-        updated["suppressed_reason"] = suppression_meta.get("reason", reason)
-        updated["suppressed_by"] = suppression_meta.get("marked_by", _connected_user)
-        updated["suppressed_at"] = suppression_meta.get("marked_at", "")
+        upsert_triage(
+            SUPPRESSIONS_FILE,
+            target,
+            status=status,
+            note=note,
+            marked_by=_connected_user,
+        )
+        triage_meta = _triage_by_hash().get(hash_, {})
+        updated = _apply_triage_metadata(target, triage_meta)
+
         _session.findings = [f for f in _session.findings if f.get("_hash") != hash_]
-        _session.suppressed_findings.append(updated)
+        _session.suppressed_findings = [
+            f for f in _session.suppressed_findings if f.get("_hash") != hash_
+        ]
+        if status == TRIAGE_FALSE_POSITIVE:
+            _session.suppressed_findings.append(updated)
+        else:
+            _session.findings.append(updated)
+            _session.findings.sort(
+                key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", ""))
+            )
         _persist_session_state()
         self._json({"ok": True, "status": _session.to_status()})
 
-    def _api_finding_unsuppress(self, body: dict):
+    def _api_finding_reset(self, body: dict):
         hash_ = body.get("hash", "").strip()
         if not hash_:
             return self._err(400, "hash required")
-        removed = remove_suppression(SUPPRESSIONS_FILE, hash_)
+        removed = remove_triage(SUPPRESSIONS_FILE, hash_)
+        finding = next((f for f in _session.findings if f.get("_hash") == hash_), None)
+        if finding is not None:
+            updated = _clear_finding_triage(finding)
+            _session.findings = [f for f in _session.findings if f.get("_hash") != hash_]
+            _session.findings.append(updated)
+            _session.findings.sort(
+                key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", ""))
+            )
+            _persist_session_state()
+            return self._json({"ok": True, "removed": removed, "status": _session.to_status()})
+
         finding = next((f for f in _session.suppressed_findings if f.get("_hash") == hash_), None)
         _session.suppressed_findings = [
             f for f in _session.suppressed_findings if f.get("_hash") != hash_
         ]
         if finding:
-            finding = dict(finding)
-            finding.pop("suppressed_reason", None)
-            finding.pop("suppressed_by", None)
-            finding.pop("suppressed_at", None)
-            _session.findings.append(finding)
+            _session.findings.append(_clear_finding_triage(finding))
             _session.findings.sort(
                 key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", ""))
             )
             _persist_session_state()
         self._json({"ok": True, "removed": removed, "status": _session.to_status()})
+
+    def _api_finding_suppress(self, body: dict):
+        body = dict(body)
+        body["status"] = TRIAGE_FALSE_POSITIVE
+        body["note"] = body.get("reason", body.get("note", ""))
+        return _Handler._api_finding_triage(self, body)
+
+    def _api_finding_unsuppress(self, body: dict):
+        return _Handler._api_finding_reset(self, body)
 
     def _api_ollama_start(self, body: dict):
         """Start Ollama if not running, then return available models."""
@@ -1053,8 +1130,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .tab-dot.report{background:#a0522d}
 
 /* ════ SCAN VIEW ════ */
-.scan-body{flex:1;display:grid;grid-template-columns:1fr 380px;overflow:hidden;min-height:0}
-.log-panel{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.scan-body{
+  flex:1;display:grid;
+  grid-template-columns:minmax(0,1fr) 380px;
+  grid-template-rows:minmax(0,1fr) auto;
+  overflow:hidden;min-height:0
+}
+.log-panel{
+  grid-column:1;grid-row:1;
+  display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)
+}
 .log-header{display:flex;align-items:center;gap:12px;padding:11px 18px;
   border-bottom:1px solid var(--border);flex-shrink:0;
   background:linear-gradient(135deg,#1a0545 0%,#2d0e7a 100%)}
@@ -1078,7 +1163,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .lv-warn .log-msg{color:#fcd34d}
 .lv-info .log-msg{color:var(--text)}
 .lv-dim  .log-msg{color:var(--dim)}
-.findings-panel{display:grid;grid-template-rows:auto auto minmax(120px,1fr) auto;overflow:hidden;background:var(--surface);min-height:0}
+.findings-panel{
+  grid-column:2;grid-row:1 / span 2;
+  display:grid;grid-template-rows:auto auto minmax(120px,1fr) auto;
+  overflow:hidden;background:var(--surface);min-height:0
+}
 .fp-header{background:linear-gradient(135deg,#1a0545 0%,#2d0e7a 55%,#3d1599 100%);
   padding:8px 14px;border-bottom:2px solid rgba(255,255,255,.1);flex-shrink:0}
 .fp-title{font-size:13px;font-weight:800;color:#fff;display:block;margin-bottom:1px}
@@ -1093,7 +1182,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .k1 .kpi-n{color:var(--red)} .k2 .kpi-n{color:var(--ora)}
 .k3 .kpi-n{color:var(--yel)} .k4 .kpi-n{color:var(--lgrn)}
 #repo-cards,[id^="repo-cards-"]{min-height:0;overflow-y:auto;padding:10px}
-.finding-drawer{border-top:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:220px;max-height:300px}
+.finding-drawer{
+  grid-column:1;grid-row:2;
+  border-top:1px solid var(--border);border-right:1px solid var(--border);
+  background:var(--surface);display:flex;flex-direction:column;
+  min-height:220px;max-height:300px;min-width:0;overflow:hidden
+}
 .finding-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:rgba(0,0,0,.03);border-bottom:1px solid var(--border);flex-wrap:wrap}
 .finding-drawer-title{font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.06em}
 .finding-switches{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -1114,12 +1208,21 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .finding-body{flex:1;min-width:0}
 .finding-title{font-size:12px;font-weight:700;color:var(--text)}
 .finding-meta{font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:2px}
+.finding-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.finding-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em}
+.finding-chip.delta-new{background:#e8f5e9;color:#1f6a3d}
+.finding-chip.delta-unchanged{background:#f1f5f9;color:#475569}
+.finding-chip.triage-reviewed{background:#e0f2fe;color:#0c4a6e}
+.finding-chip.triage-accepted_risk{background:#fff7d6;color:#8a4b00}
+.finding-chip.triage-false_positive{background:#f3e8ff;color:#6b21a8}
 .finding-desc{font-size:11px;color:var(--text2);margin-top:4px}
 .finding-actions{display:flex;gap:8px;align-self:flex-start;justify-self:end}
 .finding-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer}
 .finding-btn:hover{border-color:var(--pur2);color:var(--text)}
 .finding-btn.warn{background:#fff4d6;border-color:#e0b050}
 .finding-btn.safe{background:#e7f6ea;border-color:#6fb07a}
+.finding-btn.info{background:#e0f2fe;border-color:#7dd3fc}
+.finding-btn.alt{background:#f8fafc;border-color:#cbd5e1}
 .finding-note{font-size:11px;color:var(--dim);margin-top:4px}
 /* ── Monitor panel (phase timeline + live log) ── */
 .monitor-panel{display:block;overflow:visible;min-height:0}
@@ -1874,27 +1977,27 @@ function _tabPanelHTML(tid){
         <div class="phase-timeline" id="phase-tl-${tid}"></div>
       </div>
     </div>
-  </div>
-  <div class="finding-drawer">
-    <div class="finding-drawer-head">
-      <span class="finding-drawer-title">Finding Details</span>
-      <div class="finding-switches">
-        <button class="finding-switch active" id="finding-switch-active-${tid}" onclick="showFindingPane(${tid},'active')">
-          <span>Active</span>
-          <span class="finding-switch-count" id="finding-count-${tid}">0</span>
-        </button>
-        <button class="finding-switch" id="finding-switch-suppressed-${tid}" onclick="showFindingPane(${tid},'suppressed')">
-          <span>Suppressed</span>
-          <span class="finding-switch-count" id="suppressed-count-${tid}">0</span>
-        </button>
+    <div class="finding-drawer">
+      <div class="finding-drawer-head">
+        <span class="finding-drawer-title">Finding Details</span>
+        <div class="finding-switches">
+          <button class="finding-switch active" id="finding-switch-active-${tid}" onclick="showFindingPane(${tid},'active')">
+            <span>Active</span>
+            <span class="finding-switch-count" id="finding-count-${tid}">0</span>
+          </button>
+          <button class="finding-switch" id="finding-switch-suppressed-${tid}" onclick="showFindingPane(${tid},'suppressed')">
+            <span>Suppressed</span>
+            <span class="finding-switch-count" id="suppressed-count-${tid}">0</span>
+          </button>
+        </div>
       </div>
-    </div>
-    <div class="finding-panes">
-      <div class="finding-pane active" id="finding-pane-active-${tid}">
-        <div class="finding-list" id="finding-list-${tid}"></div>
-      </div>
-      <div class="finding-pane" id="finding-pane-suppressed-${tid}">
-        <div class="finding-list" id="suppressed-list-${tid}"></div>
+      <div class="finding-panes">
+        <div class="finding-pane active" id="finding-pane-active-${tid}">
+          <div class="finding-list" id="finding-list-${tid}"></div>
+        </div>
+        <div class="finding-pane" id="finding-pane-suppressed-${tid}">
+          <div class="finding-list" id="suppressed-list-${tid}"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -2184,60 +2287,107 @@ function showFindingPane(tid, pane){
   });
 }
 
+function _triageLabel(status){
+  return status==='reviewed' ? 'Reviewed'
+    : status==='accepted_risk' ? 'Accepted Risk'
+    : status==='false_positive' ? 'False Positive'
+    : '';
+}
+
 function _renderFindingCard(f, suppressed, tid){
   const sev=f.severity||4;
   const title=_esc(f.capability||f.provider_or_lib||'Finding');
   const meta=_esc(_fmtFindingLoc(f));
   const desc=_esc(f.description||'');
+  const triageStatus=f.triage_status||'';
+  const triageLabel=_triageLabel(triageStatus);
   const policy=f.policy_status?`<div class="finding-note">Policy: ${_esc(f.policy_status)}</div>`:'';
+  const tags=[
+    f.delta_status ? `<span class="finding-chip delta-${_esc(f.delta_status)}">${_esc(f.delta_status==='new'?'New Since Baseline':'Unchanged')}</span>` : '',
+    triageLabel ? `<span class="finding-chip triage-${_esc(triageStatus)}">${_esc(triageLabel)}</span>` : '',
+  ].filter(Boolean).join('');
   const note=suppressed
     ? `<div class="finding-note">Reason: ${_esc(f.reason||'')} ${f.marked_by?`| By: ${_esc(f.marked_by)}`:''} ${f.marked_at?`| At: ${_esc(f.marked_at)}`:''}</div>`
-    : '';
-  const action=suppressed
+    : (f.reason||f.marked_by||f.marked_at)
+      ? `<div class="finding-note">Note: ${_esc(f.reason||'')} ${f.marked_by?`| By: ${_esc(f.marked_by)}`:''} ${f.marked_at?`| At: ${_esc(f.marked_at)}`:''}</div>`
+      : '';
+  const actions=suppressed
     ? `<button class="finding-btn safe" onclick="unsuppressFinding('${tid}','${_esc(f.hash)}')">Restore</button>`
-    : `<button class="finding-btn warn" onclick="suppressFinding('${tid}','${_esc(f.hash)}')">Suppress</button>`;
+    : [
+        triageStatus!=='reviewed'
+          ? `<button class="finding-btn info" onclick="triageFinding('${tid}','${_esc(f.hash)}','reviewed')">Review</button>`
+          : '',
+        triageStatus!=='accepted_risk'
+          ? `<button class="finding-btn alt" onclick="triageFinding('${tid}','${_esc(f.hash)}','accepted_risk')">Accept Risk</button>`
+          : '',
+        `<button class="finding-btn warn" onclick="triageFinding('${tid}','${_esc(f.hash)}','false_positive')">False Positive</button>`,
+        triageStatus
+          ? `<button class="finding-btn safe" onclick="resetFinding('${tid}','${_esc(f.hash)}')">Reset</button>`
+          : '',
+      ].filter(Boolean).join('');
   return `<div class="finding-item">
     <div class="finding-main">
       <span class="finding-badge sev-${sev}">Sev-${sev}</span>
       <div class="finding-body">
         <div class="finding-title">${title}</div>
         <div class="finding-meta">${meta}</div>
+        ${tags?`<div class="finding-tags">${tags}</div>`:''}
         ${desc?`<div class="finding-desc">${desc}</div>`:''}
         ${policy}
         ${note}
       </div>
-      <div class="finding-actions">${action}</div>
+      <div class="finding-actions">${actions}</div>
     </div>
   </div>`;
 }
 
 async function suppressFinding(tid, hash){
-  const reason=prompt('Enter a suppression reason for this finding:');
-  if(reason==null) return;
-  const trimmed=reason.trim();
-  if(!trimmed){ alert('Suppression reason is required.'); return; }
+  return triageFinding(tid, hash, 'false_positive');
+}
+
+async function triageFinding(tid, hash, status){
+  let note='';
+  if(status==='false_positive'){
+    note=prompt('Enter the false-positive rationale for this finding:');
+    if(note==null) return;
+    note=note.trim();
+    if(!note){ alert('A note is required for false positive.'); return; }
+  }else if(status==='accepted_risk'){
+    note=prompt('Enter the accepted-risk rationale for this finding:');
+    if(note==null) return;
+    note=note.trim();
+    if(!note){ alert('A note is required for accepted risk.'); return; }
+  }else if(status==='reviewed'){
+    const input=prompt('Optional review note:');
+    if(input==null) return;
+    note=input.trim();
+  }
   try{
-    const r=await fetch('/api/findings/suppress',{method:'POST',
+    const r=await fetch('/api/findings/triage',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({hash, reason:trimmed})});
+      body:JSON.stringify({hash, status, note})});
     const d=await r.json();
-    if(!r.ok) throw new Error(d.error||'Failed to suppress finding');
+    if(!r.ok) throw new Error(d.error||'Failed to update finding triage');
     const tab=_getTab(Number(tid)); if(tab){ tab.statusData=d.status; _updateScanUI(Number(tid), d.status); }
   }catch(e){
-    alert('Failed to suppress finding: '+e.message);
+    alert('Failed to update triage: '+e.message);
   }
 }
 
 async function unsuppressFinding(tid, hash){
+  return resetFinding(tid, hash);
+}
+
+async function resetFinding(tid, hash){
   try{
-    const r=await fetch('/api/findings/unsuppress',{method:'POST',
+    const r=await fetch('/api/findings/reset',{method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({hash})});
     const d=await r.json();
-    if(!r.ok) throw new Error(d.error||'Failed to unsuppress finding');
+    if(!r.ok) throw new Error(d.error||'Failed to reset finding triage');
     const tab=_getTab(Number(tid)); if(tab){ tab.statusData=d.status; _updateScanUI(Number(tid), d.status); }
   }catch(e){
-    alert('Failed to unsuppress finding: '+e.message);
+    alert('Failed to reset triage: '+e.message);
   }
 }
 
@@ -2422,10 +2572,14 @@ function _updateScanUI(tid, d){
   if(fpt){
     const repoCount=Object.keys(d.per_repo||{}).length;
     const sup=d.suppressed_count||0;
+    const reviewed=d.reviewed_count||0;
+    const accepted=d.accepted_risk_count||0;
+    const delta=d.delta||{};
+    const deltaText=delta.has_baseline?` | Delta +${delta.new_count||0} / -${delta.fixed_count||0}`:'';
     if(total){
-      fpt.textContent=`${total} active finding${total===1?'':'s'} across ${repoCount} repo${repoCount===1?'':'s'}${sup?` | ${sup} suppressed`:''}`;
+      fpt.textContent=`${total} active finding${total===1?'':'s'} across ${repoCount} repo${repoCount===1?'':'s'}${reviewed?` | ${reviewed} reviewed`:''}${accepted?` | ${accepted} accepted risk`:''}${sup?` | ${sup} suppressed`:''}${deltaText}`;
     }else{
-      fpt.textContent=sup?`${sup} suppressed finding${sup===1?'':'s'}`:'Scanning...';
+      fpt.textContent=sup?`${sup} suppressed finding${sup===1?'':'s'}${deltaText}`:`Scanning...${deltaText}`;
     }
   }
   _buildRepoCards(tid, d);

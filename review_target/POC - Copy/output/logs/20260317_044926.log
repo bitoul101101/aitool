@@ -1,0 +1,20 @@
+[04:49:26] Scan ID  : 20260317_044926
+[04:49:26] Project  : COGI
+[04:49:26] Repos    : 1
+[04:49:30] LLM      : gemma3:270m | 268.10M | Q8_0
+[04:49:30] ==========================================================
+[04:49:31]   cogy-conda-image-environment  branch:master  owner:Martin Iliev
+[04:49:31] ==========================================================
+[04:49:31] Starting parallel scan (workers=1)...
+[04:49:39] 
+OK cogy-conda-image-environment -> 0 findings  (Crit:0 High:0)
+[04:49:39] 
+==========================================================
+[04:49:39] Total findings (deduped): 0
+[04:49:39] 
+Generating reports...
+[04:49:39]   cogy-conda-image-environment: clean - no findings
+[04:49:39]   No findings - no report generated.
+[04:49:39] 
+Scan complete.
+[04:49:39] Duration: 12s  |  Findings: 0

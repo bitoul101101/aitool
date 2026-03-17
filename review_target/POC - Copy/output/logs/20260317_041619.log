@@ -1,0 +1,47 @@
+[04:16:19] Scan ID  : 20260317_041619
+[04:16:19] Project  : DOW
+[04:16:19] Repos    : 1
+[04:16:23] LLM      : gemma3:270m | 268.10M | Q8_0
+[04:16:23] ==========================================================
+[04:16:23]   dowcliserver  branch:master  owner:Delsizov, Danail
+[04:16:23] ==========================================================
+[04:16:25] Starting parallel scan (workers=1)...
+[04:16:36]   [dowcliserver] Scanning: 10% (3/29 files)
+[04:16:36]   [dowcliserver] Scanning: 20% (6/29 files)
+[04:16:37]   [dowcliserver] Scanning: 55% (16/29 files)
+[04:16:37]   [dowcliserver] Scanning: 65% (19/29 files)
+[04:16:38]   [dowcliserver] Scanning: 75% (22/29 files)
+[04:16:39]   [dowcliserver] Scanning: 100% (29/29 files)
+[04:16:39]   [LLM] Reviewing 4 finding(s)...
+[04:16:41]   [LLM] Reviewing 4 finding(s) via gemma3:270m (0 skipped — high-confidence) batch=3 vram=5.9GB
+[04:16:41]   [LLM] Batch 1/2 (3 finding(s))...
+[04:19:43]   [LLM] [schema] Error (attempt 1): timed out
+[04:21:07]   [LLM] [json-mode attempt 1] Could not parse response — retrying
+[04:23:15]   [LLM] [json-mode attempt 2] Could not parse response — retrying
+[04:23:15]   [LLM] Batch 1 failed — keeping as-is
+[04:23:15]   [LLM] Batch 2/2 (1 finding(s))...
+[04:24:00]   [LLM] [json-mode attempt 1] Could not parse response — retrying
+[04:24:17]   [LLM] [json-mode attempt 2] Could not parse response — retrying
+[04:24:17]   [LLM] Batch 2 failed — keeping as-is
+[04:24:17]   [LLM] Done — dismissed:0  reinstated:0  downgraded:0  kept:4  errors:4
+[04:24:17]   [LLM] Debug log: logs/llm_reviewer_debug.log
+[04:24:17]   [LLM] Review done -> 4 finding(s)
+[04:24:18] 
+OK dowcliserver -> 4 findings  (Crit:4 High:0)
+[04:24:18]   WARN 4 Critical finding(s)!
+[04:24:18] 
+==========================================================
+[04:24:18] Total findings (deduped): 4
+[04:24:18] 
+Generating reports...
+[04:24:18]   Writing CSV report...
+[04:24:18]   Writing HTML report (4 finding(s))...
+[04:24:18]   [Report] Generating LLM analysis for 4 finding(s)...
+[04:24:18]   [Report] LLM analysis 1/4: Code Execution Risk...
+[04:24:27]   [Report] LLM analysis 2/4: Debug Mode Enabled in Application...
+[04:24:31]   [Report] LLM analysis 3/4: Code Execution Risk...
+[04:24:34]   [Report] LLM analysis 4/4: Code Execution Risk...
+[04:24:38]   OK Report: ai_scan_AI_Scan_Report_DOW_dowcliserver_20260317_042418.html
+[04:24:38] 
+Scan complete.
+[04:24:38] Duration: 478s  |  Findings: 4

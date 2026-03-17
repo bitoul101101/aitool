@@ -924,5 +924,431 @@
     },
     "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_041528.log",
     "reports": {}
+  },
+  {
+    "scan_id": "20260317_041619",
+    "date": "20260317",
+    "time": "041619",
+    "project": "DOW",
+    "repos": [
+      "dowcliserver"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 478,
+    "started_at_utc": "2026-03-17T02:16:19Z",
+    "completed_at_utc": "2026-03-17T02:24:38Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 4,
+    "active_total": 4,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 4,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {
+      "production": 4
+    },
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "dowcliserver": {
+        "owner": "Delsizov, Danail",
+        "branch": "master",
+        "commit": "33a548281a5d5a1ca5d58b5c59f83a5523dd17c3"
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_041619.log",
+    "reports": {
+      "__all__": {
+        "csv": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_DOW_dowcliserver_20260317_042418.csv",
+        "html": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_DOW_dowcliserver_20260317_042418.html",
+        "csv_name": "ai_scan_AI_Scan_Report_DOW_dowcliserver_20260317_042418.csv",
+        "html_name": "ai_scan_AI_Scan_Report_DOW_dowcliserver_20260317_042418.html"
+      }
+    }
+  },
+  {
+    "scan_id": "20260317_044811",
+    "date": "20260317",
+    "time": "044811",
+    "project": "COGI",
+    "repos": [
+      "cogy-azure-terraform"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 14,
+    "started_at_utc": "2026-03-17T02:48:11Z",
+    "completed_at_utc": "2026-03-17T02:48:26Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogy-azure-terraform": {
+        "owner": "Laniado, Yarin",
+        "branch": "master",
+        "commit": "0fe71f68922f139736055409278074bc32421838"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_044811.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_044839",
+    "date": "20260317",
+    "time": "044839",
+    "project": "BIG_DATA_SERVERS",
+    "repos": [
+      "minilab"
+    ],
+    "operator": "Unknown",
+    "state": "stopped",
+    "duration_s": 32,
+    "started_at_utc": "2026-03-17T02:48:39Z",
+    "completed_at_utc": "2026-03-17T02:49:11Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "minilab": {
+        "owner": "Cohen, Eyal",
+        "branch": "master",
+        "commit": "2d8c73f4a4c28d4699c45603a31ab672a4e0f1ec"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_044839.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_044926",
+    "date": "20260317",
+    "time": "044926",
+    "project": "COGI",
+    "repos": [
+      "cogy-conda-image-environment"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 12,
+    "started_at_utc": "2026-03-17T02:49:26Z",
+    "completed_at_utc": "2026-03-17T02:49:39Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogy-conda-image-environment": {
+        "owner": "Martin Iliev",
+        "branch": "master",
+        "commit": "37f5865664a3ff05dd8c1ea6e475cd838578db76"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_044926.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_045009",
+    "date": "20260317",
+    "time": "045009",
+    "project": "COGI",
+    "repos": [
+      "cogi-model-api-server"
+    ],
+    "operator": "Unknown",
+    "state": "stopped",
+    "duration_s": 35,
+    "started_at_utc": "2026-03-17T02:50:09Z",
+    "completed_at_utc": "2026-03-17T02:50:45Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogi-model-api-server": {
+        "owner": "Segal, Sarit",
+        "branch": "master",
+        "commit": "75f60b8cac6572108cc8147e7118d2ec94b6a3a1"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_045009.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_045051",
+    "date": "20260317",
+    "time": "045051",
+    "project": "COGI",
+    "repos": [
+      "cogi-nexyte-model-lora"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 25,
+    "started_at_utc": "2026-03-17T02:50:51Z",
+    "completed_at_utc": "2026-03-17T02:51:30Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 2,
+    "active_total": 2,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 1,
+      "high": 0,
+      "medium": 0,
+      "low": 1
+    },
+    "ctx": {
+      "production": 1,
+      "docs": 1
+    },
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogi-nexyte-model-lora": {
+        "owner": "Shoham, Yarden",
+        "branch": "master",
+        "commit": "293130dd0425027e86c985bdbe31e35899deea31"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_045051.log",
+    "reports": {
+      "__all__": {
+        "csv": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_COGI_cogi-nexyte-model-lora_20260317_045117.csv",
+        "html": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\ai_scan_AI_Scan_Report_COGI_cogi-nexyte-model-lora_20260317_045117.html",
+        "csv_name": "ai_scan_AI_Scan_Report_COGI_cogi-nexyte-model-lora_20260317_045117.csv",
+        "html_name": "ai_scan_AI_Scan_Report_COGI_cogi-nexyte-model-lora_20260317_045117.html"
+      }
+    }
+  },
+  {
+    "scan_id": "20260317_045324",
+    "date": "20260317",
+    "time": "045324",
+    "project": "COGI",
+    "repos": [
+      "cogi-deployment-server"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 14,
+    "started_at_utc": "2026-03-17T02:53:24Z",
+    "completed_at_utc": "2026-03-17T02:53:39Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "reviewed_total": 0,
+    "accepted_risk_total": 0,
+    "delta": {
+      "has_baseline": false,
+      "new_count": 0,
+      "fixed_count": 0,
+      "unchanged_count": 0,
+      "new_hashes": [],
+      "fixed_hashes": []
+    },
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogi-deployment-server": {
+        "owner": "Gruzberg, Katie",
+        "branch": "master",
+        "commit": "722dcda80ad49e099c995a510c02055128c580c3"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_045324.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_045353",
+    "date": "20260317",
+    "time": "045353",
+    "project": "COGI",
+    "repos": [
+      "cogy-api-gw"
+    ],
+    "operator": "Unknown",
+    "state": "stopped",
+    "duration_s": 18,
+    "started_at_utc": "2026-03-17T02:53:53Z",
+    "completed_at_utc": "2026-03-17T02:54:12Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "reviewed_total": 0,
+    "accepted_risk_total": 0,
+    "delta": {
+      "has_baseline": false,
+      "new_count": 0,
+      "fixed_count": 0,
+      "unchanged_count": 0,
+      "new_hashes": [],
+      "fixed_hashes": []
+    },
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogy-api-gw": {
+        "owner": "cyber-jenkins",
+        "branch": "master",
+        "commit": "824b54c129d40a76ab3672395dd4c4bca262a36f"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_045353.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_045419",
+    "date": "20260317",
+    "time": "045419",
+    "project": "COGI",
+    "repos": [
+      "cogi-data-factory"
+    ],
+    "operator": "Unknown",
+    "state": "stopped",
+    "duration_s": 28,
+    "started_at_utc": "2026-03-17T02:54:19Z",
+    "completed_at_utc": "2026-03-17T02:54:47Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "reviewed_total": 0,
+    "accepted_risk_total": 0,
+    "delta": {
+      "has_baseline": false,
+      "new_count": 0,
+      "fixed_count": 0,
+      "unchanged_count": 0,
+      "new_hashes": [],
+      "fixed_hashes": []
+    },
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogi-data-factory": {
+        "owner": "Shoham, Yarden",
+        "branch": "master",
+        "commit": "21f644bd0b9641d952495fa52c6b5051a8a3554c"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_045419.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_045519",
+    "date": "20260317",
+    "time": "045519",
+    "project": "DOW",
+    "repos": [
+      "dowcliserver"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 446,
+    "started_at_utc": "2026-03-17T02:55:19Z",
+    "completed_at_utc": "2026-03-17T03:03:06Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 4,
+    "active_total": 4,
+    "suppressed_total": 0,
+    "reviewed_total": 0,
+    "accepted_risk_total": 0,
+    "delta": {
+      "has_baseline": false,
+      "new_count": 4,
+      "fixed_count": 0,
+      "unchanged_count": 0,
+      "new_hashes": [
+        "897aeee8f6fcb80f789258fc1d0e800a",
+        "baa77b5ab13875cf7c0fbf7c1970d173",
+        "ca04e951657860eb65663a327083a4dc",
+        "ca9c720dc0131ddf24097798868412d5"
+      ],
+      "fixed_hashes": []
+    },
+    "sev": {
+      "critical": 4,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {
+      "production": 4
+    },
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "dowcliserver": {
+        "owner": "Delsizov, Danail",
+        "branch": "master",
+        "commit": "33a548281a5d5a1ca5d58b5c59f83a5523dd17c3"
+      }
+    },
+    "log_file": "C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_045519.log",
+    "reports": {}
   }
 ]

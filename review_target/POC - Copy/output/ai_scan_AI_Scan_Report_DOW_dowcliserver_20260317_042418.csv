@@ -1,0 +1,21 @@
+repo,ai_category,provider_or_lib,capability,policy_status,risk,severity,file,line,snippet,owner,last_seen,remediation
+dowcliserver,Security,unsafe_code_exec,Code Execution Risk,CRITICAL,Critical,1,houseKeeping.js,112,"        let cont = false
+        //logger.trace(""run -> pgrep Mde | while read line; do ps -p $line -o cmd|grep \'Mde\' ;done"")
+        exec(""pgrep Mde | while read line; do ps -p $line -o cmd|grep \'Mde\' ;done"", (error, stdout, stderr) => {
+            let errRes = ''
+            if (error) {","Delsizov, Danail",20260317_041619,"Isolate any LLM-generated code execution in a sandboxed environment (container, subprocess with restricted permissions). Never exec() model outputs directly in production. Review capability policies."
+dowcliserver,Security,pyrit_debug_production,Debug Mode Enabled in Application,CRITICAL,Critical,1,MakeCliServer.sh,44,"reset=`tput sgr0`
+
+isDebug=true
+
+npm config set strict-ssl false","Delsizov, Danail",20260317_041619,"Review this AI usage against the internal AI policy. Ensure the provider/library is approved, data handling is documented, and usage is logged."
+dowcliserver,Security,unsafe_code_exec,Code Execution Risk,CRITICAL,Critical,1,streamSynCmds.js,74,"    const filePath = '/tmp/' + instance + '.init.log'
+    const command = `[ -f ""${filePath}"" ] && cat ""${filePath}"" || (>&2 echo ""File does not exist"")`
+    exec( command , (error, stdout, stderr) => {
+            let errRes = ''
+            if (error) {","Delsizov, Danail",20260317_041619,"Isolate any LLM-generated code execution in a sandboxed environment (container, subprocess with restricted permissions). Never exec() model outputs directly in production. Review capability policies."
+dowcliserver,Security,unsafe_code_exec,Code Execution Risk,CRITICAL,Critical,1,tcpdumper.js,459,"
+ function runCommand(command){
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`error: ${error.message}`);","Delsizov, Danail",20260317_041619,"Isolate any LLM-generated code execution in a sandboxed environment (container, subprocess with restricted permissions). Never exec() model outputs directly in production. Review capability policies."
