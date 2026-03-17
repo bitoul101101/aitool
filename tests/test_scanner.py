@@ -1007,6 +1007,27 @@ def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():
         srv._session = orig_session
 
 
+def test_new_scan_view_blocks_start_while_another_scan_is_running():
+    import app_server as srv
+
+    html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}],
+        selected_repos=[],
+        status={"state": "running"},
+        llm_cfg={"base_url": "http://localhost:11434", "model": "gemma3:270m"},
+        llm_models=["gemma3:270m"],
+        log_text="",
+        phase_timeline=[],
+        force_selection=True,
+    ).decode("utf-8")
+
+    assert 'id="start-scan-btn" disabled' in html
+    assert "A scan is in progress. Wait until it finishes before starting a new scan." in html
+    assert "Selected model is below 4B and may be unreliable for LLM review." in html
+
+
 def test_history_page_is_server_rendered():
     import app_server as srv
 

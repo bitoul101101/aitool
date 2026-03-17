@@ -78,6 +78,7 @@ main{max-width:1340px;margin:0 auto;padding:16px 18px}
 .notice,.error{padding:10px 12px;border-radius:10px}
 .notice{background:#e8f5e5;border:1px solid #b8d3b0;color:#224d22}
 .error{background:#f8e5e2;border:1px solid #dfb1aa;color:#7d2a22}
+.warn-box{padding:10px 12px;border-radius:10px;background:#fff3d8;border:1px solid #e1bf77;color:#7a5310}
 .toast-wrap{position:fixed;left:14px;bottom:14px;display:grid;gap:8px;z-index:1000}
 .toast{min-width:260px;max-width:420px;box-shadow:0 10px 24px rgba(0,0,0,.14);animation:fadein .2s ease}
 .muted{color:#705333}
@@ -112,6 +113,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .project-link.active{background:#6d3514;color:#fff;font-weight:700}
 .repo-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) 240px auto;gap:8px;align-items:end;margin-bottom:8px}
 .repo-actions{display:flex;align-items:center;gap:8px;margin:8px 0 10px}
+.repo-notices{display:grid;gap:8px;margin-bottom:8px}
 .repo-shell{border:1px solid #ead4ba;border-radius:12px;background:#fcf6ee;padding:8px}
 .repo-grid{display:grid;gap:2px 12px;max-height:calc(100vh - 285px);overflow:auto;padding-right:4px;align-content:start}
 .repo-grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -253,6 +255,15 @@ def render_scan_page(
     error: str = "",
 ) -> bytes:
     project_query_suffix = "&new=1" if force_selection else ""
+    def _model_size_billions(name: str) -> float:
+        text = (name or "").strip().lower()
+        import re
+        match = re.search(r'(?<!\d)(\d+(?:\.\d+)?)\s*([bm])(?!\w)', text)
+        if not match:
+            return 0.0
+        value = float(match.group(1))
+        return value if match.group(2) == "b" else value / 1000.0
+
     def triage_badge(status_name: str) -> str:
         if not status_name:
             return ""
@@ -345,6 +356,7 @@ def render_scan_page(
     state = str(status.get("state", "")).lower()
     running = state == "running"
     scan_complete = state in {"done", "stopped", "error"}
+    start_blocked = running and force_selection
     selected = set(selected_repos)
     repo_count = len(repos)
     repo_cols = "cols-2" if repo_count <= 18 else "cols-3"
@@ -406,6 +418,14 @@ def render_scan_page(
     if scan_complete:
         project_q = f"?project={quote(selected_project)}&new=1" if selected_project else "?new=1"
         new_scan_button = f'<a class="btn" id="new-scan-btn" href="/scan{project_q}">New Scan</a>'
+    model_warning = ""
+    if _model_size_billions(llm_cfg.get("model", "")) and _model_size_billions(llm_cfg.get("model", "")) < 4:
+        model_warning = "Selected model is below 4B and may be unreliable for LLM review."
+    running_notice = (
+        'A scan is in progress. Wait until it finishes before starting a new scan.'
+        if start_blocked
+        else ""
+    )
     selection_view = f"""
 <section class="selection-grid">
   <aside class="card project-panel">
@@ -418,7 +438,11 @@ def render_scan_page(
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
-        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit">Start Scan</button></div>
+        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked else ""}>Start Scan</button></div>
+      </div>
+      <div class="repo-notices">
+        <div class="warn-box{" hidden" if not running_notice else ""}" id="running-scan-notice">{_esc(running_notice)}</div>
+        <div class="warn-box{" hidden" if not model_warning else ""}" id="model-size-warning">{_esc(model_warning)}</div>
       </div>
       <div class="repo-actions">
         <span class="muted" id="repo-selection-count"></span>
@@ -488,6 +512,41 @@ document.getElementById('select-all-repos-btn')?.addEventListener('click',()=>{{
 document.getElementById('select-none-repos-btn')?.addEventListener('click',()=>{{repoCheckboxes().forEach(cb=>cb.checked=false);updateRepoCount();}});
 repoCheckboxes().forEach(cb=>cb.addEventListener('change',updateRepoCount));
 filterRepos();
+(function() {{
+  const startBtn=document.getElementById('start-scan-btn');
+  const runningNotice=document.getElementById('running-scan-notice');
+  const modelSelect=document.getElementById('llm-model-select');
+  const modelWarning=document.getElementById('model-size-warning');
+  function parseModelSize(model){{
+    const m=(model||'').toLowerCase().match(/(^|[^0-9])(\\d+(?:\\.\\d+)?)\\s*([bm])(?!\\w)/);
+    if(!m) return 0;
+    const value=parseFloat(m[2]||'0');
+    return m[3]==='b' ? value : value/1000;
+  }}
+  function updateModelWarning(){{
+    if(!modelWarning || !modelSelect) return;
+    const under4b=parseModelSize(modelSelect.value) > 0 && parseModelSize(modelSelect.value) < 4;
+    modelWarning.textContent='Selected model is below 4B and may be unreliable for LLM review.';
+    modelWarning.classList.toggle('hidden', !under4b);
+  }}
+  async function updateStartAvailability(){{
+    if(!startBtn && !runningNotice) return;
+    try {{
+      const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
+      const data=await res.json();
+      const blocked=(data.state||'').toLowerCase()==='running';
+      if(startBtn) startBtn.disabled=blocked;
+      if(runningNotice) {{
+        runningNotice.textContent='A scan is in progress. Wait until it finishes before starting a new scan.';
+        runningNotice.classList.toggle('hidden', !blocked);
+      }}
+    }} catch (_err) {{}}
+  }}
+  modelSelect?.addEventListener('change', updateModelWarning);
+  updateModelWarning();
+  updateStartAvailability();
+  if(startBtn || runningNotice) setInterval(updateStartAvailability, 3000);
+}})();
 (function() {{
   const logEl=document.getElementById('scan-log');
   const iconEl=document.getElementById('scan-state-icon');
