@@ -65,7 +65,7 @@ LOG_ICON = _icon_uri("LOG", "#1f4f98")
 def _base_style() -> str:
     return """
 body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#f6efe4;color:#261507}
-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;padding:12px 18px;background:#4a210c;color:#fff}
+header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;padding:12px 18px;background:#4a210c;color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.18)}
 header h1{margin:0;font-size:18px}
 .header-nav{display:flex;justify-content:center;gap:8px;align-items:center}
 .header-actions{display:flex;justify-content:flex-end}
