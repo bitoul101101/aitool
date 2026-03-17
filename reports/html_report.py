@@ -743,13 +743,10 @@ tr.detail-row:hover td{background:#faf9ff !important;}
     def _header(self, findings=None):
         findings = findings or []
         commit = html_mod.escape(self.meta.get("commit", ""))
-        operator = html_mod.escape(self.meta.get("operator", ""))
         started_at = self.meta.get("started_at_utc", "")
-        completed_at = self.meta.get("completed_at_utc", "")
         suppressed_count = int(self.meta.get("suppressed_count", 0) or 0)
         reviewed_count = int(self.meta.get("reviewed_count", 0) or 0)
         accepted_risk_count = int(self.meta.get("accepted_risk_count", 0) or 0)
-        policy_version = html_mod.escape(self.meta.get("policy_version", ""))
         tool_version = html_mod.escape(self.meta.get("tool_version", ""))
         repo       = html_mod.escape(self.meta.get("repo", "—"))
         project    = html_mod.escape(self.meta.get("project_key", "—"))
@@ -856,6 +853,15 @@ tr.detail-row:hover td{background:#faf9ff !important;}
             f'<span class="lang-chip">{html_mod.escape(l)}</span>'
             for l in langs_sorted
         ) if langs_sorted else '<span class="lang-chip" style="opacity:.45">—</span>'
+        framework_names = sorted({
+            fp(f.get("provider_or_lib", ""))
+            for f in findings
+            if f.get("provider_or_lib", "")
+        })
+        framework_chips_html = "".join(
+            f'<span class="lang-chip">{html_mod.escape(name)}</span>'
+            for name in framework_names[:12]
+        ) if framework_names else '<span class="lang-chip" style="opacity:.45">—</span>'
 
         # ── 6. LLM dismissal rate ─────────────────────────────────
         if pre_llm and post_llm is not None and pre_llm > 0:
@@ -942,26 +948,24 @@ tr.detail-row:hover td{background:#faf9ff !important;}
                 meta_rows += mrow("Repository", repo)
             if owner_val:
                 meta_rows += mrow("Owner", owner_val)
-            if branch and branch not in ("—", ""):
-                meta_rows += mrow("Branch", branch, mono=True)
-        if commit:
-            meta_rows += mrow("Commit", commit[:12], mono=True)
-        if operator:
-            meta_rows += mrow("Operator", operator)
+            branch_commit = branch if branch not in ("—", "") else ""
+            if commit:
+                branch_commit = f"{branch_commit}/{commit[:12]}" if branch_commit else commit[:12]
+            if branch_commit:
+                meta_rows += mrow("Branch/Commit", branch_commit, mono=True)
         meta_rows += mrow("Scan Date", scan_dt)
-        meta_rows += mrow("Started", _fmt_utc(started_at))
-        meta_rows += mrow("Completed", _fmt_utc(completed_at))
         meta_rows += mrow("Duration", dur_str)
         if tool_version:
             meta_rows += mrow("Tool Version", tool_version, mono=True)
-        if policy_version:
-            meta_rows += mrow("Policy Version", policy_version, mono=True)
         if llm_label:
             meta_rows += mrow("Model Used", llm_label, raw=True)
-        # Languages row (always shown)
         meta_rows += (
             f'<div class="hdr-meta-key">Languages</div>'
             f'<div class="hdr-meta-val"><div class="lang-chips">{lang_chips_html}</div></div>'
+        )
+        meta_rows += (
+            f'<div class="hdr-meta-key">Frameworks</div>'
+            f'<div class="hdr-meta-val"><div class="lang-chips">{framework_chips_html}</div></div>'
         )
 
         # ── Stat rows ─────────────────────────────────────────────

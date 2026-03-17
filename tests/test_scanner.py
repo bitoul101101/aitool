@@ -709,7 +709,6 @@ def test_scan_page_contains_server_rendered_findings_forms():
         }
     ]
     html = srv.render_scan_page(
-        connected_owner="Security Engineer",
         projects=[{"key": "COGI"}],
         selected_project="COGI",
         repos=[{"slug": "repo1"}, {"slug": "repo2"}],
@@ -717,12 +716,15 @@ def test_scan_page_contains_server_rendered_findings_forms():
         status=session.to_status(),
         llm_cfg=srv.load_llm_config(),
         llm_models=["m1", "m2"],
+        log_text="line 1\nline 2",
     ).decode("utf-8")
 
     assert 'id="repo-search"' in html
     assert 'id="llm-model-select"' in html
     assert "Refresh Models" in html
-    assert "Example finding" in html
+    assert "Activity Log" in html
+    assert "repo1" in html
+    assert "OpenAI" in html
 
 
 def test_history_page_is_server_rendered():

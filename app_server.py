@@ -609,6 +609,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         body = self._read_body()
         if p in ("/login", "/connect"):
             return self._page_connect(body)
+        elif p == "/app/exit":
+            return self._page_app_exit()
         elif p == "/scan/start":
             return self._page_scan_start(body)
         elif p == "/scan/stop":
@@ -671,19 +673,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_VIEWER):
             return
         qs = parse_qs(urlparse(self.path).query)
-        project_key = (qs.get("project", [""])[0] or "").strip()
+        project_key = (qs.get("project", [""])[0] or _session.project_key or "").strip()
         if project_key and _require_project_access(self, project_key):
             return
         repos = _repos_for_project(project_key) if project_key else []
+        status = _session.to_status() if _is_connected() else {}
+        effective_selected_repos = selected_repos if selected_repos is not None else (
+            list(_session.repo_slugs) if project_key and project_key == _session.project_key else []
+        )
         html = render_scan_page(
-            connected_owner=_operator_state.connected_owner,
             projects=filter_projects(_operator_state.projects_cache, _operator_state.ctx),
             selected_project=project_key,
             repos=repos,
-            selected_repos=selected_repos or [],
-            status=_session.to_status() if _is_connected() else {},
+            selected_repos=effective_selected_repos,
+            status=status,
             llm_cfg=load_llm_config(),
             llm_models=_ollama_list_models(load_llm_config().get("base_url", "http://localhost:11434")),
+            log_text="\n".join(entry.get("msg", "") for entry in _session.log_lines[-400:]),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
@@ -724,6 +730,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             return self._render_login_page(error=str(e))
         self._redirect(_with_query("/scan", notice="Connected to Bitbucket"))
+
+    def _page_app_exit(self):
+        if _require_role(self, ROLE_ADMIN):
+            return
+        _audit_event("app_shutdown_requested")
+        _request_app_shutdown()
+        self._send(200, "text/html; charset=utf-8", b"<html><body style='font-family:Segoe UI,system-ui,sans-serif;padding:24px'>Shutting down...</body></html>")
 
     def _page_scan_start(self, body: dict):
         global _session
