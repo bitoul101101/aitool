@@ -281,8 +281,6 @@ class ScanJobService:
             "total": len(findings),
             "active_total": len(findings),
             "suppressed_total": len(session.suppressed_findings),
-            "reviewed_total": sum(1 for f in findings if f.get("triage_status") == TRIAGE_REVIEWED),
-            "accepted_risk_total": sum(1 for f in findings if f.get("triage_status") == TRIAGE_ACCEPTED_RISK),
             "delta": session.delta,
             "sev": {
                 "critical": sev.get(1, 0),

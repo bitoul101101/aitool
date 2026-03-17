@@ -719,7 +719,6 @@ def test_build_spa_includes_history_triage_and_delta_controls():
 
     assert 'id="hist-filter-triage"' in html
     assert 'id="hist-filter-delta"' in html
-    assert ">Needs Attention</th>" in html
     assert ">Triage</th>" in html
     assert ">Delta</th>" in html
 

@@ -1684,7 +1684,6 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
       </select>
       <select id="hist-filter-triage" onchange="_histPage=0;renderHistory()">
         <option value="">All Triage</option>
-        <option value="needs_attention">Needs Attention</option>
         <option value="reviewed">Reviewed</option>
         <option value="accepted_risk">Accepted Risk</option>
         <option value="false_positive">False Positive</option>
@@ -1712,7 +1711,6 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
           <th onclick="histSort('project')" id="hth-project" class="sortable" style="cursor:pointer">Project</th>
           <th onclick="histSort('repos')" id="hth-repos" class="sortable" style="cursor:pointer">Repositories</th>
           <th onclick="histSort('total')" id="hth-total" class="sortable" style="cursor:pointer">Total</th>
-          <th onclick="histSort('attention')" id="hth-attention" class="sortable" style="cursor:pointer">Needs Attention</th>
           <th>Triage</th>
           <th>Delta</th>
           <th>Suppressed</th>
@@ -2970,18 +2968,9 @@ function _histDelta(rec){
   return rec.delta || {};
 }
 
-function _histNeedsAttention(rec){
-  const active=rec.active_total ?? rec.total ?? 0;
-  const reviewed=rec.reviewed_total ?? 0;
-  const accepted=rec.accepted_risk_total ?? 0;
-  return Math.max(0, active - reviewed - accepted);
-}
-
 function _histTriageHtml(rec){
-  const reviewed=rec.reviewed_total ?? 0;
-  const accepted=rec.accepted_risk_total ?? 0;
   const suppressed=rec.suppressed_total ?? 0;
-  return `R ${reviewed} | A ${accepted} | FP ${suppressed}`;
+  return `FP ${suppressed}`;
 }
 
 function _histDeltaHtml(rec){
@@ -3027,9 +3016,6 @@ function renderHistory(){
   if(llmF)   rows=rows.filter(r=>r.llm_model===llmF);
   if(triageF){
     rows=rows.filter(r=>{
-      if(triageF==='needs_attention') return _histNeedsAttention(r) > 0;
-      if(triageF==='reviewed') return (r.reviewed_total ?? 0) > 0;
-      if(triageF==='accepted_risk') return (r.accepted_risk_total ?? 0) > 0;
       if(triageF==='false_positive') return (r.suppressed_total ?? 0) > 0;
       return true;
     });
@@ -3053,7 +3039,6 @@ function renderHistory(){
       if(col==='critical')  return (rec.sev||{}).critical||0;
       if(col==='high')      return (rec.sev||{}).high||0;
       if(col==='total')     return rec.total||0;
-      if(col==='attention') return _histNeedsAttention(rec);
       if(col==='project')   return (rec.project||'').toLowerCase();
       if(col==='repos')     return ((rec.repos||[])[0]||'').toLowerCase();
       if(col==='llm_model') return (rec.llm_model||'').toLowerCase();
@@ -3184,7 +3169,6 @@ function renderHistory(){
     tr.appendChild(_td(_esc(rec.project||'-'),'font-weight:600;color:var(--text)'));
     tr.appendChild(_td(_esc(repos),`max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`));
     tr.appendChild(_td(rec.total??'-','font-size:15px;color:var(--text);text-align:right'));
-    tr.appendChild(_td(String(_histNeedsAttention(rec)),'font-size:15px;color:#8b4513;text-align:right;font-weight:700'));
     tr.appendChild(_td(_esc(_histTriageHtml(rec)),'font-size:12px;color:var(--text2);white-space:nowrap'));
     tr.appendChild(_td(_esc(_histDeltaHtml(rec)),'font-size:12px;color:var(--text2);white-space:nowrap'));
     tr.appendChild(_td(rec.suppressed_total??'0','font-size:15px;color:var(--text2);text-align:right'));
