@@ -526,5 +526,79 @@
         "html_name": "ai_scan_AI_Scan_Report_COGI_cogi-rag_20260317_031508.html"
       }
     }
+  },
+  {
+    "scan_id": "20260317_033108",
+    "date": "20260317",
+    "time": "033108",
+    "project": "COGI",
+    "repos": [
+      "cogi-host-app"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 16,
+    "started_at_utc": "2026-03-17T01:31:08Z",
+    "completed_at_utc": "2026-03-17T01:31:25Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 0,
+    "active_total": 0,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {},
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogi-host-app": {
+        "owner": "Tatarski, Nikola",
+        "branch": "master",
+        "commit": "484f3ea9e20f8687e6e137a48f475be3513e878e"
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_033108.log",
+    "reports": {}
+  },
+  {
+    "scan_id": "20260317_033139",
+    "date": "20260317",
+    "time": "033139",
+    "project": "COGI",
+    "repos": [
+      "cogi-agent-evaluator"
+    ],
+    "operator": "Unknown",
+    "state": "done",
+    "duration_s": 333,
+    "started_at_utc": "2026-03-17T01:31:39Z",
+    "completed_at_utc": "2026-03-17T01:38:16Z",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "total": 15,
+    "active_total": 15,
+    "suppressed_total": 0,
+    "sev": {
+      "critical": 13,
+      "high": 2,
+      "medium": 0,
+      "low": 0
+    },
+    "ctx": {
+      "production": 15
+    },
+    "llm_model": "gemma3:270m",
+    "repo_details": {
+      "cogi-agent-evaluator": {
+        "owner": "Shoham, Yarden",
+        "branch": "master",
+        "commit": "b1c4e3ee63f4c17bdd4e05ed80dae91e5a40051d"
+      }
+    },
+    "log_file": "\\\\?\\C:\\Users\\mmilhovitch\\OneDrive - COGNYTE\\Downloads\\AI Tool\\review_target\\POC - Copy\\output\\logs\\20260317_033139.log",
+    "reports": {}
   }
 ]

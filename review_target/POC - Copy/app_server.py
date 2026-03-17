@@ -1093,12 +1093,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .kpi-l{font-size:9px;font-weight:700;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
 .k1 .kpi-n{color:var(--red)} .k2 .kpi-n{color:var(--ora)}
 .k3 .kpi-n{color:var(--yel)} .k4 .kpi-n{color:var(--lgrn)}
-#repo-cards,[id^="repo-cards-"]{max-height:160px;overflow-y:auto;padding:10px;flex-shrink:0}
-.finding-groups{padding:0 10px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;min-height:0}
-.finding-group{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-.finding-group-head{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(0,0,0,.04);font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
-.finding-group-count{font-family:var(--mono);font-size:11px;color:var(--dim)}
-.finding-list{max-height:220px;overflow-y:auto}
+#repo-cards,[id^="repo-cards-"]{max-height:180px;overflow-y:auto;padding:10px;flex-shrink:0}
+.finding-drawer{border-top:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:220px;max-height:300px}
+.finding-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:rgba(0,0,0,.03);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.finding-drawer-title{font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.06em}
+.finding-switches{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.finding-switch{display:inline-flex;align-items:center;gap:8px;padding:7px 10px;border-radius:999px;border:1px solid var(--border2);background:var(--card);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer}
+.finding-switch.active{background:#f1e7de;border-color:#a0522d;color:#6b2d0a}
+.finding-switch-count{font-family:var(--mono);font-size:11px;color:inherit;opacity:.8}
+.finding-panes{flex:1;min-height:0}
+.finding-pane{display:none;height:100%}
+.finding-pane.active{display:block}
+.finding-list{height:100%;overflow-y:auto}
 .finding-empty{padding:10px 12px;color:var(--dim);font-size:12px}
 .finding-item{padding:10px 12px;border-top:1px solid rgba(0,0,0,.06)}
 .finding-item:first-child{border-top:none}
@@ -1119,7 +1125,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 /* ── Monitor panel (phase timeline + live log) ── */
 .monitor-panel{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0}
 .monitor-spacer{flex:1}
-.phase-timeline{flex-shrink:0;padding:10px 14px 12px;background:var(--surface);border-top:1px solid var(--border)}
+.phase-timeline{flex-shrink:0;padding:10px 14px 12px;background:var(--surface);border-top:1px solid var(--border);min-height:170px}
 .phase-row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;color:var(--dim);line-height:1.3}
 .phase-row.ph-done{color:var(--text2)}
 .phase-row.ph-active{color:var(--text);font-weight:600}
@@ -1834,7 +1840,7 @@ function _tabPanelHTML(tid){
     </div>
     <div class="findings-panel">
       <div class="fp-header">
-        <span class="fp-title">Findings</span>
+        <span class="fp-title">Scan Status</span>
         <span class="fp-subtitle" id="fp-total-${tid}">Waiting for scan results...</span>
       </div>
       <div class="kpi-strip">
@@ -1844,25 +1850,32 @@ function _tabPanelHTML(tid){
         <div class="kpi-cell k4"><div class="kpi-n" id="k-low-${tid}" >-</div><div class="kpi-l">Low</div></div>
       </div>
       <div id="repo-cards-${tid}"></div>
-      <div class="finding-groups">
-        <div class="finding-group">
-          <div class="finding-group-head">
-            <span>Active Findings</span>
-            <span class="finding-group-count" id="finding-count-${tid}">0</span>
-          </div>
-          <div class="finding-list" id="finding-list-${tid}"></div>
-        </div>
-        <div class="finding-group">
-          <div class="finding-group-head">
-            <span>Suppressed</span>
-            <span class="finding-group-count" id="suppressed-count-${tid}">0</span>
-          </div>
-          <div class="finding-list" id="suppressed-list-${tid}"></div>
-        </div>
-      </div>
       <div class="monitor-panel">
         <div class="monitor-spacer"></div>
         <div class="phase-timeline" id="phase-tl-${tid}"></div>
+      </div>
+    </div>
+  </div>
+  <div class="finding-drawer">
+    <div class="finding-drawer-head">
+      <span class="finding-drawer-title">Finding Details</span>
+      <div class="finding-switches">
+        <button class="finding-switch active" id="finding-switch-active-${tid}" onclick="showFindingPane(${tid},'active')">
+          <span>Active</span>
+          <span class="finding-switch-count" id="finding-count-${tid}">0</span>
+        </button>
+        <button class="finding-switch" id="finding-switch-suppressed-${tid}" onclick="showFindingPane(${tid},'suppressed')">
+          <span>Suppressed</span>
+          <span class="finding-switch-count" id="suppressed-count-${tid}">0</span>
+        </button>
+      </div>
+    </div>
+    <div class="finding-panes">
+      <div class="finding-pane active" id="finding-pane-active-${tid}">
+        <div class="finding-list" id="finding-list-${tid}"></div>
+      </div>
+      <div class="finding-pane" id="finding-pane-suppressed-${tid}">
+        <div class="finding-list" id="suppressed-list-${tid}"></div>
       </div>
     </div>
   </div>
@@ -2143,6 +2156,15 @@ function _fmtFindingLoc(f){
   return `${f.repo||'-'} | ${file}${line}`;
 }
 
+function showFindingPane(tid, pane){
+  ['active','suppressed'].forEach(name=>{
+    const btn=document.getElementById(`finding-switch-${name}-${tid}`);
+    const panel=document.getElementById(`finding-pane-${name}-${tid}`);
+    if(btn) btn.classList.toggle('active', name===pane);
+    if(panel) panel.classList.toggle('active', name===pane);
+  });
+}
+
 function _renderFindingCard(f, suppressed, tid){
   const sev=f.severity||4;
   const title=_esc(f.capability||f.provider_or_lib||'Finding');
@@ -2153,7 +2175,7 @@ function _renderFindingCard(f, suppressed, tid){
     ? `<div class="finding-note">Reason: ${_esc(f.reason||'')} ${f.marked_by?`| By: ${_esc(f.marked_by)}`:''} ${f.marked_at?`| At: ${_esc(f.marked_at)}`:''}</div>`
     : '';
   const action=suppressed
-    ? `<button class="finding-btn safe" onclick="unsuppressFinding('${tid}','${_esc(f.hash)}')">Unsuppress</button>`
+    ? `<button class="finding-btn safe" onclick="unsuppressFinding('${tid}','${_esc(f.hash)}')">Restore</button>`
     : `<button class="finding-btn warn" onclick="suppressFinding('${tid}','${_esc(f.hash)}')">Suppress</button>`;
   return `<div class="finding-item">
     <div class="finding-main">
@@ -2440,6 +2462,15 @@ function _buildFindingLists(tid, d){
   suppressedEl.innerHTML=suppressed.length
     ? suppressed.map(f=>_renderFindingCard(f,true,tid)).join('')
     : '<div class="finding-empty">No suppressed findings.</div>';
+  const activeBtn=document.getElementById(`finding-switch-active-${tid}`);
+  const suppressedBtn=document.getElementById(`finding-switch-suppressed-${tid}`);
+  const activeSelected=activeBtn ? activeBtn.classList.contains('active') : true;
+  const suppressedSelected=suppressedBtn ? suppressedBtn.classList.contains('active') : false;
+  if(!active.length && suppressed.length && !suppressedSelected){
+    showFindingPane(tid, 'suppressed');
+  }else if(active.length && !activeSelected && !suppressedSelected){
+    showFindingPane(tid, 'active');
+  }
 }
 
 function _onTabFinished(tab, d){

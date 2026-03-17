@@ -685,6 +685,18 @@ def test_build_spa_does_not_embed_saved_pat():
     assert "const HAS_SAVED_PAT = (true === true);" in html
 
 
+def test_build_spa_uses_restore_action_and_findings_drawer():
+    import app_server as srv
+
+    html = srv._build_spa().decode("utf-8")
+
+    assert "Finding Details" in html
+    assert "showFindingPane" in html
+    assert ">Restore</button>" in html
+    assert "finding-pane-active-${tid}" in html
+    assert "finding-pane-suppressed-${tid}" in html
+
+
 def test_allowed_origin_only_permits_local_app_hosts():
     import app_server as srv
 

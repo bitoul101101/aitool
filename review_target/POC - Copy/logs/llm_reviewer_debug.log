@@ -1867,3 +1867,635 @@ The function `eliminate_false_positives` takes a JSON array as input. It first c
 
 The function returns a JSON array containing only the dictionaries that are not empty.
 
+
+============================================================
+mode=schema attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[6]",
+    "file_ext": ".ipynb::cell[6]",
+    "match": "eval(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[8]",
+    "file_ext": ".ipynb::cell[8]",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "configuration\\config.json",
+    "file_ext": ".json",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  }
+]
+```
+
+============================================================
+mode=schema attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[6]",
+    "file_ext": ".ipynb::cell[6]",
+    "match": "eval(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[8]",
+    "file_ext": ".ipynb::cell[8]",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "configuration\\config.json",
+    "file_ext": ".json",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  }
+]
+```
+
+============================================================
+mode=json-mode attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[6]",
+    "file_ext": ".ipynb::cell[6]",
+    "match": "eval(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[8]",
+    "file_ext": ".ipynb::cell[8]",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "configuration\\config.json",
+    "file_ext": ".json",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  }
+]
+```
+
+============================================================
+mode=json-mode attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[6]",
+    "file_ext": ".ipynb::cell[6]",
+    "match": "eval(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "sandbox_model_prediction.ipynb::cell[8]",
+    "file_ext": ".ipynb::cell[8]",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  },
+  {
+    "pattern_name": "direct_http_ai",
+    "capability": "Direct HTTP Call",
+    "category": "External AI API",
+    "base_severity": 2,
+    "context": "production",
+    "file": "configuration\\config.json",
+    "file_ext": ".json",
+    "match": "api.openai.com",
+    "snippet": "(source not available)"
+  }
+]
+```
+
+============================================================
+mode=schema attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"      55 |        csv_data = self.remove_duplicates_df(csv_data)\n    56 |        self.evaluation_items = [\n      57 |             EvaluationItem(\n      58 |               line_num,\n      59 |               csv_line.get(self.csv_task_type_column),\n      60 |             \n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |        prompt = template.render(question=question,\n    116 |                                         labeled=labeled,\n    117 |                       predicted=predicted)\n    118 |           client = LLM(model)\n    119 |           respons\n   110 |                                            data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                           labeled=labeled,\n   117 |                                           predicted=predicted)\n   118 |           client = LLM(model)\n     119 |           respons\n   110 |                                                  data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |             respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |               respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "pdf_file = self.remove_duplicates_df(pdf_file)\n    56 |      self.evaluation_items = [\n    57 |             EvaluationItem(\n    58 |                   line_num,\n    59 |                     csv_line.get(self.csv_task_type_column),\n    60 |               \n...(truncated)"},{"pattern_name": "unsafe_code_pdf_handling",
+    "capability": "Unsafe PDF Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                               predicted=predicted)\n   118 |               client = LLM(model)\n    119 |                                                data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "file_side": "file_side =  file_side\n    56 |    self.evaluation_data =  self.evaluation_data\n    57 |                                                              
+
+============================================================
+mode=schema attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"      55 |        csv_data = self.remove_duplicates_df(csv_data)\n    56 |        self.evaluation_items = [\n      57 |             EvaluationItem(\n      58 |               line_num,\n      59 |               csv_line.get(self.csv_task_type_column),\n      60 |             \n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |        prompt = template.render(question=question,\n    116 |                                         labeled=labeled,\n    117 |                       predicted=predicted)\n    118 |           client = LLM(model)\n    119 |           respons\n   110 |                                            data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                           labeled=labeled,\n   117 |                                           predicted=predicted)\n   118 |           client = LLM(model)\n     119 |           respons\n   110 |                                                  data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |             respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |               respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "pdf_file = self.remove_duplicates_df(pdf_file)\n    56 |      self.evaluation_items = [\n    57 |             EvaluationItem(\n    58 |                   line_num,\n    59 |                     csv_line.get(self.csv_task_type_column),\n    60 |               \n...(truncated)"},{"pattern_name": "unsafe_code_pdf_handling",
+    "capability": "Unsafe PDF Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                               predicted=predicted)\n   118 |               client = LLM(model)\n    119 |                                                data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "file_side": "file_side =  file_side\n    56 |    self.evaluation_data =  self.evaluation_data\n    57 |                                                              
+
+============================================================
+mode=json-mode attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"      55 |        csv_data = self.remove_duplicates_df(csv_data)\n    56 |        self.evaluation_items = [\n      57 |             EvaluationItem(\n      58 |               line_num,\n      59 |               csv_line.get(self.csv_task_type_column),\n      60 |             \n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |        prompt = template.render(question=question,\n    116 |                                         labeled=labeled,\n    117 |                       predicted=predicted)\n    118 |           client = LLM(model)\n    119 |           respons\n   110 |                                            data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                           labeled=labeled,\n   117 |                                           predicted=predicted)\n   118 |           client = LLM(model)\n     119 |           respons\n   110 |                                                  data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |             respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |               respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "pdf_file = self.remove_duplicates_df(pdf_file)\n    56 |      self.evaluation_items = [\n    57 |             EvaluationItem(\n    58 |                   line_num,\n    59 |                     csv_line.get(self.csv_task_type_column),\n    60 |               \n...(truncated)"},{"pattern_name": "unsafe_code_pdf_handling",
+    "capability": "Unsafe PDF Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                               predicted=predicted)\n   118 |               client = LLM(model)\n    119 |                                                data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "file_side": "file_side =  file_side\n    56 |    self.evaluation_data =  self.evaluation_data\n    57 |                                                              
+
+============================================================
+mode=json-mode attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"      55 |        csv_data = self.remove_duplicates_df(csv_data)\n    56 |        self.evaluation_items = [\n      57 |             EvaluationItem(\n      58 |               line_num,\n      59 |               csv_line.get(self.csv_task_type_column),\n      60 |             \n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |        prompt = template.render(question=question,\n    116 |                                         labeled=labeled,\n    117 |                       predicted=predicted)\n    118 |           client = LLM(model)\n    119 |           respons\n   110 |                                            data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                           labeled=labeled,\n   117 |                                           predicted=predicted)\n   118 |           client = LLM(model)\n     119 |           respons\n   110 |                                                  data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |           prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |             respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".py",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                             predicted=predicted)\n   118 |             client = LLM(model)\n    119 |               respons\n   110 |                                                    data =  data\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "pdf_file = self.remove_duplicates_df(pdf_file)\n    56 |      self.evaluation_items = [\n    57 |             EvaluationItem(\n    58 |                   line_num,\n    59 |                     csv_line.get(self.csv_task_type_column),\n    60 |               \n...(truncated)"},{"pattern_name": "unsafe_code_pdf_handling",
+    "capability": "Unsafe PDF Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "match": "eval(response", "snippet": "  115 |          prompt = template.render(question=question,\n    116 |                                             labeled=labeled,\n   117 |                                               predicted=predicted)\n   118 |               client = LLM(model)\n    119 |                                                data =  data\n...(truncated)"},{"pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014  Data Flow to Dangerous Sink",
+    "category": "Security",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\evaluation_item.py",
+    "file_ext": ".pdf",
+    "file_side": "file_side =  file_side\n    56 |    self.evaluation_data =  self.evaluation_data\n    57 |                                                              
+
+============================================================
+mode=schema attempt=1 model=gemma3:270m
+============================================================
+```python
+import json
+
+def eliminate_false_positives(json_array):
+    """
+    Eliminates false positives while preserving real security risks.
+    """
+    try:
+        if not json_array:
+            return []
+        return json.loads(json_array)
+    except Exception as e:
+        print(f"Error parsing JSON: {e}")
+        return []
+```
+
+
+============================================================
+mode=schema attempt=2 model=gemma3:270m
+============================================================
+```python
+import json
+
+def eliminate_false_positives(json_array):
+    """
+    Eliminates false positives while preserving real security risks.
+    """
+    try:
+        if not json_array:
+            return []
+        return json.loads(json_array)
+    except Exception as e:
+        print(f"Error parsing JSON: {e}")
+        return []
+```
+
+
+============================================================
+mode=json-mode attempt=1 model=gemma3:270m
+============================================================
+```python
+import json
+
+def eliminate_false_positives(json_array):
+    """
+    Eliminates false positives while preserving real security risks.
+    """
+    try:
+        if not json_array:
+            return []
+        return json.loads(json_array)
+    except Exception as e:
+        print(f"Error parsing JSON: {e}")
+        return []
+```
+
+
+============================================================
+mode=json-mode attempt=2 model=gemma3:270m
+============================================================
+```python
+import json
+
+def eliminate_false_positives(json_array):
+    """
+    Eliminates false positives while preserving real security risks.
+    """
+    try:
+        if not json_array:
+            return []
+        return json.loads(json_array)
+    except Exception as e:
+        print(f"Error parsing JSON: {e}")
+        return []
+```
+
+
+============================================================
+mode=schema attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\prompt_refinement\\model_actions.py",
+    "file_ext": ".py",
+    "match": "eval(result)",
+    "snippet": "    42 |  async def send_prompt(self, prompt):\n    43 |  return await self.cloud_llm.send_prompt(prompt)\n    44 | \n    45 |  def extract_model_answer(self, result):\n    46 |  results_json = get_tags_content(result)\n    47 |  try:\n>>>   48 | \n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\utils\\evaluator_utils.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"   237 |  diff: dict[str, dict] = json.loads(DeepDiff(x, y, **deep_args).to_json())\n   238 |  diff_f = {k: flatten_to_dots(v) for k, v in diff.items() if isinstance(v, dict)}\n   239 |  readable_diff = format_diff_readable(diff_f)\n   240 |  return round(1 - dif\n...(truncated)"
+  }
+  ]
+}
+```
+
+============================================================
+mode=schema attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\prompt_refinement\\model_actions.py",
+    "file_ext": ".py",
+    "match": "eval(result)",
+    "snippet": "    42 |  async def send_prompt(self, prompt):\n    43 |  return await self.cloud_llm.send_prompt(prompt)\n    44 | \n    45 |  def extract_model_answer(self, result):\n    46 |  results_json = get_tags_content(result)\n    47 |  try:\n>>>   48 | \n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\utils\\evaluator_utils.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"   237 |  diff: dict[str, dict] = json.loads(DeepDiff(x, y, **deep_args).to_json())\n   238 |  diff_f = {k: flatten_to_dots(v) for k, v in diff.items() if isinstance(v, dict)}\n   239 |  readable_diff = format_diff_readable(diff_f)\n   240 |  return round(1 - dif\n...(truncated)"
+  }
+  ]
+}
+```
+
+============================================================
+mode=json-mode attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\prompt_refinement\\model_actions.py",
+    "file_ext": ".py",
+    "match": "eval(result)",
+    "snippet": "    42 |  async def send_prompt(self, prompt):\n    43 |  return await self.cloud_llm.send_prompt(prompt)\n    44 | \n    45 |  def extract_model_answer(self, result):\n    46 |  results_json = get_tags_content(result)\n    47 |  try:\n>>>   48 | \n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\utils\\evaluator_utils.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"   237 |  diff: dict[str, dict] = json.loads(DeepDiff(x, y, **deep_args).to_json())\n   238 |  diff_f = {k: flatten_to_dots(v) for k, v in diff.items() if isinstance(v, dict)}\n   239 |  readable_diff = format_diff_readable(diff_f)\n   240 |  return round(1 - dif\n...(truncated)"
+  }
+  ]
+}
+```
+
+============================================================
+mode=json-mode attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "insecure_output_handling",
+    "capability": "Insecure Output Handling \u2014 LLM Output in Dangerous Sink",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\prompt_refinement\\model_actions.py",
+    "file_ext": ".py",
+    "match": "eval(result)",
+    "snippet": "    42 |  async def send_prompt(self, prompt):\n    43 |  return await self.cloud_llm.send_prompt(prompt)\n    44 | \n    45 |  def extract_model_answer(self, result):\n    46 |  results_json = get_tags_content(result)\n    47 |  try:\n>>>   48 | \n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "src\\utils\\evaluator_utils.py",
+    "file_ext": ".py",
+    "match": "eval(","snippet":"   237 |  diff: dict[str, dict] = json.loads(DeepDiff(x, y, **deep_args).to_json())\n   238 |  diff_f = {k: flatten_to_dots(v) for k, v in diff.items() if isinstance(v, dict)}\n   239 |  readable_diff = format_diff_readable(diff_f)\n   240 |  return round(1 - dif\n...(truncated)"
+  }
+  ]
+}
+```
