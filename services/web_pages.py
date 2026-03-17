@@ -142,18 +142,26 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row strong{justify-self:end}
 .findings-panel{margin-top:12px}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
+.finding-table-wrap table,.mitigate-wrap table,.suppressed-wrap table{font-size:12px}
 .finding-meta{display:grid;gap:4px}
-.finding-main{font-weight:600}
-.finding-sub{font-size:12px;color:#705333}
+.finding-main{display:flex;align-items:center;gap:6px;font-weight:600;flex-wrap:wrap}
+.finding-loc{font-size:11px;color:#7a5d3e;font-family:Cascadia Code,Consolas,monospace}
+.finding-sub{font-size:11px;color:#705333}
+.sev-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;color:#fff}
+.sev-1{background:#b42318}
+.sev-2{background:#e05c00}
+.sev-3{background:#b07a00}
+.sev-4{background:#4f7b39}
+.finding-snippet{margin-top:2px;padding:6px 8px;border-radius:8px;background:#f6ebdc;color:#5a4021;font-family:Cascadia Code,Consolas,monospace;font-size:10px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}
 .triage-state{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;background:#efe1cf;color:#5d3b15}
 .triage-reviewed{background:#e3efff;color:#164a95}
 .triage-accepted_risk{background:#fff1dc;color:#8a5b00}
 .triage-false_positive{background:#e5f3e7;color:#1f6a35}
 .triage-note{font-size:12px;color:#5f4527}
-.triage-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.triage-form{display:inline-flex;gap:6px;align-items:center;margin:0}
+.triage-actions{display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.triage-form{display:flex;gap:6px;align-items:center;margin:0}
 .triage-form.inline-only{display:inline-flex}
-.triage-form button{padding:4px 7px;font-size:11px}
+.triage-form button{padding:3px 6px;font-size:10px;width:100%}
 .mitigate-section,.suppressed-section{margin-top:14px}
 .mitigate-section h3,.suppressed-section h3{margin:0 0 8px;font-size:15px}
 .mitigate-wrap,.suppressed-wrap{max-height:220px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
@@ -335,14 +343,33 @@ def render_scan_page(
         )
         return f'<div class="triage-actions">{reviewed_form}{accepted_form}{suppress_form}</div>'
 
-    def finding_row(detail: dict) -> str:
+    def severity_chip(detail: dict) -> str:
+        sev = int(detail.get("severity", 4) or 4)
+        label = detail.get("severity_label", str(sev))
+        return f'<span class="sev-chip sev-{sev}">{_esc(label)}</span>'
+
+    def snippet_block(detail: dict) -> str:
+        snippet = str(detail.get("snippet", "") or "").strip()
+        if not snippet:
+            return ""
+        snippet = snippet[:220]
+        return f'<div class="finding-snippet">{_esc(snippet)}</div>'
+
+    def finding_summary(detail: dict) -> str:
         location = f'{detail.get("file", "")}:{detail.get("line", "")}'
         return (
+            '<div class="finding-meta">'
+            f'<div class="finding-main">{severity_chip(detail)}<span>{_esc(detail.get("repo", ""))}</span>'
+            f'<span class="finding-loc">{_esc(location)}</span></div>'
+            f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div>'
+            f'{snippet_block(detail)}'
+            '</div>'
+        )
+
+    def finding_row(detail: dict) -> str:
+        return (
             "<tr>"
-            f'<td><div class="finding-meta"><div class="finding-main">{_esc(detail.get("repo", ""))}</div>'
-            f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div></div></td>'
-            f'<td><div class="finding-meta"><div>{_esc(location)}</div>{triage_meta(detail)}</div></td>'
-            f"<td>{_esc(detail.get('severity_label', detail.get('severity', '')))}</td>"
+            f"<td>{finding_summary(detail)}</td>"
             f'<td><div class="finding-meta"><div>{_esc(detail.get("capability", ""))}</div>'
             f'<div class="finding-sub">{_esc(detail.get("delta_status", ""))}</div></div></td>'
             f"<td>{triage_actions(detail)}</td>"
@@ -350,28 +377,22 @@ def render_scan_page(
         )
 
     def suppressed_row(detail: dict) -> str:
-        location = f'{detail.get("file", "")}:{detail.get("line", "")}'
         status_name = detail.get("triage_status", "false_positive") or "false_positive"
         return (
             "<tr>"
-            f'<td><div class="finding-meta"><div class="finding-main">{_esc(detail.get("repo", ""))}</div>'
-            f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div></div></td>'
-            f'<td><div class="finding-meta"><div>{_esc(location)}</div>{triage_meta(detail)}</div></td>'
-            f"<td>{_esc(detail.get('severity_label', detail.get('severity', '')))}</td>"
+            f"<td>{finding_summary(detail)}</td>"
             f"<td>{triage_badge(status_name)}</td>"
+            f"<td>{triage_meta(detail)}</td>"
             f"<td>{triage_actions(detail, suppressed=True)}</td>"
             "</tr>"
         )
 
     def mitigated_row(detail: dict) -> str:
-        location = f'{detail.get("file", "")}:{detail.get("line", "")}'
         return (
             "<tr>"
-            f'<td><div class="finding-meta"><div class="finding-main">{_esc(detail.get("repo", ""))}</div>'
-            f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div></div></td>'
-            f'<td><div class="finding-meta"><div>{_esc(location)}</div>{triage_meta(detail)}</div></td>'
-            f"<td>{_esc(detail.get('severity_label', detail.get('severity', '')))}</td>"
+            f"<td>{finding_summary(detail)}</td>"
             f"<td>{triage_badge(detail.get('triage_status', 'reviewed') or 'reviewed')}</td>"
+            f"<td>{triage_meta(detail)}</td>"
             f"<td>{triage_actions(detail, suppressed=False)}</td>"
             "</tr>"
         )
@@ -490,9 +511,9 @@ def render_scan_page(
     </div>
     <div class="findings-panel">
       <h2 style="margin:0 0 8px;font-size:16px">Current Findings</h2>
-      <div class="finding-table-wrap">
-        <table>
-          <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Capability</th><th>Actions</th></tr></thead>
+        <div class="finding-table-wrap">
+          <table>
+          <thead><tr><th>Finding</th><th>Capability</th><th>Actions</th></tr></thead>
           <tbody id="current-findings-body">{findings_rows}</tbody>
         </table>
       </div>
@@ -501,7 +522,7 @@ def render_scan_page(
       <h3>To Mitigate</h3>
       <div class="mitigate-wrap">
         <table>
-          <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Finding</th><th>Status</th><th>Details</th><th>Actions</th></tr></thead>
           <tbody id="mitigate-findings-body">{mitigate_rows}</tbody>
         </table>
       </div>
@@ -510,7 +531,7 @@ def render_scan_page(
       <h3>Suppressed / Accepted Findings</h3>
       <div class="suppressed-wrap">
         <table>
-          <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Finding</th><th>Status</th><th>Details</th><th>Actions</th></tr></thead>
           <tbody id="suppressed-findings-body">{suppressed_rows}</tbody>
         </table>
       </div>
@@ -625,15 +646,30 @@ filterRepos();
       + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="false_positive"><input type="hidden" name="note" value=""><button type="submit" class="warn" onclick="return triagePromptSubmit(this.form, 'Suppress')">Suppress</button></form>`
       + `</div>`;
   }}
+  function severityChip(item){{
+    const sev=Number(item.severity || 4);
+    const label=esc(item.severity_label || item.severity || '');
+    return `<span class="sev-chip sev-${{sev}}">${{label}}</span>`;
+  }}
+  function snippetBlock(item){{
+    const snippet=String(item.snippet || '').trim();
+    if(!snippet) return '';
+    return `<div class="finding-snippet">${{esc(snippet.slice(0, 220))}}</div>`;
+  }}
+  function findingSummary(item){{
+    const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
+    return `<div class="finding-meta">`
+      + `<div class="finding-main">${{severityChip(item)}}<span>${{esc(item.repo||'')}}</span><span class="finding-loc">${{location}}</span></div>`
+      + `<div class="finding-sub">${{esc(item.description||'')}}</div>`
+      + snippetBlock(item)
+      + `</div>`;
+  }}
   function renderFindingRows(items){{
     const rows=(items||[]).filter(item => !item.triage_status || (item.triage_status !== 'reviewed' && item.triage_status !== 'accepted_risk'));
-    if(!rows.length) return '<tr><td colspan="5">No current findings.</td></tr>';
+    if(!rows.length) return '<tr><td colspan="3">No current findings.</td></tr>';
     return rows.slice(0,20).map(item => {{
-      const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
       return `<tr>`
-        + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
-        + `<td><div class="finding-meta"><div>${{location}}</div>${{triageMeta(item)}}</div></td>`
-        + `<td>${{esc(item.severity_label||item.severity||'')}}</td>`
+        + `<td>${{findingSummary(item)}}</td>`
         + `<td><div class="finding-meta"><div>${{esc(item.capability||'')}}</div><div class="finding-sub">${{esc(item.delta_status||'')}}</div></div></td>`
         + `<td>${{triageActions(item, false)}}</td>`
         + `</tr>`;
@@ -641,28 +677,24 @@ filterRepos();
   }}
   function renderMitigateRows(items){{
     const rows=(items||[]).filter(item => item.triage_status === 'reviewed');
-    if(!rows.length) return '<tr><td colspan="5">No findings marked to mitigate.</td></tr>';
+    if(!rows.length) return '<tr><td colspan="4">No findings marked to mitigate.</td></tr>';
     return rows.slice(0,20).map(item => {{
-      const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
       return `<tr>`
-        + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
-        + `<td><div class="finding-meta"><div>${{location}}</div>${{triageMeta(item)}}</div></td>`
-        + `<td>${{esc(item.severity_label||item.severity||'')}}</td>`
+        + `<td>${{findingSummary(item)}}</td>`
         + `<td><span class="triage-state triage-reviewed">To Mitigate</span></td>`
+        + `<td>${{triageMeta(item)}}</td>`
         + `<td>${{triageActions(item, false)}}</td>`
         + `</tr>`;
     }}).join('');
   }}
   function renderSuppressedRows(items){{
-    if(!items || !items.length) return '<tr><td colspan="5">No suppressed or accepted findings.</td></tr>';
+    if(!items || !items.length) return '<tr><td colspan="4">No suppressed or accepted findings.</td></tr>';
     return items.slice(0,30).map(item => {{
-      const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
       const status=(item.triage_status||'false_positive') === 'accepted_risk' ? 'Accepted Risk' : 'Suppressed';
       return `<tr>`
-        + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
-        + `<td><div class="finding-meta"><div>${{location}}</div>${{triageMeta(item)}}</div></td>`
-        + `<td>${{esc(item.severity_label||item.severity||'')}}</td>`
+        + `<td>${{findingSummary(item)}}</td>`
         + `<td><span class="triage-state triage-${{esc(item.triage_status||'false_positive')}}">${{esc(status)}}</span></td>`
+        + `<td>${{triageMeta(item)}}</td>`
         + `<td>${{triageActions(item, true)}}</td>`
         + `</tr>`;
     }}).join('');

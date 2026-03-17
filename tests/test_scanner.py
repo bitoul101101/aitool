@@ -753,6 +753,7 @@ def test_scan_page_selection_view_stays_pre_scan():
             "capability": "API Key",
             "policy_status": "critical",
             "description": "Unsuppressed finding",
+            "snippet": "client = OpenAI(api_key=token)",
         },
         {
             "_hash": "hash-1",
@@ -810,6 +811,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "capability": "API Key",
             "policy_status": "critical",
             "description": "Unsuppressed finding",
+            "snippet": "client = OpenAI(api_key=token)",
         },
         {
             "_hash": "hash-1",
@@ -821,6 +823,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "capability": "OpenAI",
             "policy_status": "fail",
             "description": "Example finding",
+            "snippet": "response = llm.invoke(prompt)",
             "triage_status": "reviewed",
             "triage_by": "analyst",
             "triage_at": "2026-03-17T15:40:00Z",
@@ -837,6 +840,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "severity_label": "Low",
             "capability": "Example",
             "description": "Documentation example",
+            "snippet": "OPENAI_API_KEY=example",
             "triage_status": "false_positive",
             "triage_note": "Expected internal example",
             "triage_by": "analyst",
@@ -864,6 +868,8 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "triagePromptSubmit" in html
     assert 'name="note" value=""' in html
     assert ">To Mitigate<" in html
+    assert "client = OpenAI(api_key=token)" in html
+    assert "Finding" in html
     assert "Expected internal example" in html
     assert "reviewed" in html.lower()
     assert 'id="new-scan-btn"' in html

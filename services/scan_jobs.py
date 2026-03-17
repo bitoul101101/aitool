@@ -80,6 +80,7 @@ class ScanSession:
             "provider_or_lib": finding.get("provider_or_lib", ""),
             "capability": finding.get("capability", ""),
             "description": finding.get("description", ""),
+            "snippet": finding.get("snippet", ""),
             "triage_status": finding.get("triage_status", ""),
             "triage_note": finding.get("triage_note", ""),
             "triage_by": finding.get("triage_by", ""),
