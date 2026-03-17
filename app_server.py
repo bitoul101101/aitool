@@ -1040,7 +1040,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         queue_skip   = backlog_len   # items to skip from queue (already sent)
 
         for entry in backlog:
-            self._sse_write(entry)
+            if not self._sse_write(entry):
+                return
 
         # Stream new entries, skipping any that overlap with the backlog
         while True:
@@ -1049,7 +1050,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 if queue_skip > 0:
                     queue_skip -= 1   # this entry was already in the backlog
                 else:
-                    self._sse_write(entry)
+                    if not self._sse_write(entry):
+                        break
                 if _session.state in ("done", "stopped", "error"):
                     while not _session.log_queue.empty():
                         try:
@@ -1057,7 +1059,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                             if queue_skip > 0:
                                 queue_skip -= 1
                             else:
-                                self._sse_write(e2)
+                                if not self._sse_write(e2):
+                                    return
                         except queue.Empty:
                             break
                     break
@@ -1073,10 +1076,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _sse_write(self, entry: dict):
         line = _format_log_entry(entry)
         if not line:
-            return
+            return True
         data = json.dumps(line)
-        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
-        self.wfile.flush()
+        try:
+            self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+            self.wfile.flush()
+            return True
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+            return False
 
     def _serve_report(self, filename: str):
         """Serve a file from OUTPUT_DIR by name."""

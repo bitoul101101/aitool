@@ -1856,6 +1856,21 @@ def test_request_app_shutdown_sets_exit_event_and_stops_server():
         srv._app_exit_event.clear()
 
 
+def test_sse_write_returns_false_on_client_disconnect():
+    import app_server as srv
+
+    class BrokenWriter:
+        def write(self, _data):
+            raise ConnectionAbortedError(10053, "connection aborted")
+
+        def flush(self):
+            raise AssertionError("flush should not run after write failure")
+
+    handler = type("SSEHandler", (), {"wfile": BrokenWriter()})()
+
+    assert srv._Handler._sse_write(handler, {"msg": "hello", "ts": 0, "level": "info"}) is False
+
+
 def test_run_scan_with_no_repos_completes_cleanly():
     import app_server as srv
 
