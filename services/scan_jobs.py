@@ -815,7 +815,6 @@ class ScanJobService:
             finding["delta_status"] = "new" if finding.get("_hash", "") in new_hashes else "unchanged"
         log(f"Total findings (deduped): {len(final)}", "hd")
 
-        session.scan_duration_s = int(time.time() - t_start)
         log("\nGenerating reports...", "dim")
         report_paths: Dict[str, dict] = {}
 
@@ -832,6 +831,7 @@ class ScanJobService:
                 dt_date = datetime.now().strftime("%Y%m%d")
                 dt_time = datetime.now().strftime("%H%M%S")
                 report_generated_at_utc = self._utc_now_iso()
+                elapsed_so_far = int(time.time() - t_start)
                 is_multi = len(scanned_slugs) > 1
                 label = "ALL" if is_multi else (scanned_slugs[0] if scanned_slugs else session.repo_slugs[0])
                 safe_name = f"AI_Scan_Report_{session.project_key}_{label}_{dt_date}_{dt_time}"
@@ -867,7 +867,7 @@ class ScanJobService:
                         "scan_id": session.scan_id,
                         "delta": session.delta,
                         "llm_model_info": session.llm_model_info,
-                        "scan_duration_s": session.scan_duration_s,
+                        "scan_duration_s": elapsed_so_far,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,
                         "suppressed_count": len(session.suppressed_findings),
@@ -891,7 +891,7 @@ class ScanJobService:
                         "scan_id": session.scan_id,
                         "delta": session.delta,
                         "llm_model_info": session.llm_model_info,
-                        "scan_duration_s": session.scan_duration_s,
+                        "scan_duration_s": elapsed_so_far,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,
                         "suppressed_count": len(session.suppressed_findings),
@@ -935,6 +935,7 @@ class ScanJobService:
             except Exception as exc:
                 log(f"  Report error: {exc}", "err")
 
+        session.scan_duration_s = int(time.time() - t_start)
         session.completed_at_utc = self._utc_now_iso()
         session.repo_details = {
             slug: {

@@ -146,10 +146,9 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .triage-accepted_risk{background:#fff1dc;color:#8a5b00}
 .triage-false_positive{background:#e5f3e7;color:#1f6a35}
 .triage-note{font-size:12px;color:#5f4527}
-.triage-actions{display:grid;gap:6px}
-.triage-form{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0}
+.triage-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.triage-form{display:inline-flex;gap:6px;align-items:center;margin:0}
 .triage-form.inline-only{display:inline-flex}
-.triage-form input[type="text"]{min-width:170px;flex:1 1 180px}
 .triage-form button{padding:6px 9px;font-size:12px}
 .suppressed-section{margin-top:14px}
 .suppressed-section h3{margin:0 0 8px;font-size:15px}
@@ -305,23 +304,24 @@ def render_scan_page(
             f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="reviewed">'
-            '<button type="submit" class="ghost">Reviewed</button>'
+            '<input type="hidden" name="note" value="">'
+            '<button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, \'Reviewed\')">Reviewed</button>'
             "</form>"
         )
         accepted_form = (
-            f'<form class="triage-form" method="post" action="/findings/triage">'
+            f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="accepted_risk">'
-            '<input type="text" name="note" placeholder="Accepted risk reason" required>'
-            '<button type="submit" class="alt">Accept Risk</button>'
+            '<input type="hidden" name="note" value="">'
+            '<button type="submit" class="alt" onclick="return triagePromptSubmit(this.form, \'Accept Risk\')">Accept Risk</button>'
             "</form>"
         )
         suppress_form = (
-            f'<form class="triage-form" method="post" action="/findings/triage">'
+            f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="false_positive">'
-            '<input type="text" name="note" placeholder="Suppression reason" required>'
-            '<button type="submit" class="warn">Suppress</button>'
+            '<input type="hidden" name="note" value="">'
+            '<button type="submit" class="warn" onclick="return triagePromptSubmit(this.form, \'Suppress\')">Suppress</button>'
             "</form>"
         )
         return f'<div class="triage-actions">{reviewed_form}{accepted_form}{suppress_form}</div>'
@@ -503,6 +503,18 @@ def render_scan_page(
   {running_view if (not force_selection and (running or state in ("done", "stopped") and log_text)) else selection_view}
 </section>
 <script>
+function triagePromptSubmit(form, actionLabel){{
+  const noteInput=form?.querySelector('input[name="note"]');
+  const reason=window.prompt(`${{actionLabel}} reason:`, noteInput?.value || '');
+  if(reason === null) return false;
+  const trimmed=String(reason).trim();
+  if(!trimmed){{
+    window.alert('Reason is required.');
+    return false;
+  }}
+  if(noteInput) noteInput.value=trimmed;
+  return true;
+}}
 const repoSearch=document.getElementById('repo-search');
 const repoCount=document.getElementById('repo-selection-count');
 function repoCheckboxes(){{return Array.from(document.querySelectorAll('.repo-checkbox'));}}
@@ -573,9 +585,9 @@ filterRepos();
     if(suppressed) return reset;
     if(item.triage_status==='reviewed' || item.triage_status==='accepted_risk') return `<div class="triage-actions">${{reset}}</div>`;
     return `<div class="triage-actions">`
-      + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="reviewed"><button type="submit" class="ghost">Reviewed</button></form>`
-      + `<form class="triage-form" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="accepted_risk"><input type="text" name="note" placeholder="Accepted risk reason" required><button type="submit" class="alt">Accept Risk</button></form>`
-      + `<form class="triage-form" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="false_positive"><input type="text" name="note" placeholder="Suppression reason" required><button type="submit" class="warn">Suppress</button></form>`
+      + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="reviewed"><input type="hidden" name="note" value=""><button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, 'Reviewed')">Reviewed</button></form>`
+      + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="accepted_risk"><input type="hidden" name="note" value=""><button type="submit" class="alt" onclick="return triagePromptSubmit(this.form, 'Accept Risk')">Accept Risk</button></form>`
+      + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="false_positive"><input type="hidden" name="note" value=""><button type="submit" class="warn" onclick="return triagePromptSubmit(this.form, 'Suppress')">Suppress</button></form>`
       + `</div>`;
   }}
   function renderFindingRows(items){{
