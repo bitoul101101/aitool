@@ -30,8 +30,6 @@ import queue
 import threading
 import tempfile
 import time
-import urllib.error
-import urllib.request
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -55,6 +53,13 @@ from scanner.suppressions import (
     upsert_triage,
 )
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
+from services.runtime_support import (
+    ensure_ollama_running,
+    load_llm_config as load_llm_config_file,
+    ollama_list_models,
+    ollama_ping,
+    save_llm_config as save_llm_config_file,
+)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 BITBUCKET_URL = "https://bitbucket.cognyte.local:8443"
@@ -95,17 +100,10 @@ def load_owner_map(path):
         return {}
 
 def load_llm_config() -> dict:
-    try:
-        return json.loads(Path(LLM_CFG_FILE).read_text("utf-8"))
-    except Exception:
-        return {"base_url": "http://localhost:11434",
-                "model": "qwen2.5-coder:7b-instruct"}
+    return load_llm_config_file(LLM_CFG_FILE)
 
 def save_llm_config(cfg: dict) -> None:
-    try:
-        Path(LLM_CFG_FILE).write_text(json.dumps(cfg, indent=2), "utf-8")
-    except Exception as e:
-        print(f"[WARN] Could not save LLM config: {e}")
+    save_llm_config_file(LLM_CFG_FILE, cfg)
 
 
 def _utc_now_iso() -> str:
@@ -144,61 +142,20 @@ def _git_head_commit(repo_dir: Path) -> str:
         return ""
 
 def _ollama_ping(base_url: str) -> bool:
-    try:
-        req = urllib.request.Request(base_url.rstrip("/") + "/api/tags")
-        with urllib.request.urlopen(req, timeout=3):
-            return True
-    except Exception:
-        return False
+    return ollama_ping(base_url, timeout=3)
 
 def _ollama_list_models(base_url: str) -> list:
-    try:
-        req = urllib.request.Request(base_url.rstrip("/") + "/api/tags")
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read())
-            return [m.get("name", "") for m in data.get("models", [])]
-    except Exception:
-        return []
+    return ollama_list_models(base_url, timeout=5)
 
 
 OLLAMA_START_TIMEOUT = 15   # seconds to wait for ollama serve to become ready
 
 
 def _ollama_ensure_running(base_url: str) -> dict:
-    """
-    Ensure Ollama is reachable at base_url.
-    If not, attempt to start it with `ollama serve` and wait up to
-    OLLAMA_START_TIMEOUT seconds for it to become ready.
-    Returns {"ok": True} or {"ok": False, "error": "<reason>"}.
-    """
-    import subprocess as _sp
-
-    if _ollama_ping(base_url):
-        return {"ok": True, "status": "already_running"}
-
-    # Try to start
-    try:
-        _sp.Popen(
-            ["ollama", "serve"],
-            stdout=_sp.DEVNULL,
-            stderr=_sp.DEVNULL,
-            creationflags=_sp.CREATE_NO_WINDOW if os.name == "nt" else 0,
-        )
-    except FileNotFoundError:
-        return {"ok": False,
-                "error": "`ollama` not found in PATH - install from https://ollama.com"}
-    except Exception as e:
-        return {"ok": False, "error": f"Failed to start ollama: {e}"}
-
-    # Poll until ready or timeout
-    deadline = time.time() + OLLAMA_START_TIMEOUT
-    while time.time() < deadline:
-        time.sleep(1)
-        if _ollama_ping(base_url):
-            return {"ok": True, "status": "started"}
-
-    return {"ok": False,
-            "error": f"Ollama did not become ready within {OLLAMA_START_TIMEOUT}s"}
+    ok, status = ensure_ollama_running(base_url, timeout_s=OLLAMA_START_TIMEOUT)
+    if ok:
+        return {"ok": True, "status": status}
+    return {"ok": False, "error": status}
 
 
 # ── Global app state ──────────────────────────────────────────────────────────

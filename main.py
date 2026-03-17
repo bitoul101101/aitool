@@ -26,6 +26,13 @@ from reports.html_report import HTMLReporter
 from reports.delta import build_delta_meta
 from reports.report_server import open_report, stop_all
 from scanner.pat_store import save_pat, load_pat, delete_pat, backend_name, is_available
+from services.runtime_support import (
+    ensure_ollama_running,
+    load_llm_config as load_llm_config_file,
+    ollama_list_models,
+    ollama_ping,
+    save_llm_config as save_llm_config_file,
+)
 
 # ── Config ────────────────────────────────────────────────────────
 BITBUCKET_URL    = "https://bitbucket.cognyte.local:8443"
@@ -38,40 +45,20 @@ OWNER_MAP_FILE   = "owner_map.json"
 # ── LLM reviewer config (persisted to JSON) ──────────────────────
 # LLM review runs on every scan — it is not optional.
 LLM_CONFIG_FILE     = "ai_scanner_llm_config.json"
-_LLM_DEFAULTS       = {
-    "base_url": "http://localhost:11434",
-    "model":    "qwen2.5-coder:7b-instruct",
-}
 OLLAMA_START_TIMEOUT = 12   # seconds to wait for ollama serve to become ready
 
 def load_llm_config() -> dict:
     """Load LLM settings from JSON file, falling back to defaults."""
-    try:
-        data = json.loads(Path(LLM_CONFIG_FILE).read_text(encoding="utf-8"))
-        cfg = dict(_LLM_DEFAULTS)
-        cfg.update({k: v for k, v in data.items() if k in _LLM_DEFAULTS})
-        return cfg
-    except Exception:
-        return dict(_LLM_DEFAULTS)
+    return load_llm_config_file(LLM_CONFIG_FILE)
 
 def save_llm_config(cfg: dict) -> None:
     """Persist LLM settings to JSON file."""
-    try:
-        Path(LLM_CONFIG_FILE).write_text(
-            json.dumps(cfg, indent=2), encoding="utf-8")
-    except Exception as e:
-        print(f"[WARN] Could not save LLM config: {e}")
+    save_llm_config_file(LLM_CONFIG_FILE, cfg)
 
 
 def _ollama_ping(base_url: str) -> bool:
     """Return True if Ollama is reachable at base_url."""
-    import urllib.request, urllib.error
-    try:
-        req = urllib.request.Request(base_url.rstrip("/") + "/api/tags")
-        with urllib.request.urlopen(req, timeout=4):
-            return True
-    except Exception:
-        return False
+    return ollama_ping(base_url, timeout=4)
 
 
 def _ollama_ensure_running(base_url: str, log_fn=None) -> bool:
@@ -80,51 +67,17 @@ def _ollama_ensure_running(base_url: str, log_fn=None) -> bool:
     Waits up to OLLAMA_START_TIMEOUT seconds for it to become ready.
     Returns True when reachable, False if start failed.
     """
-    if _ollama_ping(base_url):
-        return True
-    if log_fn:
-        log_fn("  [LLM] Ollama not running — starting `ollama serve`...")
-    try:
-        subprocess.Popen(
-            ["ollama", "serve"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            # Detach from parent so it survives if this process exits
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-        )
-    except FileNotFoundError:
-        if log_fn:
-            log_fn("  [LLM] `ollama` not found in PATH — install from https://ollama.com")
-        return False
-    except Exception as e:
-        if log_fn:
-            log_fn(f"  [LLM] Failed to start ollama: {e}")
-        return False
-
-    # Poll until ready or timeout
-    import time
-    deadline = time.time() + OLLAMA_START_TIMEOUT
-    while time.time() < deadline:
-        time.sleep(1)
-        if _ollama_ping(base_url):
-            if log_fn:
-                log_fn("  [LLM] Ollama started ✓")
-            return True
-    if log_fn:
-        log_fn("  [LLM] Ollama did not become ready in time")
-    return False
+    ok, _status = ensure_ollama_running(
+        base_url,
+        timeout_s=OLLAMA_START_TIMEOUT,
+        log_fn=log_fn,
+    )
+    return ok
 
 
 def _ollama_list_models(base_url: str) -> list:
     """Return list of model name strings from Ollama /api/tags."""
-    import urllib.request, json as _json
-    try:
-        req = urllib.request.Request(base_url.rstrip("/") + "/api/tags")
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = _json.loads(resp.read())
-            return sorted(m.get("name", "") for m in data.get("models", []) if m.get("name"))
-    except Exception:
-        return []
+    return ollama_list_models(base_url, timeout=6)
 
 # ── Palette ───────────────────────────────────────────────────────
 BG      = "#1e2130"
