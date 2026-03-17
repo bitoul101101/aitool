@@ -182,7 +182,8 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True) -
     if show_nav:
         nav = (
             '<div class="header-nav">'
-            f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan</a>'
+            f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
+            f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan Results</a>'
             f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
             f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
             '</div>'
@@ -545,7 +546,7 @@ filterRepos();
   }}, 3000);
 }})();
 </script>"""
-    return _layout(title="Scan", body=body, active="scan")
+    return _layout(title="Scan", body=body, active="new_scan" if force_selection else "scan")
 
 
 def render_history_page(*, history: list[dict], notice: str = "", error: str = "") -> bytes:
