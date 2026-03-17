@@ -1275,7 +1275,7 @@ def test_delete_history_removes_sqlite_record():
         srv._invalidate_history_cache()
 
 
-def test_api_finding_suppress_moves_finding_and_invalidates_reports():
+def test_api_finding_suppress_moves_finding_and_preserves_reports():
     import app_server as srv
 
     class DummyHandler:
@@ -1354,9 +1354,10 @@ def test_api_finding_suppress_moves_finding_and_invalidates_reports():
         assert handler.payload[1]["ok"] is True
         assert srv._session.findings == []
         assert len(srv._session.suppressed_findings) == 1
-        assert srv._session.report_paths == {}
-        assert not html_path.exists()
-        assert not csv_path.exists()
+        assert srv._session.report_paths["__all__"]["html_name"] == html_path.name
+        assert srv._session.report_paths["__all__"]["csv_name"] == csv_path.name
+        assert html_path.exists()
+        assert csv_path.exists()
         assert any(rec["hash"] == "hash-1" for rec in list_suppressions(srv.SUPPRESSIONS_FILE))
     finally:
         srv.OUTPUT_DIR = orig_out

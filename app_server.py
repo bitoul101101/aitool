@@ -566,7 +566,6 @@ def _invalidate_session_reports() -> None:
 
 def _persist_session_state() -> None:
     _rebuild_session_per_repo()
-    _invalidate_session_reports()
     if _session.scan_id:
         _save_history_record(_session, _session.findings)
 
