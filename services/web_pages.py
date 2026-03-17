@@ -159,6 +159,7 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
+.table-shell tbody tr:hover{background:#f4eadb}
 .history-time{font-size:11px;color:#7a5d3e}
 .icon-link img{display:block;width:34px;height:34px}
 .filters-row{margin-bottom:12px}
@@ -552,8 +553,58 @@ filterRepos();
   const iconEl=document.getElementById('scan-state-icon');
   const textEl=document.getElementById('scan-state-text');
   const findingsBody=document.getElementById('current-findings-body');
+  const suppressedBody=document.getElementById('suppressed-findings-body');
   const timelineEl=document.getElementById('phase-timeline');
   if(!logEl) return;
+  function esc(value){{
+    return String(value ?? '').replace(/[&<>\"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[ch]));
+  }}
+  function triageMeta(item){{
+    const bits=[];
+    if(item.triage_status) bits.push(`<span class="triage-state triage-${{esc(item.triage_status)}}">${{esc(String(item.triage_status).replaceAll('_',' '))}}</span>`);
+    const info=[item.marked_by||'', item.marked_at||''].filter(Boolean).join(' · ');
+    if(info) bits.push(`<span class="finding-sub">${{esc(info)}}</span>`);
+    if(item.reason) bits.push(`<div class="triage-note">${{esc(item.reason)}}</div>`);
+    return bits.join('');
+  }}
+  function triageActions(item, suppressed){{
+    const hash=esc(item.hash||'');
+    const reset=`<form class="triage-form inline-only" method="post" action="/findings/reset"><input type="hidden" name="hash" value="${{hash}}"><button type="submit" class="ghost">Reset</button></form>`;
+    if(suppressed) return reset;
+    if(item.triage_status==='reviewed' || item.triage_status==='accepted_risk') return `<div class="triage-actions">${{reset}}</div>`;
+    return `<div class="triage-actions">`
+      + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="reviewed"><button type="submit" class="ghost">Reviewed</button></form>`
+      + `<form class="triage-form" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="accepted_risk"><input type="text" name="note" placeholder="Accepted risk reason" required><button type="submit" class="alt">Accept Risk</button></form>`
+      + `<form class="triage-form" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="false_positive"><input type="text" name="note" placeholder="Suppression reason" required><button type="submit" class="warn">Suppress</button></form>`
+      + `</div>`;
+  }}
+  function renderFindingRows(items){{
+    if(!items || !items.length) return '<tr><td colspan="5">No current findings.</td></tr>';
+    return items.slice(0,20).map(item => {{
+      const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
+      return `<tr>`
+        + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
+        + `<td><div class="finding-meta"><div>${{location}}</div>${{triageMeta(item)}}</div></td>`
+        + `<td>${{esc(item.severity_label||item.severity||'')}}</td>`
+        + `<td><div class="finding-meta"><div>${{esc(item.capability||'')}}</div><div class="finding-sub">${{esc(item.delta_status||'')}}</div></div></td>`
+        + `<td>${{triageActions(item, false)}}</td>`
+        + `</tr>`;
+    }}).join('');
+  }}
+  function renderSuppressedRows(items){{
+    if(!items || !items.length) return '<tr><td colspan="5">No suppressed findings.</td></tr>';
+    return items.slice(0,30).map(item => {{
+      const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
+      const status=(item.triage_status||'false_positive').replaceAll('_',' ');
+      return `<tr>`
+        + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
+        + `<td><div class="finding-meta"><div>${{location}}</div>${{triageMeta(item)}}</div></td>`
+        + `<td>${{esc(item.severity_label||item.severity||'')}}</td>`
+        + `<td><span class="triage-state triage-${{esc(item.triage_status||'false_positive')}}">${{esc(status)}}</span></td>`
+        + `<td>${{triageActions(item, true)}}</td>`
+        + `</tr>`;
+    }}).join('');
+  }}
   function timelineRows(items){{
     if(!items || !items.length) return '<div class="muted">Timeline will appear after the scan starts.</div>';
     return items.map(item=>`<div class="timeline-row"><span class="state-icon ${{item.state||'pending'}}"></span><span class="timeline-name">${{item.name||''}}</span><strong>${{item.duration||'—'}}</strong></div>`).join('');
@@ -600,6 +651,8 @@ filterRepos();
       const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
       const data=await res.json();
       const state=(data.state||'').toLowerCase();
+      if(findingsBody) findingsBody.innerHTML=renderFindingRows(data.finding_details||[]);
+      if(suppressedBody) suppressedBody.innerHTML=renderSuppressedRows(data.suppressed_details||[]);
       if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[]);
       reportActions(data);
       if(state==='running') return;

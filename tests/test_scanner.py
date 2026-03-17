@@ -1055,6 +1055,7 @@ def test_history_page_is_server_rendered():
     assert "Delete Selected Repos" in html
     assert 'id="history-search"' in html
     assert "/reports/r.html" in html
+    assert ".table-shell tbody tr:hover" in html
 
 
 def test_settings_page_is_server_rendered():
