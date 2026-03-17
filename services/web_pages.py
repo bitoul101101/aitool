@@ -28,6 +28,16 @@ def _fmt_duration(seconds: object) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def _fmt_triage_time(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%y %H:%M")
+    except Exception:
+        return str(value)
+
+
 def _icon_uri(label: str, color: str) -> str:
     svg = f"""
 <svg xmlns='http://www.w3.org/2000/svg' width='54' height='54' viewBox='0 0 54 54'>
@@ -117,6 +127,22 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row strong{justify-self:end}
 .findings-panel{margin-top:12px}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
+.finding-meta{display:grid;gap:4px}
+.finding-main{font-weight:600}
+.finding-sub{font-size:12px;color:#705333}
+.triage-state{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;background:#efe1cf;color:#5d3b15}
+.triage-reviewed{background:#e3efff;color:#164a95}
+.triage-accepted_risk{background:#fff1dc;color:#8a5b00}
+.triage-false_positive{background:#e5f3e7;color:#1f6a35}
+.triage-note{font-size:12px;color:#5f4527}
+.triage-actions{display:grid;gap:6px}
+.triage-form{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0}
+.triage-form.inline-only{display:inline-flex}
+.triage-form input[type="text"]{min-width:170px;flex:1 1 180px}
+.triage-form button{padding:6px 9px;font-size:12px}
+.suppressed-section{margin-top:14px}
+.suppressed-section h3{margin:0 0 8px;font-size:15px}
+.suppressed-wrap{max-height:220px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .report-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0}
 button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
@@ -214,6 +240,95 @@ def render_scan_page(
     notice: str = "",
     error: str = "",
 ) -> bytes:
+    def triage_badge(status_name: str) -> str:
+        if not status_name:
+            return ""
+        label = status_name.replace("_", " ")
+        return f'<span class="triage-state triage-{_esc(status_name)}">{_esc(label)}</span>'
+
+    def triage_meta(detail: dict) -> str:
+        status_name = detail.get("triage_status", "")
+        reason = detail.get("reason", "")
+        marked_by = detail.get("marked_by", "")
+        marked_at = _fmt_triage_time(detail.get("marked_at", ""))
+        bits = []
+        if status_name:
+            bits.append(triage_badge(status_name))
+        info = " · ".join(part for part in (marked_by, marked_at) if part)
+        if info:
+            bits.append(f'<span class="finding-sub">{_esc(info)}</span>')
+        if reason:
+            bits.append(f'<div class="triage-note">{_esc(reason)}</div>')
+        return "".join(bits)
+
+    def triage_actions(detail: dict, *, suppressed: bool = False) -> str:
+        hash_ = detail.get("hash", "")
+        if not hash_:
+            return ""
+        reset_form = (
+            f'<form class="triage-form inline-only" method="post" action="/findings/reset">'
+            f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
+            '<button type="submit" class="ghost">Reset</button>'
+            "</form>"
+        )
+        if suppressed:
+            return reset_form
+        status_name = detail.get("triage_status", "")
+        if status_name in {"reviewed", "accepted_risk"}:
+            return f'<div class="triage-actions">{reset_form}</div>'
+        reviewed_form = (
+            f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
+            f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
+            '<input type="hidden" name="status" value="reviewed">'
+            '<button type="submit" class="ghost">Reviewed</button>'
+            "</form>"
+        )
+        accepted_form = (
+            f'<form class="triage-form" method="post" action="/findings/triage">'
+            f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
+            '<input type="hidden" name="status" value="accepted_risk">'
+            '<input type="text" name="note" placeholder="Accepted risk reason" required>'
+            '<button type="submit" class="alt">Accept Risk</button>'
+            "</form>"
+        )
+        suppress_form = (
+            f'<form class="triage-form" method="post" action="/findings/triage">'
+            f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
+            '<input type="hidden" name="status" value="false_positive">'
+            '<input type="text" name="note" placeholder="Suppression reason" required>'
+            '<button type="submit" class="warn">Suppress</button>'
+            "</form>"
+        )
+        return f'<div class="triage-actions">{reviewed_form}{accepted_form}{suppress_form}</div>'
+
+    def finding_row(detail: dict) -> str:
+        location = f'{detail.get("file", "")}:{detail.get("line", "")}'
+        return (
+            "<tr>"
+            f'<td><div class="finding-meta"><div class="finding-main">{_esc(detail.get("repo", ""))}</div>'
+            f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div></div></td>'
+            f'<td><div class="finding-meta"><div>{_esc(location)}</div>{triage_meta(detail)}</div></td>'
+            f"<td>{_esc(detail.get('severity_label', detail.get('severity', '')))}</td>"
+            f'<td><div class="finding-meta"><div>{_esc(detail.get("capability", ""))}</div>'
+            f'<div class="finding-sub">{_esc(detail.get("delta_status", ""))}</div></div></td>'
+            f"<td>{triage_actions(detail)}</td>"
+            "</tr>"
+        )
+
+    def suppressed_row(detail: dict) -> str:
+        location = f'{detail.get("file", "")}:{detail.get("line", "")}'
+        status_name = detail.get("triage_status", "false_positive") or "false_positive"
+        return (
+            "<tr>"
+            f'<td><div class="finding-meta"><div class="finding-main">{_esc(detail.get("repo", ""))}</div>'
+            f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div></div></td>'
+            f'<td><div class="finding-meta"><div>{_esc(location)}</div>{triage_meta(detail)}</div></td>'
+            f"<td>{_esc(detail.get('severity_label', detail.get('severity', '')))}</td>"
+            f"<td>{triage_badge(status_name)}</td>"
+            f"<td>{triage_actions(detail, suppressed=True)}</td>"
+            "</tr>"
+        )
+
     state = str(status.get("state", "")).lower()
     running = state == "running"
     scan_complete = state in {"done", "stopped", "error"}
@@ -234,10 +349,9 @@ def render_scan_page(
         for model in models
     )
     findings = status.get("finding_details", [])[:20]
-    findings_rows = "".join(
-        f"<tr><td>{_esc(f.get('repo',''))}</td><td>{_esc(f.get('file',''))}:{_esc(f.get('line',''))}</td><td>{_esc(f.get('severity_label', f.get('severity','')))}</td><td>{_esc(f.get('capability',''))}</td></tr>"
-        for f in findings
-    ) or '<tr><td colspan="4">No current findings.</td></tr>'
+    suppressed = status.get("suppressed_details", [])[:30]
+    findings_rows = "".join(finding_row(f) for f in findings) or '<tr><td colspan="5">No current findings.</td></tr>'
+    suppressed_rows = "".join(suppressed_row(f) for f in suppressed) or '<tr><td colspan="5">No suppressed findings.</td></tr>'
     normalized_timeline = []
     for item in phase_timeline:
         if isinstance(item, dict):
@@ -320,8 +434,17 @@ def render_scan_page(
       <h2 style="margin:0 0 8px;font-size:16px">Current Findings</h2>
       <div class="finding-table-wrap">
         <table>
-          <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Capability</th></tr></thead>
+          <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Capability</th><th>Actions</th></tr></thead>
           <tbody id="current-findings-body">{findings_rows}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="suppressed-section">
+      <h3>Suppressed / Triage</h3>
+      <div class="suppressed-wrap">
+        <table>
+          <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="suppressed-findings-body">{suppressed_rows}</tbody>
         </table>
       </div>
     </div>
@@ -356,10 +479,6 @@ filterRepos();
   const findingsBody=document.getElementById('current-findings-body');
   const timelineEl=document.getElementById('phase-timeline');
   if(!logEl) return;
-  function findingRows(items){{
-    if(!items || !items.length) return '<tr><td colspan="4">No current findings.</td></tr>';
-    return items.slice(0,20).map(f=>`<tr><td>${{f.repo||''}}</td><td>${{f.file||''}}:${{f.line||''}}</td><td>${{f.severity_label||f.severity||''}}</td><td>${{f.capability||''}}</td></tr>`).join('');
-  }}
   function timelineRows(items){{
     if(!items || !items.length) return '<div class="muted">Timeline will appear after the scan starts.</div>';
     return items.map(item=>`<div class="timeline-row"><span class="state-icon ${{item.state||'pending'}}"></span><span class="timeline-name">${{item.name||''}}</span><strong>${{item.duration||'—'}}</strong></div>`).join('');
@@ -400,7 +519,6 @@ filterRepos();
       const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
       const data=await res.json();
       const state=(data.state||'').toLowerCase();
-      if(findingsBody) findingsBody.innerHTML=findingRows(data.finding_details||[]);
       if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[]);
       reportActions(data);
       if(state==='running') return;

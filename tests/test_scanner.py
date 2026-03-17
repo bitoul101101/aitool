@@ -718,11 +718,22 @@ def test_login_page_is_server_rendered_and_does_not_embed_saved_pat():
     assert 'action="/login"' in html
 
 
-def test_scan_page_contains_server_rendered_findings_forms():
+def test_scan_page_selection_view_stays_pre_scan():
     import app_server as srv
 
     session = srv.ScanSession()
     session.findings = [
+        {
+            "_hash": "hash-0",
+            "repo": "repo1",
+            "file": "main.py",
+            "line": 7,
+            "severity": 1,
+            "severity_label": "Critical",
+            "capability": "API Key",
+            "policy_status": "critical",
+            "description": "Unsuppressed finding",
+        },
         {
             "_hash": "hash-1",
             "repo": "repo1",
@@ -752,6 +763,78 @@ def test_scan_page_contains_server_rendered_findings_forms():
     assert "Start Scan" in html
     assert "repo1" in html
     assert "Current Findings" not in html
+
+
+def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view():
+    import app_server as srv
+
+    session = srv.ScanSession()
+    session.state = "done"
+    session.findings = [
+        {
+            "_hash": "hash-0",
+            "repo": "repo1",
+            "file": "main.py",
+            "line": 7,
+            "severity": 1,
+            "severity_label": "Critical",
+            "capability": "API Key",
+            "policy_status": "critical",
+            "description": "Unsuppressed finding",
+        },
+        {
+            "_hash": "hash-1",
+            "repo": "repo1",
+            "file": "app.py",
+            "line": 10,
+            "severity": 2,
+            "severity_label": "High",
+            "capability": "OpenAI",
+            "policy_status": "fail",
+            "description": "Example finding",
+            "triage_status": "reviewed",
+            "triage_by": "analyst",
+            "triage_at": "2026-03-17T15:40:00Z",
+            "triage_note": "",
+        }
+    ]
+    session.suppressed_findings = [
+        {
+            "_hash": "hash-2",
+            "repo": "repo1",
+            "file": "docs.md",
+            "line": 3,
+            "severity": 4,
+            "severity_label": "Low",
+            "capability": "Example",
+            "description": "Documentation example",
+            "triage_status": "false_positive",
+            "triage_note": "Expected internal example",
+            "triage_by": "analyst",
+            "triage_at": "2026-03-17T15:41:00Z",
+        }
+    ]
+
+    html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}],
+        selected_repos=["repo1"],
+        status=session.to_status(),
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["m1"],
+        log_text="line 1\nline 2",
+        phase_timeline=[("scan", "00:02")],
+    ).decode("utf-8")
+
+    assert "Current Findings" in html
+    assert "Suppressed / Triage" in html
+    assert 'action="/findings/triage"' in html
+    assert 'action="/findings/reset"' in html
+    assert "Accepted risk reason" in html
+    assert "Suppression reason" in html
+    assert "Expected internal example" in html
+    assert "reviewed" in html.lower()
 
 
 def test_scan_session_log_normalizes_blank_lines():
