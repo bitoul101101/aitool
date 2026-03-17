@@ -2,6 +2,7 @@
 Bitbucket client: list repos, get clone URLs, shallow clone, cleanup.
 """
 
+import base64
 import subprocess
 import shutil
 import stat
@@ -186,14 +187,28 @@ class BitbucketClient:
         data = self._get(url)
         for link in data.get("links", {}).get("clone", []):
             if link.get("name", "").lower() in (protocol, "https", "http"):
-                href = link["href"]
-                # Inject credentials — Bitbucket Server uses username:token
-                if self.username and self.token:
-                    href = href.replace("://", f"://{self.username}:{self.token}@", 1)
-                elif self.username and self.password:
-                    href = href.replace("://", f"://{self.username}:{self.password}@", 1)
-                return href
+                return link["href"]
         return None
+
+    def build_git_auth_env(self) -> dict[str, str]:
+        """
+        Return git environment variables that inject HTTP auth without
+        exposing credentials in the clone URL or process argv.
+        """
+        auth_value = ""
+        if self.username and self.token:
+            creds = f"{self.username}:{self.token}".encode("utf-8")
+            auth_value = "Authorization: Basic " + base64.b64encode(creds).decode("ascii")
+        elif self.username and self.password:
+            creds = f"{self.username}:{self.password}".encode("utf-8")
+            auth_value = "Authorization: Basic " + base64.b64encode(creds).decode("ascii")
+        elif self.token:
+            auth_value = f"Authorization: Bearer {self.token}"
+
+        if not auth_value:
+            return {}
+
+        return _git_config_env("http.extraHeader", auth_value)
 
     def get_repo_info(self, project_key: str, repo_slug: str) -> dict:
         """Get repo metadata."""
@@ -286,10 +301,22 @@ class BitbucketClient:
         return projects
 
 
+def _git_config_env(key: str, value: str) -> dict[str, str]:
+    """
+    Encode transient git config via environment variables so secrets do not
+    appear in command-line arguments.
+    """
+    return {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": key,
+        "GIT_CONFIG_VALUE_0": value,
+    }
+
+
 def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
                   branch: str = None, verbose: bool = False,
                   stop_event=None, proc_holder: list = None,
-                  proc_lock=None) -> None:
+                  proc_lock=None, git_env: dict | None = None) -> None:
     """
     Shallow clone a repo to dest.
     If branch is given, clones that specific branch (use for the default/main branch).
@@ -325,6 +352,8 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
     env["GIT_TERMINAL_PROMPT"]  = "0"
     env["GIT_SSL_NO_VERIFY"]    = "1"
     env["GIT_LFS_SKIP_SMUDGE"]  = "1"   # skip LFS blob downloads entirely
+    if git_env:
+        env.update(git_env)
 
     proc = subprocess.Popen(
         cmd,

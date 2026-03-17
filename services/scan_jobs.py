@@ -418,18 +418,33 @@ class ScanJobService:
         snapshot = self._build_record(session, findings if findings is not None else session.findings)
         self._upsert_job_record(snapshot)
 
+    @staticmethod
+    def _history_sort_key(record: dict) -> tuple[str, str]:
+        return (
+            str(record.get("completed_at_utc") or record.get("started_at_utc") or ""),
+            str(record.get("scan_id") or ""),
+        )
+
     def load_history(self) -> list:
+        records_by_scan_id: dict[str, dict] = {
+            str(record.get("scan_id")): record
+            for record in self._read_legacy_history()
+            if record.get("scan_id")
+        }
         try:
             self._ensure_db()
             with self._connect() as conn:
                 rows = conn.execute(
                     "SELECT record_json FROM scan_jobs ORDER BY updated_at ASC, scan_id ASC"
                 ).fetchall()
-            if rows:
-                return [json.loads(row["record_json"]) for row in rows]
+            for row in rows:
+                record = json.loads(row["record_json"])
+                scan_id = str(record.get("scan_id") or "")
+                if scan_id:
+                    records_by_scan_id[scan_id] = record
         except Exception:
             pass
-        return self._read_legacy_history()
+        return sorted(records_by_scan_id.values(), key=self._history_sort_key)
 
     def get_log_text(self, scan_id: str) -> str:
         try:
@@ -585,6 +600,7 @@ class ScanJobService:
         log("=" * 58, "dim")
 
         repo_meta: Dict[str, dict] = {}
+        git_env = client.build_git_auth_env() if client is not None else {}
         for slug in session.repo_slugs:
             if stop.is_set():
                 break
@@ -635,6 +651,7 @@ class ScanJobService:
                     stop_event=stop,
                     proc_holder=session.proc_holder,
                     proc_lock=session.proc_lock,
+                    git_env=git_env,
                 )
                 meta["commit"] = self._git_head_commit(clone_dir)
             except RuntimeError as exc:

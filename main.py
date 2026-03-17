@@ -1046,6 +1046,7 @@ class ScanWindow:
         # ── L: Parallel clone + scan ──────────────────────────────
         # Prefetch metadata for all repos (sequential — fast API calls)
         repo_meta = {}
+        git_env = self.client.build_git_auth_env()
         for slug in self.repo_slugs:
             if self._stop_event.is_set():
                 break
@@ -1092,7 +1093,8 @@ class ScanWindow:
                               branch=branch, verbose=False,
                               stop_event=self._stop_event,
                               proc_holder=self._proc_holder,
-                              proc_lock=self._proc_lock)
+                              proc_lock=self._proc_lock,
+                              git_env=git_env)
             except RuntimeError as e:
                 return slug, None, owner, 0, f"clone failed: {e}"
             except Exception as e:

@@ -277,6 +277,29 @@ def _delete_history(scan_ids: List[str]) -> None:
     _scan_service.delete_history(scan_ids)
 
 
+def _is_within_roots(path: Path, roots: List[Path]) -> bool:
+    try:
+        resolved = path.resolve()
+    except Exception:
+        return False
+    for root in roots:
+        try:
+            if resolved.is_relative_to(root.resolve()):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _delete_managed_history_file(path_str: str, *, roots: List[Path]) -> str | None:
+    path = Path(path_str)
+    if not _is_within_roots(path, roots):
+        return f"refused to delete unmanaged path: {path}"
+    if path.exists():
+        path.unlink()
+    return None
+
+
 def _triage_by_hash() -> Dict[str, dict]:
     return triage_by_hash(SUPPRESSIONS_FILE)
 
@@ -663,6 +686,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         hist = _load_history()
         deleted, errors = [], []
+        managed_roots = [Path(OUTPUT_DIR).resolve(), Path(LOG_DIR).resolve()]
 
         for sid in scan_ids:
             # Find matching record
@@ -677,18 +701,18 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 fpath = rp.get(key, "")
                 if fpath:
                     try:
-                        p = Path(fpath)
-                        if p.exists():
-                            p.unlink()
+                        err = _delete_managed_history_file(fpath, roots=managed_roots)
+                        if err:
+                            errors.append(f"{sid} {key}: {err}")
                     except Exception as e:
                         errors.append(f"{sid} {key}: {e}")
 
             log_file = rec.get("log_file", "")
             if log_file:
                 try:
-                    p = Path(log_file)
-                    if p.exists():
-                        p.unlink()
+                    err = _delete_managed_history_file(log_file, roots=managed_roots)
+                    if err:
+                        errors.append(f"{sid} log: {err}")
                 except Exception as e:
                     errors.append(f"{sid} log: {e}")
 

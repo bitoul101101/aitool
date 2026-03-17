@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+
+output/*.db
+output/scan_history.json
+output/logs/
+
+logs/*.log

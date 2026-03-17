@@ -8,6 +8,7 @@ import os
 import subprocess
 import tempfile
 import json
+import base64
 from pathlib import Path
 
 # Add project root to path
@@ -1110,6 +1111,130 @@ def test_shallow_clone_cleans_partial_destination_on_failure():
             pass
 
     assert not dest.exists(), "Partial clone directory should be cleaned up after failure"
+
+
+def test_get_clone_url_does_not_embed_credentials():
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient("https://bitbucket.example", token="pat-123", username="alice")
+    client._get = lambda *_args, **_kwargs: {
+        "links": {
+            "clone": [
+                {"name": "http", "href": "https://bitbucket.example/scm/proj/repo.git"}
+            ]
+        }
+    }
+
+    clone_url = client.get_clone_url("PROJ", "repo")
+
+    assert clone_url == "https://bitbucket.example/scm/proj/repo.git"
+    assert "pat-123" not in clone_url
+    assert "alice@" not in clone_url
+
+
+def test_build_git_auth_env_uses_header_not_url():
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient("https://bitbucket.example", token="pat-123", username="alice")
+
+    env = client.build_git_auth_env()
+
+    expected = base64.b64encode(b"alice:pat-123").decode("ascii")
+    assert env["GIT_CONFIG_KEY_0"] == "http.extraHeader"
+    assert env["GIT_CONFIG_VALUE_0"] == f"Authorization: Basic {expected}"
+
+
+def test_load_history_merges_sqlite_and_legacy_records():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(d / "logs")
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv._invalidate_history_cache()
+
+    try:
+        legacy_record = {
+            "scan_id": "20250315_000001",
+            "project": "LEGACY",
+            "state": "done",
+            "reports": {},
+        }
+        Path(srv.HISTORY_FILE).write_text(json.dumps([legacy_record]), encoding="utf-8")
+
+        session = srv.ScanSession()
+        session.scan_id = "20250316_000002"
+        session.project_key = "DB"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.llm_model = "test-model"
+        session.llm_model_info = {"name": "test-model"}
+        srv._save_history_record(session, [])
+
+        history = srv._load_history()
+
+        assert {r["scan_id"] for r in history} == {"20250315_000001", "20250316_000002"}
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv._invalidate_history_cache()
+
+
+def test_api_history_delete_refuses_unmanaged_paths():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    d = Path(tempfile.mkdtemp())
+    outside = Path(tempfile.mkdtemp()) / "outside-report.html"
+    outside.write_text("do not delete", encoding="utf-8")
+
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(d / "logs")
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv._invalidate_history_cache()
+
+    try:
+        handler = DummyHandler()
+        record = {
+            "scan_id": "20250317_000003",
+            "reports": {"__all__": {"html": str(outside)}},
+            "log_file": "",
+        }
+        with patch.object(srv, "_load_history", return_value=[record]), patch.object(srv, "_delete_history") as delete_mock:
+            srv._Handler._api_history_delete(handler, {"scan_ids": ["20250317_000003"]})
+
+        assert handler.payload[0] == 200
+        assert outside.exists()
+        assert "refused to delete unmanaged path" in handler.payload[1]["errors"][0]
+        delete_mock.assert_called_once_with(["20250317_000003"])
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv._invalidate_history_cache()
 
 
 def test_stop_active_scan_kills_processes_and_marks_stopped():
