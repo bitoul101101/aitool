@@ -677,25 +677,18 @@ def test_atomic_history_write():
         srv._invalidate_history_cache()
 
 
-def test_scan_page_is_server_rendered_and_does_not_embed_saved_pat():
+def test_login_page_is_server_rendered_and_does_not_embed_saved_pat():
     import app_server as srv
 
     with patch.object(srv, "load_pat", return_value="secret-token-123"):
-        html = srv.render_scan_page(
+        html = srv.render_login_page(
             bitbucket_url=srv.BITBUCKET_URL,
-            connected_owner="Security Engineer",
             has_saved_pat=True,
-            projects=[],
-            selected_project="",
-            repos=[],
-            selected_repos=[],
-            status=srv._session.to_status(),
-            llm_cfg=srv.load_llm_config(),
         ).decode("utf-8")
 
     assert "secret-token-123" not in html
     assert "Saved token available: Yes" in html
-    assert 'action="/connect"' in html
+    assert 'action="/login"' in html
 
 
 def test_scan_page_contains_server_rendered_findings_forms():
@@ -716,19 +709,19 @@ def test_scan_page_contains_server_rendered_findings_forms():
         }
     ]
     html = srv.render_scan_page(
-        bitbucket_url=srv.BITBUCKET_URL,
         connected_owner="Security Engineer",
-        has_saved_pat=False,
-        projects=[],
-        selected_project="",
-        repos=[],
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}, {"slug": "repo2"}],
         selected_repos=[],
         status=session.to_status(),
         llm_cfg=srv.load_llm_config(),
+        llm_models=["m1", "m2"],
     ).decode("utf-8")
 
-    assert 'action="/findings/triage"' in html
-    assert 'action="/findings/reset"' in html
+    assert 'id="repo-search"' in html
+    assert 'id="llm-model-select"' in html
+    assert "Refresh Models" in html
     assert "Example finding" in html
 
 
@@ -742,9 +735,13 @@ def test_history_page_is_server_rendered():
                 "project_key": "COGI",
                 "repo_slugs": ["repo1"],
                 "state": "done",
-                "finding_total": 3,
+                "total": 3,
                 "suppressed_total": 1,
-                "delta": {"new_count": 2, "fixed_count": 1},
+                "critical_prod": 1,
+                "high_prod": 2,
+                "llm_model": "m",
+                "duration_s": 14,
+                "started_at_utc": "2026-03-17T12:00:00Z",
                 "reports": {"__all__": {"html_name": "r.html", "csv_name": "r.csv"}},
                 "log_file": "x.log",
             }
@@ -752,8 +749,9 @@ def test_history_page_is_server_rendered():
     ).decode("utf-8")
 
     assert 'action="/history/delete"' in html
+    assert "Delete Selected Repos" in html
+    assert 'id="history-search"' in html
     assert "/reports/r.html" in html
-    assert ">COGI<" in html
 
 
 def test_settings_page_is_server_rendered():
@@ -766,7 +764,6 @@ def test_settings_page_is_server_rendered():
     ).decode("utf-8")
 
     assert 'action="/settings/save"' in html
-    assert "server-rendered" in html
     assert srv.BITBUCKET_URL in html
 
 

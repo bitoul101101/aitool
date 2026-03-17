@@ -265,6 +265,14 @@ class ScanJobService:
         sev = Counter(f.get("severity", 4) for f in findings)
         ctx = Counter(f.get("context", "production") for f in findings)
         llm_name = (session.llm_model_info or {}).get("name", session.llm_model)
+        critical_prod = sum(
+            1 for f in findings
+            if f.get("severity") == 1 and str(f.get("context", "production")).lower() == "production"
+        )
+        high_prod = sum(
+            1 for f in findings
+            if f.get("severity") == 2 and str(f.get("context", "production")).lower() == "production"
+        )
         return {
             "scan_id": session.scan_id,
             "date": session.scan_id[:8],
@@ -290,6 +298,8 @@ class ScanJobService:
             },
             "ctx": dict(ctx),
             "llm_model": llm_name,
+            "critical_prod": critical_prod,
+            "high_prod": high_prod,
             "repo_details": session.repo_details,
             "log_file": log_file,
             "reports": session.report_paths,

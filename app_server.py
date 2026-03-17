@@ -75,7 +75,7 @@ from services.report_access import (
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
-from services.web_pages import render_history_page, render_scan_page, render_settings_page
+from services.web_pages import render_history_page, render_login_page, render_scan_page, render_settings_page
 from services.runtime_support import (
     ensure_ollama_running,
     load_llm_config as load_llm_config_file,
@@ -323,7 +323,18 @@ def _delete_managed_history_file(path_str: str, *, roots: List[Path]) -> str | N
 
 
 def _history_records_for_user() -> list[dict]:
-    return history_records_for_context(_load_history(), _operator_state.ctx)
+    records = history_records_for_context(_load_history(), _operator_state.ctx)
+    current = _current_session_history_record()
+    if current:
+        records = [rec for rec in records if rec.get("scan_id") != current.get("scan_id")]
+        records.append(current)
+        records.sort(
+            key=lambda record: (
+                str(record.get("completed_at_utc") or record.get("started_at_utc") or ""),
+                str(record.get("scan_id") or ""),
+            )
+        )
+    return records
 
 
 def _find_history_record_by_scan_id(scan_id: str) -> dict | None:
@@ -346,6 +357,41 @@ def _repos_for_project(project_key: str) -> list[dict]:
         repos = _operator_state.client.list_repos(project_key)
         _operator_state.repos_cache[project_key] = repos
     return repos
+
+
+def _is_connected() -> bool:
+    return _operator_state.client is not None
+
+
+def _current_session_history_record() -> dict | None:
+    if not _session.scan_id or _session.state not in {"running", "stopped"}:
+        return None
+    findings = list(_session.findings)
+    critical_prod = sum(
+        1 for f in findings
+        if f.get("severity") == 1 and str(f.get("context", "production")).lower() == "production"
+    )
+    high_prod = sum(
+        1 for f in findings
+        if f.get("severity") == 2 and str(f.get("context", "production")).lower() == "production"
+    )
+    return {
+        "scan_id": _session.scan_id,
+        "project_key": _session.project_key,
+        "repo_slugs": list(_session.repo_slugs),
+        "state": _session.state,
+        "started_at_utc": _session.started_at_utc,
+        "completed_at_utc": _session.completed_at_utc,
+        "total": len(findings),
+        "active_total": len(findings),
+        "suppressed_total": len(_session.suppressed_findings),
+        "llm_model": _session.llm_model,
+        "duration_s": _session.scan_duration_s,
+        "critical_prod": critical_prod,
+        "high_prod": high_prod,
+        "reports": _session.report_paths,
+        "log_file": "",
+    }
 
 
 _settings_service = SettingsService(
@@ -485,11 +531,21 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         p = parsed.path
-        if p in ("/", "/index.html", "/scan"):
+        if p in ("/", "/index.html", "/login"):
+            if _is_connected() and p in ("/", "/index.html"):
+                return self._redirect("/scan")
+            self._render_login_page()
+        elif p == "/scan":
+            if not _is_connected():
+                return self._redirect("/login")
             self._render_scan_page()
         elif p == "/history":
+            if not _is_connected():
+                return self._redirect("/login")
             self._render_history_page()
         elif p == "/settings":
+            if not _is_connected():
+                return self._redirect("/login")
             self._render_settings_page()
         elif p == "/api/status":
             self._json({
@@ -498,6 +554,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "llm": load_llm_config(),
                 "has_saved_pat": bool(load_pat()),
                 "auth": _operator_state.public_auth(),
+                "connected": _is_connected(),
             })
         elif p == "/api/scan/status":
             if _require_role(self, ROLE_VIEWER):
@@ -550,7 +607,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         p = urlparse(self.path).path
         body = self._read_body()
-        if p == "/connect":
+        if p in ("/login", "/connect"):
             return self._page_connect(body)
         elif p == "/scan/start":
             return self._page_scan_start(body)
@@ -600,6 +657,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     # ── Page handlers ─────────────────────────────────────────────────────────
 
+    def _render_login_page(self, *, notice: str = "", error: str = ""):
+        qs = parse_qs(urlparse(self.path).query)
+        html = render_login_page(
+            bitbucket_url=BITBUCKET_URL,
+            has_saved_pat=bool(load_pat()),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
     def _render_scan_page(self, *, notice: str = "", error: str = "", selected_repos: list[str] | None = None):
         if _require_role(self, ROLE_VIEWER):
             return
@@ -609,18 +676,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         repos = _repos_for_project(project_key) if project_key else []
         html = render_scan_page(
-            bitbucket_url=BITBUCKET_URL,
             connected_owner=_operator_state.connected_owner,
-            has_saved_pat=bool(load_pat()),
             projects=filter_projects(_operator_state.projects_cache, _operator_state.ctx),
             selected_project=project_key,
             repos=repos,
             selected_repos=selected_repos or [],
-            status=_session.to_status(),
+            status=_session.to_status() if _is_connected() else {},
             llm_cfg=load_llm_config(),
+            llm_models=_ollama_list_models(load_llm_config().get("base_url", "http://localhost:11434")),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
-            log_text="\n".join(entry.get("msg", "") for entry in _session.log_lines[-30:]),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -657,7 +722,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 audit_event=_audit_event,
             )
         except Exception as e:
-            return self._render_scan_page(error=str(e))
+            return self._render_login_page(error=str(e))
         self._redirect(_with_query("/scan", notice="Connected to Bitbucket"))
 
     def _page_scan_start(self, body: dict):
