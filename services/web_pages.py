@@ -121,9 +121,13 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .repo-row{display:flex;align-items:center;gap:6px;padding:1px 4px;border-radius:6px;font-size:12px;line-height:1.15}
 .repo-row input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
 .repo-row span{display:block}
-.running-shell{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:14px;align-items:start}
-.scan-header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
-.scan-status{display:flex;align-items:baseline;gap:10px}
+.running-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;align-items:start}
+.scan-sidebar-head{display:grid;gap:8px}
+.scan-status{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.scan-status strong{font-size:16px}
+.scan-status .muted{font-size:13px}
+.scan-actions{display:flex;gap:8px;flex-wrap:wrap}
+.scan-actions .warn,.scan-actions .btn{padding:7px 10px;font-size:12px}
 .state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
 .state-icon.pending{background:#bfa78c}
 .state-icon.running{animation:blink 1s ease-in-out infinite}
@@ -149,10 +153,10 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .triage-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .triage-form{display:inline-flex;gap:6px;align-items:center;margin:0}
 .triage-form.inline-only{display:inline-flex}
-.triage-form button{padding:6px 9px;font-size:12px}
-.suppressed-section{margin-top:14px}
-.suppressed-section h3{margin:0 0 8px;font-size:15px}
-.suppressed-wrap{max-height:220px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
+.triage-form button{padding:4px 7px;font-size:11px}
+.mitigate-section,.suppressed-section{margin-top:14px}
+.mitigate-section h3,.suppressed-section h3{margin:0 0 8px;font-size:15px}
+.mitigate-wrap,.suppressed-wrap{max-height:220px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .report-actions{display:grid;gap:8px;margin:12px 0 0}
 button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
@@ -267,7 +271,12 @@ def render_scan_page(
     def triage_badge(status_name: str) -> str:
         if not status_name:
             return ""
-        label = status_name.replace("_", " ")
+        label_map = {
+            "reviewed": "To Mitigate",
+            "accepted_risk": "Accepted Risk",
+            "false_positive": "Suppressed",
+        }
+        label = label_map.get(status_name, status_name.replace("_", " "))
         return f'<span class="triage-state triage-{_esc(status_name)}">{_esc(label)}</span>'
 
     def triage_meta(detail: dict) -> str:
@@ -305,7 +314,7 @@ def render_scan_page(
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="reviewed">'
             '<input type="hidden" name="note" value="">'
-            '<button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, \'Reviewed\')">Reviewed</button>'
+            '<button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, \'To Mitigate\')">To Mitigate</button>'
             "</form>"
         )
         accepted_form = (
@@ -354,6 +363,19 @@ def render_scan_page(
             "</tr>"
         )
 
+    def mitigated_row(detail: dict) -> str:
+        location = f'{detail.get("file", "")}:{detail.get("line", "")}'
+        return (
+            "<tr>"
+            f'<td><div class="finding-meta"><div class="finding-main">{_esc(detail.get("repo", ""))}</div>'
+            f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div></div></td>'
+            f'<td><div class="finding-meta"><div>{_esc(location)}</div>{triage_meta(detail)}</div></td>'
+            f"<td>{_esc(detail.get('severity_label', detail.get('severity', '')))}</td>"
+            f"<td>{triage_badge(detail.get('triage_status', 'reviewed') or 'reviewed')}</td>"
+            f"<td>{triage_actions(detail, suppressed=False)}</td>"
+            "</tr>"
+        )
+
     state = str(status.get("state", "")).lower()
     running = state == "running"
     scan_complete = state in {"done", "stopped", "error"}
@@ -374,10 +396,14 @@ def render_scan_page(
         f'<option value="{_esc(model)}"{" selected" if model == llm_cfg.get("model", "") else ""}>{_esc(model)}</option>'
         for model in models
     )
-    findings = status.get("finding_details", [])[:20]
-    suppressed = status.get("suppressed_details", [])[:30]
-    findings_rows = "".join(finding_row(f) for f in findings) or '<tr><td colspan="5">No current findings.</td></tr>'
-    suppressed_rows = "".join(suppressed_row(f) for f in suppressed) or '<tr><td colspan="5">No suppressed findings.</td></tr>'
+    all_findings = status.get("finding_details", [])
+    current_findings = [f for f in all_findings if f.get("triage_status") not in {"reviewed", "accepted_risk"}][:20]
+    mitigate_findings = [f for f in all_findings if f.get("triage_status") == "reviewed"][:20]
+    accepted_or_suppressed = [f for f in all_findings if f.get("triage_status") == "accepted_risk"] + status.get("suppressed_details", [])
+    accepted_or_suppressed = accepted_or_suppressed[:30]
+    findings_rows = "".join(finding_row(f) for f in current_findings) or '<tr><td colspan="5">No current findings.</td></tr>'
+    mitigate_rows = "".join(mitigated_row(f) for f in mitigate_findings) or '<tr><td colspan="5">No findings marked to mitigate.</td></tr>'
+    suppressed_rows = "".join(suppressed_row(f) for f in accepted_or_suppressed) or '<tr><td colspan="5">No suppressed or accepted findings.</td></tr>'
     normalized_timeline = []
     for item in phase_timeline:
         if isinstance(item, dict):
@@ -403,7 +429,7 @@ def render_scan_page(
     report = status.get("report") or {}
     scan_id = status.get("scan_id", "")
     report_actions = ""
-    if scan_complete and findings:
+    if scan_complete and all_findings:
         html_name = report.get("html_name", "")
         csv_name = report.get("csv_name", "")
         log_url = f"/api/history/log/{_esc(scan_id)}" if scan_id else ""
@@ -458,13 +484,6 @@ def render_scan_page(
     running_view = f"""
 <section class="running-shell">
   <section class="card activity-panel">
-    <div class="scan-header">
-      <div class="scan-status">
-        <div style="font-size:16px;font-weight:700">Scan</div>
-        <div id="scan-state-text" class="muted">{_esc(state_text)}</div>
-      </div>
-      <div class="inline">{stop_button if running else ""}{new_scan_button}</div>
-    </div>
     <div>
       <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
       <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
@@ -478,8 +497,17 @@ def render_scan_page(
         </table>
       </div>
     </div>
+    <div class="mitigate-section">
+      <h3>To Mitigate</h3>
+      <div class="mitigate-wrap">
+        <table>
+          <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="mitigate-findings-body">{mitigate_rows}</tbody>
+        </table>
+      </div>
+    </div>
     <div class="suppressed-section">
-      <h3>Suppressed / Triage</h3>
+      <h3>Suppressed / Accepted Findings</h3>
       <div class="suppressed-wrap">
         <table>
           <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead>
@@ -489,6 +517,13 @@ def render_scan_page(
     </div>
   </section>
   <aside class="stack">
+    <section class="card scan-sidebar-head">
+      <div class="scan-status">
+        <strong>Scan</strong>
+        <div id="scan-state-text" class="muted">{_esc(state_text)}</div>
+      </div>
+      <div class="scan-actions">{stop_button if running else ""}{new_scan_button}</div>
+    </section>
     <section class="card">
       <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
@@ -562,9 +597,9 @@ filterRepos();
 }})();
 (function() {{
   const logEl=document.getElementById('scan-log');
-  const iconEl=document.getElementById('scan-state-icon');
   const textEl=document.getElementById('scan-state-text');
   const findingsBody=document.getElementById('current-findings-body');
+  const mitigateBody=document.getElementById('mitigate-findings-body');
   const suppressedBody=document.getElementById('suppressed-findings-body');
   const timelineEl=document.getElementById('phase-timeline');
   if(!logEl) return;
@@ -585,14 +620,15 @@ filterRepos();
     if(suppressed) return reset;
     if(item.triage_status==='reviewed' || item.triage_status==='accepted_risk') return `<div class="triage-actions">${{reset}}</div>`;
     return `<div class="triage-actions">`
-      + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="reviewed"><input type="hidden" name="note" value=""><button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, 'Reviewed')">Reviewed</button></form>`
+      + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="reviewed"><input type="hidden" name="note" value=""><button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, 'To Mitigate')">To Mitigate</button></form>`
       + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="accepted_risk"><input type="hidden" name="note" value=""><button type="submit" class="alt" onclick="return triagePromptSubmit(this.form, 'Accept Risk')">Accept Risk</button></form>`
       + `<form class="triage-form inline-only" method="post" action="/findings/triage"><input type="hidden" name="hash" value="${{hash}}"><input type="hidden" name="status" value="false_positive"><input type="hidden" name="note" value=""><button type="submit" class="warn" onclick="return triagePromptSubmit(this.form, 'Suppress')">Suppress</button></form>`
       + `</div>`;
   }}
   function renderFindingRows(items){{
-    if(!items || !items.length) return '<tr><td colspan="5">No current findings.</td></tr>';
-    return items.slice(0,20).map(item => {{
+    const rows=(items||[]).filter(item => !item.triage_status || (item.triage_status !== 'reviewed' && item.triage_status !== 'accepted_risk'));
+    if(!rows.length) return '<tr><td colspan="5">No current findings.</td></tr>';
+    return rows.slice(0,20).map(item => {{
       const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
       return `<tr>`
         + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
@@ -603,11 +639,25 @@ filterRepos();
         + `</tr>`;
     }}).join('');
   }}
+  function renderMitigateRows(items){{
+    const rows=(items||[]).filter(item => item.triage_status === 'reviewed');
+    if(!rows.length) return '<tr><td colspan="5">No findings marked to mitigate.</td></tr>';
+    return rows.slice(0,20).map(item => {{
+      const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
+      return `<tr>`
+        + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
+        + `<td><div class="finding-meta"><div>${{location}}</div>${{triageMeta(item)}}</div></td>`
+        + `<td>${{esc(item.severity_label||item.severity||'')}}</td>`
+        + `<td><span class="triage-state triage-reviewed">To Mitigate</span></td>`
+        + `<td>${{triageActions(item, false)}}</td>`
+        + `</tr>`;
+    }}).join('');
+  }}
   function renderSuppressedRows(items){{
-    if(!items || !items.length) return '<tr><td colspan="5">No suppressed findings.</td></tr>';
+    if(!items || !items.length) return '<tr><td colspan="5">No suppressed or accepted findings.</td></tr>';
     return items.slice(0,30).map(item => {{
       const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
-      const status=(item.triage_status||'false_positive').replaceAll('_',' ');
+      const status=(item.triage_status||'false_positive') === 'accepted_risk' ? 'Accepted Risk' : 'Suppressed';
       return `<tr>`
         + `<td><div class="finding-meta"><div class="finding-main">${{esc(item.repo||'')}}</div><div class="finding-sub">${{esc(item.description||'')}}</div></div></td>`
         + `<td><div class="finding-meta"><div>${{location}}</div>${{triageMeta(item)}}</div></td>`
@@ -663,15 +713,15 @@ filterRepos();
       const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
       const data=await res.json();
       const state=(data.state||'').toLowerCase();
-      if(findingsBody) findingsBody.innerHTML=renderFindingRows(data.finding_details||[]);
-      if(suppressedBody) suppressedBody.innerHTML=renderSuppressedRows(data.suppressed_details||[]);
+          if(findingsBody) findingsBody.innerHTML=renderFindingRows(data.finding_details||[]);
+          if(mitigateBody) mitigateBody.innerHTML=renderMitigateRows(data.finding_details||[]);
+          if(suppressedBody) suppressedBody.innerHTML=renderSuppressedRows([...(data.finding_details||[]).filter(item => item.triage_status === 'accepted_risk'), ...(data.suppressed_details||[])]);
       if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[]);
       reportActions(data);
       if(state==='running') return;
       clearInterval(timer);
       stream.close();
-      if(iconEl) iconEl.className='state-icon ' + (state==='done' ? 'done' : state==='stopped' ? 'stopped' : '');
-      if(textEl) textEl.textContent=state ? state.charAt(0).toUpperCase()+state.slice(1) : 'Ready';
+          if(textEl) textEl.textContent=state ? state.charAt(0).toUpperCase()+state.slice(1) : 'Ready';
       const stopBtn=document.getElementById('stop-scan-btn');
       if(stopBtn) stopBtn.disabled=true;
     }} catch (_err) {{}}

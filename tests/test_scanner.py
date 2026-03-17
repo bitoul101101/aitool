@@ -857,11 +857,13 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     ).decode("utf-8")
 
     assert "Current Findings" in html
-    assert "Suppressed / Triage" in html
+    assert "To Mitigate" in html
+    assert "Suppressed / Accepted Findings" in html
     assert 'action="/findings/triage"' in html
     assert 'action="/findings/reset"' in html
     assert "triagePromptSubmit" in html
     assert 'name="note" value=""' in html
+    assert ">To Mitigate<" in html
     assert "Expected internal example" in html
     assert "reviewed" in html.lower()
     assert 'id="new-scan-btn"' in html
