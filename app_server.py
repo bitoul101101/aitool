@@ -59,12 +59,16 @@ from services.access_control import (
     ROLE_SCANNER,
     ROLE_TRIAGE,
     ROLE_VIEWER,
-    UserContext,
     filter_projects,
-    resolve_user_context,
 )
 from services.audit_log import AuditLogService
+from services.report_access import (
+    find_history_record_by_report_name,
+    find_history_record_by_scan_id,
+    history_records_for_context,
+)
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
+from services.single_user_state import SingleUserState, load_single_user_config
 from services.runtime_support import (
     ensure_ollama_running,
     load_llm_config as load_llm_config_file,
@@ -173,16 +177,8 @@ def _ollama_ensure_running(base_url: str) -> dict:
 
 # ── Global app state ──────────────────────────────────────────────────────────
 
-_client: Optional[BitbucketClient] = None
 _session: ScanSession = ScanSession()
-_projects_cache: List[dict] = []
-_repos_cache: Dict[str, List[dict]] = {}
-_connected_user: str = "Unknown"
-_user_ctx: UserContext = UserContext(
-    username="Unknown",
-    roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_TRIAGE, ROLE_ADMIN),
-    allowed_projects=("*",),
-)
+_operator_state = SingleUserState(load_single_user_config(ACCESS_FILE))
 _state_lock = threading.Lock()
 _app_exit_event = threading.Event()
 _server_instance: Optional[http.server.ThreadingHTTPServer] = None
@@ -235,21 +231,21 @@ def _audit_event(action: str, **details) -> None:
     _audit_log.record({
         "ts": _utc_now_iso(),
         "action": action,
-        "actor": _user_ctx.username,
-        "roles": list(_user_ctx.roles),
+        "actor": _operator_state.ctx.username,
+        "roles": list(_operator_state.ctx.roles),
         **details,
     })
 
 
 def _require_role(handler, role: str):
-    if not _user_ctx.can(role):
+    if not _operator_state.can(role):
         handler._err(403, f"{role} role required")
         return True
     return False
 
 
 def _require_project_access(handler, project_key: str):
-    if not _user_ctx.can_access_project(project_key):
+    if not _operator_state.can_access_project(project_key):
         handler._err(403, f"project access denied: {project_key}")
         return True
     return False
@@ -303,28 +299,15 @@ def _delete_managed_history_file(path_str: str, *, roots: List[Path]) -> str | N
 
 
 def _history_records_for_user() -> list[dict]:
-    return [
-        record for record in _load_history()
-        if _user_ctx.can_access_project(str(record.get("project", "")))
-    ]
+    return history_records_for_context(_load_history(), _operator_state.ctx)
 
 
 def _find_history_record_by_scan_id(scan_id: str) -> dict | None:
-    for record in _history_records_for_user():
-        if record.get("scan_id") == scan_id:
-            return record
-    return None
+    return find_history_record_by_scan_id(_history_records_for_user(), scan_id)
 
 
 def _find_history_record_by_report_name(filename: str) -> dict | None:
-    safe = Path(filename).name
-    for record in _history_records_for_user():
-        reports = (record.get("reports") or {}).get("__all__", {})
-        for key in ("html", "csv", "html_name", "csv_name"):
-            value = str(reports.get(key, "") or "")
-            if value and Path(value).name == safe:
-                return record
-    return None
+    return find_history_record_by_report_name(_history_records_for_user(), filename)
 
 
 def _triage_by_hash() -> Dict[str, dict]:
@@ -441,7 +424,7 @@ def _run_scan(session: ScanSession):
     _sync_scan_service_paths()
     _scan_service.run_scan(
         session,
-        client=_client,
+        client=_operator_state.client,
         save_history_record=_save_history_record,
     )
 
@@ -467,11 +450,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "version": APP_VERSION,
                 "llm": load_llm_config(),
                 "has_saved_pat": bool(load_pat()),
-                "auth": {
-                    "user": _user_ctx.username,
-                    "roles": list(_user_ctx.roles),
-                    "projects": list(_user_ctx.allowed_projects),
-                },
+                "auth": _operator_state.public_auth(),
             })
         elif p == "/api/scan/status":
             if _require_role(self, ROLE_VIEWER):
@@ -563,7 +542,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     # ── API handlers ──────────────────────────────────────────────────────────
 
     def _api_connect(self, body: dict):
-        global _client, _projects_cache, _connected_user, _user_ctx
         token = body.get("token", "").strip()
         remember = body.get("remember", False)
         use_saved_token = bool(body.get("use_saved_token"))
@@ -577,10 +555,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 verify_ssl=False, verbose=False)
             owner    = client.get_pat_owner()
             projects = client.list_projects()
-            _user_ctx = resolve_user_context(ACCESS_FILE, owner or "Unknown")
-            _client         = client
-            _projects_cache = filter_projects(projects, _user_ctx)
-            _connected_user = owner or "Unknown"
+            visible_projects = _operator_state.connect(client, owner, projects)
             if remember:
                 save_pat(token)
             else:
@@ -588,15 +563,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             _audit_event(
                 "connect",
                 outcome="success",
-                project_count=len(_projects_cache),
+                project_count=len(visible_projects),
+                connected_owner=_operator_state.connected_owner,
             )
             self._json({"ok": True, "owner": owner,
-                        "projects": _projects_cache,
-                        "auth": {
-                            "user": _user_ctx.username,
-                            "roles": list(_user_ctx.roles),
-                            "projects": list(_user_ctx.allowed_projects),
-                        }})
+                        "projects": visible_projects,
+                        "auth": _operator_state.public_auth()})
         except Exception as e:
             _audit_event("connect", outcome="error", error=str(e))
             self._err(401, str(e))
@@ -614,7 +586,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._err(400, "project_key and repo_slugs required")
         if _require_project_access(self, project_key):
             return
-        if not _client:
+        if not _operator_state.client:
             return self._err(401, "Not connected")
         if _session.state == "running":
             return self._err(409, "Scan already running")
@@ -628,7 +600,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         _session.total        = len(repo_slugs)
         _session.llm_url      = llm_url
         _session.llm_model    = llm_model
-        _session.operator     = _connected_user or "Unknown"
+        _session.operator     = _operator_state.ctx.username
         _session.state        = "running"
 
         _audit_event(
@@ -847,7 +819,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             target,
             status=status,
             note=note,
-            marked_by=_connected_user,
+            marked_by=_operator_state.ctx.username,
         )
         _audit_event(
             "finding_triage",
@@ -3337,13 +3309,9 @@ def _patched_get(self):
         if _require_role(self, ROLE_VIEWER):
             return
         self._json({
-            "projects": filter_projects(_projects_cache, _user_ctx),
-            "owner": _connected_user,
-            "auth": {
-                "user": _user_ctx.username,
-                "roles": list(_user_ctx.roles),
-                "projects": list(_user_ctx.allowed_projects),
-            },
+            "projects": filter_projects(_operator_state.projects_cache, _operator_state.ctx),
+            "owner": _operator_state.connected_owner,
+            "auth": _operator_state.public_auth(),
         })
     elif p == "/api/repos":
         if _require_role(self, ROLE_VIEWER):
@@ -3351,15 +3319,15 @@ def _patched_get(self):
         from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
         key = qs.get("project", [""])[0]
-        if not key or not _client:
+        if not key or not _operator_state.client:
             return self._json({"repos": []})
         if _require_project_access(self, key):
             return
         try:
-            repos = _repos_cache.get(key)
+            repos = _operator_state.repos_cache.get(key)
             if repos is None:
-                repos = _client.list_repos(key)
-                _repos_cache[key] = repos
+                repos = _operator_state.client.list_repos(key)
+                _operator_state.repos_cache[key] = repos
             self._json({"repos": repos})
         except Exception as e:
             self._err(500, str(e))

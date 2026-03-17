@@ -1,0 +1,15 @@
+{
+  "operator": {
+    "name": "Unknown",
+    "bitbucket_owner": "",
+    "roles": [
+      "viewer",
+      "scanner",
+      "triage",
+      "admin"
+    ],
+    "projects": [
+      "*"
+    ]
+  }
+}

@@ -19,7 +19,8 @@ from scanner.suppressions import TRIAGE_REVIEWED, list_suppressions, list_triage
 from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
 from reports.html_report import HTMLReporter
-from services.access_control import ROLE_ADMIN, ROLE_SCANNER, ROLE_VIEWER, UserContext
+from services.access_control import ROLE_ADMIN, ROLE_SCANNER, ROLE_TRIAGE, ROLE_VIEWER, UserContext
+from services.single_user_state import SingleUserConfig, SingleUserState
 
 
 # ── Detector tests ────────────────────────────────────────────────
@@ -743,10 +744,20 @@ def test_api_projects_returns_cached_projects():
         def _json(self, data, status=200):
             self.payload = (status, data)
 
-    orig_projects = srv._projects_cache
-    orig_owner = srv._connected_user
-    srv._projects_cache = [{"key": "COGI"}, {"key": "APPSEC"}]
-    srv._connected_user = "Security Engineer"
+    orig_state = srv._operator_state
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER,),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+    srv._operator_state.projects_cache = [{"key": "COGI"}, {"key": "APPSEC"}]
+    srv._operator_state.connected_owner = "Security Engineer"
 
     try:
         handler = DummyHandler()
@@ -756,8 +767,7 @@ def test_api_projects_returns_cached_projects():
         assert handler.payload[1]["projects"] == [{"key": "COGI"}, {"key": "APPSEC"}]
         assert handler.payload[1]["owner"] == "Security Engineer"
     finally:
-        srv._projects_cache = orig_projects
-        srv._connected_user = orig_owner
+        srv._operator_state = orig_state
 
 
 def test_api_projects_filters_by_user_scope():
@@ -776,16 +786,20 @@ def test_api_projects_filters_by_user_scope():
             self.payload = (status, {"error": msg})
             return None
 
-    orig_projects = srv._projects_cache
-    orig_owner = srv._connected_user
-    orig_ctx = srv._user_ctx
-    srv._projects_cache = [{"key": "COGI"}, {"key": "APPSEC"}]
-    srv._connected_user = "Security Engineer"
-    srv._user_ctx = UserContext(
-        username="Security Engineer",
-        roles=(ROLE_VIEWER,),
-        allowed_projects=("COGI",),
+    orig_state = srv._operator_state
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER,),
+                allowed_projects=("COGI",),
+            ),
+        )
     )
+    srv._operator_state.projects_cache = [{"key": "COGI"}, {"key": "APPSEC"}]
+    srv._operator_state.connected_owner = "Security Engineer"
 
     try:
         handler = DummyHandler()
@@ -794,9 +808,7 @@ def test_api_projects_filters_by_user_scope():
         assert handler.payload[0] == 200
         assert handler.payload[1]["projects"] == [{"key": "COGI"}]
     finally:
-        srv._projects_cache = orig_projects
-        srv._connected_user = orig_owner
-        srv._user_ctx = orig_ctx
+        srv._operator_state = orig_state
 
 
 def test_default_temp_dir_prefers_system_temp_on_windows():
@@ -935,13 +947,23 @@ def test_api_finding_suppress_moves_finding_and_invalidates_reports():
     orig_db = srv.DB_FILE
     orig_sup = srv.SUPPRESSIONS_FILE
     orig_session = srv._session
-    orig_user = srv._connected_user
+    orig_state = srv._operator_state
     srv.OUTPUT_DIR = str(d)
     srv.HISTORY_FILE = str(d / "scan_history.json")
     srv.LOG_DIR = str(d / "logs")
     srv.DB_FILE = str(d / "scan_jobs.db")
     srv.SUPPRESSIONS_FILE = str(d / "ai_scanner_suppressions.json")
-    srv._connected_user = "Security Engineer"
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_TRIAGE, ROLE_ADMIN),
+                allowed_projects=("*",),
+            ),
+        )
+    )
     srv._invalidate_history_cache()
 
     try:
@@ -994,7 +1016,7 @@ def test_api_finding_suppress_moves_finding_and_invalidates_reports():
         srv.DB_FILE = orig_db
         srv.SUPPRESSIONS_FILE = orig_sup
         srv._session = orig_session
-        srv._connected_user = orig_user
+        srv._operator_state = orig_state
         srv._invalidate_history_cache()
 
 
@@ -1012,12 +1034,18 @@ def test_api_scan_start_requires_scanner_role():
             self.payload = (status, {"error": msg})
             return None
 
-    orig_ctx = srv._user_ctx
+    orig_state = srv._operator_state
     try:
-        srv._user_ctx = UserContext(
-            username="Viewer",
-            roles=(ROLE_VIEWER,),
-            allowed_projects=("*",),
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Viewer",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Viewer",
+                    roles=(ROLE_VIEWER,),
+                    allowed_projects=("*",),
+                ),
+            )
         )
         handler = DummyHandler()
         srv._Handler._api_scan_start(
@@ -1027,7 +1055,7 @@ def test_api_scan_start_requires_scanner_role():
         assert handler.payload[0] == 403
         assert "scanner role required" in handler.payload[1]["error"]
     finally:
-        srv._user_ctx = orig_ctx
+        srv._operator_state = orig_state
 
 
 def test_api_repos_rejects_project_outside_scope():
@@ -1050,22 +1078,26 @@ def test_api_repos_rejects_project_outside_scope():
             self.payload = (status, {"error": msg})
             return None
 
-    orig_client = srv._client
-    orig_ctx = srv._user_ctx
+    orig_state = srv._operator_state
     try:
-        srv._client = DummyClient()
-        srv._user_ctx = UserContext(
-            username="Analyst",
-            roles=(ROLE_VIEWER, ROLE_SCANNER),
-            allowed_projects=("COGI",),
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Analyst",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Analyst",
+                    roles=(ROLE_VIEWER, ROLE_SCANNER),
+                    allowed_projects=("COGI",),
+                ),
+            )
         )
+        srv._operator_state.client = DummyClient()
         handler = DummyHandler()
         srv._Handler.do_GET(handler)
         assert handler.payload[0] == 403
         assert "project access denied" in handler.payload[1]["error"]
     finally:
-        srv._client = orig_client
-        srv._user_ctx = orig_ctx
+        srv._operator_state = orig_state
 
 
 def test_settings_save_writes_audit_record():
@@ -1088,7 +1120,7 @@ def test_settings_save_writes_audit_record():
     orig_log = srv.LOG_DIR
     orig_db = srv.DB_FILE
     orig_audit = srv.AUDIT_FILE
-    orig_ctx = srv._user_ctx
+    orig_state = srv._operator_state
     orig_llm_cfg = Path(srv.LLM_CFG_FILE).read_text(encoding="utf-8")
     try:
         srv.OUTPUT_DIR = str(d)
@@ -1097,10 +1129,16 @@ def test_settings_save_writes_audit_record():
         srv.DB_FILE = str(d / "scan_jobs.db")
         srv.AUDIT_FILE = str(d / "audit_events.jsonl")
         srv._sync_scan_service_paths()
-        srv._user_ctx = UserContext(
-            username="Admin",
-            roles=(ROLE_ADMIN,),
-            allowed_projects=("*",),
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Admin",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Admin",
+                    roles=(ROLE_ADMIN,),
+                    allowed_projects=("*",),
+                ),
+            )
         )
         handler = DummyHandler()
         srv._Handler._api_settings_save(
@@ -1118,7 +1156,7 @@ def test_settings_save_writes_audit_record():
         srv.LOG_DIR = orig_log
         srv.DB_FILE = orig_db
         srv.AUDIT_FILE = orig_audit
-        srv._user_ctx = orig_ctx
+        srv._operator_state = orig_state
         Path(srv.LLM_CFG_FILE).write_text(orig_llm_cfg, encoding="utf-8")
         srv._sync_scan_service_paths()
 
@@ -1144,13 +1182,23 @@ def test_api_finding_triage_marks_reviewed_and_reset_clears_it():
     orig_db = srv.DB_FILE
     orig_sup = srv.SUPPRESSIONS_FILE
     orig_session = srv._session
-    orig_user = srv._connected_user
+    orig_state = srv._operator_state
     srv.OUTPUT_DIR = str(d)
     srv.HISTORY_FILE = str(d / "scan_history.json")
     srv.LOG_DIR = str(d / "logs")
     srv.DB_FILE = str(d / "scan_jobs.db")
     srv.SUPPRESSIONS_FILE = str(d / "ai_scanner_suppressions.json")
-    srv._connected_user = "Security Engineer"
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_ADMIN, ROLE_TRIAGE),
+                allowed_projects=("*",),
+            ),
+        )
+    )
     srv._invalidate_history_cache()
 
     try:
@@ -1195,7 +1243,7 @@ def test_api_finding_triage_marks_reviewed_and_reset_clears_it():
         srv.DB_FILE = orig_db
         srv.SUPPRESSIONS_FILE = orig_sup
         srv._session = orig_session
-        srv._connected_user = orig_user
+        srv._operator_state = orig_state
         srv._invalidate_history_cache()
 
 
