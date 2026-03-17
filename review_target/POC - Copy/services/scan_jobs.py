@@ -357,6 +357,21 @@ class ScanJobService:
             json.dump(history, fh, indent=2)
         os.replace(tmp_path, self.paths.history_file)
 
+    def cleanup_stale_temp_clones(self) -> None:
+        from scanner.bitbucket import cleanup_clone
+
+        temp_root = Path(self.paths.temp_dir)
+        if not temp_root.exists():
+            return
+        for child in temp_root.iterdir():
+            try:
+                if child.is_dir():
+                    cleanup_clone(child)
+                else:
+                    child.unlink()
+            except Exception:
+                pass
+
     def save_history_record(self, session: ScanSession, findings: list) -> None:
         try:
             Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
@@ -399,6 +414,7 @@ class ScanJobService:
 
         Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.paths.temp_dir).mkdir(parents=True, exist_ok=True)
+        self.cleanup_stale_temp_clones()
 
         t_start = time.time()
         session.started_at_utc = session.started_at_utc or self._utc_now_iso()

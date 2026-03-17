@@ -5,6 +5,7 @@ Run: python -m pytest tests/ -v
 
 import sys
 import os
+import subprocess
 import tempfile
 import json
 from pathlib import Path
@@ -769,6 +770,57 @@ def test_delete_history_removes_sqlite_record():
         srv.LOG_DIR = orig_log
         srv.DB_FILE = orig_db
         srv._invalidate_history_cache()
+
+
+def test_cleanup_stale_temp_clones_removes_leftovers():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_temp = srv.TEMP_DIR
+    stale_dir = d / "stale-repo"
+    stale_dir.mkdir(parents=True)
+    (stale_dir / "keep.txt").write_text("leftover")
+    stale_file = d / "stale.tmp"
+    stale_file.write_text("x")
+
+    try:
+        srv.TEMP_DIR = str(d)
+        srv._cleanup_stale_temp_clones()
+
+        assert list(d.iterdir()) == []
+    finally:
+        srv.TEMP_DIR = orig_temp
+
+
+def test_shallow_clone_cleans_partial_destination_on_failure():
+    from scanner.bitbucket import shallow_clone
+
+    class FakeProc:
+        def __init__(self, dest_path: Path):
+            self.returncode = 128
+            self.stdout = None
+            self.stderr = MagicMock()
+            self.stderr.read.return_value = "fatal: clone failed"
+            dest_path.mkdir(parents=True, exist_ok=True)
+            (dest_path / ".git").mkdir(exist_ok=True)
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def kill(self):
+            return None
+
+    d = Path(tempfile.mkdtemp())
+    dest = d / "partial-clone"
+
+    with patch("scanner.bitbucket.subprocess.Popen", return_value=FakeProc(dest)):
+        try:
+            shallow_clone("https://example.invalid/repo.git", dest)
+            assert False, "Expected shallow_clone to raise RuntimeError"
+        except RuntimeError:
+            pass
+
+    assert not dest.exists(), "Partial clone directory should be cleaned up after failure"
 
 
 def test_run_scan_with_no_repos_completes_cleanly():

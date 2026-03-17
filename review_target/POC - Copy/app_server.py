@@ -262,6 +262,11 @@ def _delete_history(scan_ids: List[str]) -> None:
     _scan_service.delete_history(scan_ids)
 
 
+def _cleanup_stale_temp_clones() -> None:
+    _sync_scan_service_paths()
+    _scan_service.cleanup_stale_temp_clones()
+
+
 def _run_scan(session: ScanSession):
     _sync_scan_service_paths()
     _scan_service.run_scan(
@@ -2651,6 +2656,7 @@ _Handler.do_GET = _patched_get
 def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.ThreadingHTTPServer:
     global _HTML
     _HTML = _build_spa()
+    _cleanup_stale_temp_clones()
 
     # Inject into handler
     _Handler.html_bytes_app = _HTML  # not used directly; _HTML global is read

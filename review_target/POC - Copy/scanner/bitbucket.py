@@ -301,6 +301,12 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
     if stop_event and stop_event.is_set():
         raise RuntimeError("Scan cancelled.")
 
+    def _best_effort_cleanup() -> None:
+        try:
+            cleanup_clone(dest)
+        except Exception:
+            pass
+
     if dest.exists():
         shutil.rmtree(dest)
 
@@ -340,6 +346,7 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
             if stop_event and stop_event.is_set():
                 proc.kill()
                 proc.wait()
+                _best_effort_cleanup()
                 raise RuntimeError("Scan cancelled.")
             try:
                 proc.wait(timeout=0.5)
@@ -383,6 +390,7 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
                 while True:
                     if stop_event and stop_event.is_set():
                         proc2.kill(); proc2.wait()
+                        _best_effort_cleanup()
                         raise RuntimeError("Scan cancelled.")
                     try:
                         proc2.wait(timeout=0.5); break
@@ -392,9 +400,11 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
                 pass
             if proc2.returncode != 0:
                 stderr2 = proc2.stderr.read() if proc2.stderr else ""
+                _best_effort_cleanup()
                 raise RuntimeError(
                     f"Git clone failed (rc={proc2.returncode}): {stderr2.strip()}")
             return  # retry succeeded
+        _best_effort_cleanup()
         raise RuntimeError(
             f"Git clone failed (rc={proc.returncode}): {stderr_text.strip()}")
 
