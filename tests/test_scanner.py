@@ -724,7 +724,7 @@ def test_scan_page_contains_server_rendered_findings_forms():
     assert 'id="llm-model-select"' in html
     assert "Start Scan" in html
     assert "repo1" in html
-    assert "OpenAI" in html
+    assert "Current Findings" not in html
 
 
 def test_history_page_is_server_rendered():

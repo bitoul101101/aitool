@@ -47,9 +47,10 @@ LOG_ICON = _icon_uri("LOG", "#1f4f98")
 def _base_style() -> str:
     return """
 body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#f6efe4;color:#261507}
-header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:#4a210c;color:#fff}
+header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;padding:12px 18px;background:#4a210c;color:#fff}
 header h1{margin:0;font-size:18px}
-nav{display:flex;gap:8px;margin-left:auto;align-items:center}
+.header-nav{display:flex;justify-content:center;gap:8px;align-items:center}
+.header-actions{display:flex;justify-content:flex-end}
 .nav{color:#f7e0c0;text-decoration:none;padding:7px 11px;border-radius:8px}
 .nav.active,.nav:hover{background:#6d3514;color:#fff}
 .exit-form{margin:0}
@@ -61,12 +62,12 @@ main{max-width:1340px;margin:0 auto;padding:16px 18px}
 .toast-wrap{position:fixed;top:14px;right:14px;display:grid;gap:8px;z-index:1000}
 .toast{min-width:260px;max-width:420px;box-shadow:0 10px 24px rgba(0,0,0,.14);animation:fadein .2s ease}
 .muted{color:#705333}
-button,.btn{border:0;border-radius:8px;padding:9px 13px;background:#6d3514;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+button,.btn{border:0;border-radius:8px;padding:9px 13px;background:#6d3514;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 button.alt,.btn.alt{background:#8a6c50}
 button.warn,.btn.warn{background:#a2392f}
 button.ghost,.btn.ghost{background:#efe1cf;color:#5d3b15}
 label{display:block;font-size:11px;font-weight:700;margin-bottom:5px;color:#6d4a21;text-transform:uppercase}
-input,select,textarea{width:100%;padding:8px 10px;border:1px solid #cda983;border-radius:8px;background:#fff}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid #cda983;border-radius:8px;background:#fff;box-sizing:border-box}
 a{color:#7d3200}
 table{width:100%;border-collapse:collapse;background:#fffaf4}
 th,td{padding:8px 10px;border-bottom:1px solid #ead4ba;text-align:left;vertical-align:top}
@@ -79,32 +80,50 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .stack{display:grid;gap:10px}
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .checkline{display:flex;align-items:center;gap:8px;font-size:14px;text-transform:none;color:#261507}
-.checkline input{width:auto;margin:0}
-.scan-shell{display:grid;grid-template-columns:220px minmax(0,1fr) 380px;gap:14px;align-items:start}
-.project-panel,.repo-panel,.sidebar-panel{min-height:calc(100vh - 132px)}
-.project-list{display:grid;gap:3px;max-height:calc(100vh - 190px);overflow:auto;padding-right:4px}
-.project-link{display:block;padding:5px 8px;border-radius:8px;text-decoration:none;background:#f6ebdc;color:#5e3b16;font-size:13px}
+.checkline input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
+.login-shell{max-width:540px;margin:48px auto 0}
+.login-grid{display:grid;gap:14px}
+.login-actions{display:flex;justify-content:flex-end}
+.scan-shell{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+.selection-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
+.project-panel,.repo-panel,.activity-panel{min-height:calc(100vh - 132px)}
+.project-list{display:grid;gap:2px;max-height:calc(100vh - 200px);overflow:auto;padding-right:4px}
+.project-link{display:block;padding:4px 7px;border-radius:8px;text-decoration:none;background:#f6ebdc;color:#5e3b16;font-size:12px}
 .project-link.active{background:#6d3514;color:#fff;font-weight:700}
-.repo-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) 220px auto;gap:8px;align-items:end;margin-bottom:8px}
+.repo-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) 240px auto;gap:8px;align-items:end;margin-bottom:8px}
+.repo-actions{display:flex;align-items:center;gap:8px;margin:8px 0 10px}
 .repo-shell{border:1px solid #ead4ba;border-radius:12px;background:#fcf6ee;padding:8px}
-.repo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 10px;max-height:300px;overflow:auto;padding-right:4px}
-.repo-row{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:6px;font-size:13px;line-height:1.2}
-.repo-row input{width:auto;margin:0;flex:0 0 auto}
+.repo-grid{display:grid;gap:2px 12px;max-height:calc(100vh - 285px);overflow:auto;padding-right:4px;align-content:start}
+.repo-grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.repo-grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.repo-row{display:flex;align-items:center;gap:6px;padding:1px 4px;border-radius:6px;font-size:12px;line-height:1.15}
+.repo-row input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
 .repo-row span{display:block}
-.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:360px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.running-shell{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:14px;align-items:start}
+.scan-header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
+.scan-status{display:flex;align-items:center;gap:10px}
+.state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+.state-icon.running{animation:blink 1s ease-in-out infinite}
+.state-icon.done{background:#20a955}
+.state-icon.done::before{content:"V"}
+.state-icon.stopped{background:#a2392f}
+.state-icon.stopped::before{content:"!"}
+.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:420px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
-.timeline-row{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px}
-.finding-shell{position:sticky;top:16px}
-.finding-table-wrap{max-height:calc(100vh - 170px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
+.timeline-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px}
+.timeline-row strong{justify-self:end}
+.findings-panel{margin-top:12px}
+.finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
 .history-time{font-size:11px;color:#7a5d3e}
 .icon-link img{display:block;width:34px;height:34px}
 .filters-row{margin-bottom:12px}
-@media (max-width:1220px){.scan-shell{grid-template-columns:200px 1fr}.sidebar-panel{grid-column:1 / -1}.finding-shell{position:static}}
-@media (max-width:900px){header{flex-wrap:wrap}nav{margin-left:0}.scan-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.sidebar-panel{min-height:auto}.repo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar{grid-template-columns:1fr 1fr}.table-shell{max-height:none}}
+@media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}}
+@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar{grid-template-columns:1fr 1fr}.table-shell{max-height:none}}
 @keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(42,124,255,.35)}50%{opacity:.35;box-shadow:0 0 0 5px rgba(42,124,255,0)}}
 """
 
 
@@ -117,29 +136,41 @@ def _flash(notice: str = "", error: str = "") -> str:
     return f'<div class="toast-wrap">{"".join(items)}</div>' if items else ""
 
 
-def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, auto_refresh: int | None = None) -> bytes:
-    refresh = f'<meta http-equiv="refresh" content="{auto_refresh}">' if auto_refresh else ""
+def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True) -> bytes:
     nav = ""
     if show_nav:
         nav = (
+            '<div class="header-nav">'
             f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan</a>'
             f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
             f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
+            '</div>'
+            '<div class="header-actions">'
             '<form class="exit-form" method="post" action="/app/exit"><button type="submit" class="warn">Exit</button></form>'
+            "</div>"
         )
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-{refresh}
 <title>{_esc(title)}</title>
 <style>{_base_style()}</style>
 </head>
 <body>
-<header><h1>AI Security & Compliance Scanner</h1>{f"<nav>{nav}</nav>" if nav else ""}</header>
+<header><h1>AI Security & Compliance Scanner</h1>{nav if nav else ""}</header>
 <main>{body}</main>
-<script>setTimeout(()=>document.querySelectorAll('.toast').forEach(el=>el.remove()),5000);</script>
+<script>
+setTimeout(()=>document.querySelectorAll('.toast').forEach(el=>el.remove()),5000);
+(function() {{
+  const url=new URL(window.location.href);
+  if(url.searchParams.has('notice')||url.searchParams.has('error')) {{
+    url.searchParams.delete('notice');
+    url.searchParams.delete('error');
+    history.replaceState(null,'',url.pathname + (url.search ? url.search : ''));
+  }}
+}})();
+</script>
 </body>
 </html>"""
     return html.encode("utf-8")
@@ -148,15 +179,18 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, a
 def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = "", error: str = "") -> bytes:
     body = f"""
 {_flash(notice, error)}
-<section class="card" style="max-width:540px;margin:48px auto 0">
+<section class="card login-shell">
   <h2 style="margin:0 0 12px">Login</h2>
-  <p class="muted">Connect to {_esc(bitbucket_url)} with a Personal Access Token.</p>
-  <form method="post" action="/login" class="stack" style="margin-top:16px">
-    <div><label>Personal Access Token</label><input type="password" name="token" value="" style="max-width:100%"></div>
+  <p class="muted" style="margin:0">Connect to {_esc(bitbucket_url)} with a Personal Access Token.</p>
+  <form method="post" action="/login" class="login-grid" style="margin-top:18px">
+    <div>
+      <label>Personal Access Token</label>
+      <input type="password" name="token" value="">
+    </div>
     <label class="checkline"><input type="checkbox" name="use_saved_token" value="true"><span>Use saved token</span></label>
     <label class="checkline"><input type="checkbox" name="remember" value="true"><span>Remember token locally</span></label>
     <div class="muted">Saved token available: {"Yes" if has_saved_pat else "No"}</div>
-    <div class="inline" style="justify-content:flex-end"><button type="submit">Login</button></div>
+    <div class="login-actions"><button type="submit">Login</button></div>
   </form>
 </section>"""
     return _layout(title="Login", body=body, show_nav=False)
@@ -176,14 +210,17 @@ def render_scan_page(
     notice: str = "",
     error: str = "",
 ) -> bytes:
-    running = status.get("state") == "running"
+    state = str(status.get("state", "")).lower()
+    running = state == "running"
+    selected = set(selected_repos)
+    repo_count = len(repos)
+    repo_cols = "cols-2" if repo_count <= 18 else "cols-3"
     project_links = "".join(
         f'<a class="project-link{" active" if p.get("key","") == selected_project else ""}" href="/scan?project={_esc(p.get("key",""))}">{_esc(p.get("key",""))}</a>'
         for p in projects
     ) or '<div class="muted">No projects loaded.</div>'
-    selected = set(selected_repos)
     repo_rows = "".join(
-        f'<label class="repo-row" data-repo-name="{_esc(repo.get("slug","").lower())}"><input type="checkbox" class="repo-checkbox" name="repo_slugs" value="{_esc(repo.get("slug",""))}"{" checked" if repo.get("slug","") in selected else ""}><span>{_esc(repo.get("slug",""))}</span></label>'
+        f'<label class="repo-row" data-repo-name="{_esc(repo.get("slug","").lower())}"><input type="checkbox" class="repo-checkbox" name="repo_slugs" value="{_esc(repo.get("slug",""))}"{" checked" if repo.get("slug","") in selected else ""}><span>{_esc(repo.get("slug","").lower())}</span></label>'
         for repo in repos
     ) or '<div class="muted">No repositories available for the selected project.</div>'
     models = list(dict.fromkeys([m for m in llm_models if m] + ([llm_cfg.get("model", "")] if llm_cfg.get("model") else [])))
@@ -199,8 +236,11 @@ def render_scan_page(
         f'<div class="timeline-row"><span>{_esc(name.title())}</span><strong>{_esc(duration)}</strong></div>'
         for name, duration in phase_timeline
     ) or '<div class="muted">Timeline will appear after the scan starts.</div>'
-    stop_button = '<button type="button" class="warn" onclick="document.getElementById(\'stop-form\').submit()">Stop Scan</button>' if running else ""
+    stop_button = '<button type="button" class="warn" onclick="document.getElementById(\'stop-form\').submit()">Stop Scan</button>'
+    state_icon_class = "running" if running else "done" if state == "done" else "stopped" if state == "stopped" else ""
+    state_text = "Running" if running else "Done" if state == "done" else "Stopped" if state == "stopped" else "Ready"
     selection_view = f"""
+<section class="selection-grid">
   <aside class="card project-panel">
     <h2 style="margin:0 0 8px;font-size:16px">Projects</h2>
     <div class="project-list">{project_links}</div>
@@ -211,38 +251,36 @@ def render_scan_page(
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
-        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit">Start Scan</button>{stop_button}</div>
+        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit">Start Scan</button></div>
       </div>
-      <div class="inline">
+      <div class="repo-actions">
         <span class="muted" id="repo-selection-count"></span>
         <button type="button" class="ghost" id="select-all-repos-btn">All</button>
         <button type="button" class="ghost" id="select-none-repos-btn">None</button>
       </div>
-      <div class="repo-shell"><div id="repo-grid" class="repo-grid">{repo_rows}</div></div>
+      <div class="repo-shell"><div id="repo-grid" class="repo-grid {repo_cols}">{repo_rows}</div></div>
     </form>
-    <form method="post" action="/scan/stop" id="stop-form"></form>
-  </section>"""
+  </section>
+</section>
+<form method="post" action="/scan/stop" id="stop-form"></form>"""
     running_view = f"""
-  <section class="card repo-panel" style="grid-column:1 / span 2">
-    <div class="inline" style="justify-content:flex-start;margin-bottom:10px">{stop_button}</div>
-    <div class="stack">
-      <div>
-        <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
-        <div class="terminal">{_esc(log_text or "No activity yet.")}</div>
+<section class="running-shell">
+  <section class="card activity-panel">
+    <div class="scan-header">
+      <div class="scan-status">
+        <span id="scan-state-icon" class="state-icon {state_icon_class}"></span>
+        <div>
+          <div style="font-size:16px;font-weight:700">Scan</div>
+          <div id="scan-state-text" class="muted">{_esc(state_text)}</div>
+        </div>
       </div>
-      <div>
-        <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
-        <div class="timeline">{timeline_html}</div>
-      </div>
+      <div class="inline">{stop_button if running else ""}</div>
     </div>
-    <form method="post" action="/scan/stop" id="stop-form"></form>
-  </section>"""
-    body = f"""
-{_flash(notice, error)}
-<section class="scan-shell">
-  {running_view if running else selection_view}
-  <aside class="card sidebar-panel">
-    <div class="finding-shell">
+    <div>
+      <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
+      <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
+    </div>
+    <div class="findings-panel">
       <h2 style="margin:0 0 8px;font-size:16px">Current Findings</h2>
       <div class="finding-table-wrap">
         <table>
@@ -251,7 +289,17 @@ def render_scan_page(
         </table>
       </div>
     </div>
+  </section>
+  <aside class="card">
+    <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
+    <div class="timeline">{timeline_html}</div>
   </aside>
+</section>
+<form method="post" action="/scan/stop" id="stop-form"></form>"""
+    body = f"""
+{_flash(notice, error)}
+<section class="scan-shell">
+  {running_view if running or state in ("done", "stopped") and log_text else selection_view}
 </section>
 <script>
 const repoSearch=document.getElementById('repo-search');
@@ -264,8 +312,32 @@ document.getElementById('select-all-repos-btn')?.addEventListener('click',()=>{{
 document.getElementById('select-none-repos-btn')?.addEventListener('click',()=>{{repoCheckboxes().forEach(cb=>cb.checked=false);updateRepoCount();}});
 repoCheckboxes().forEach(cb=>cb.addEventListener('change',updateRepoCount));
 filterRepos();
+(function() {{
+  const logEl=document.getElementById('scan-log');
+  const iconEl=document.getElementById('scan-state-icon');
+  const textEl=document.getElementById('scan-state-text');
+  if(!logEl) return;
+  const stream=new EventSource('/api/scan/stream');
+  stream.onmessage=(event)=>{{
+    if(!event.data) return;
+    logEl.textContent += (logEl.textContent.trim()? '\\n' : '') + event.data;
+    logEl.scrollTop = logEl.scrollHeight;
+  }};
+  const timer=setInterval(async ()=>{{
+    try {{
+      const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
+      const data=await res.json();
+      const state=(data.state||'').toLowerCase();
+      if(state==='running') return;
+      clearInterval(timer);
+      stream.close();
+      if(iconEl) iconEl.className='state-icon ' + (state==='done' ? 'done' : state==='stopped' ? 'stopped' : '');
+      if(textEl) textEl.textContent=state ? state.charAt(0).toUpperCase()+state.slice(1) : 'Ready';
+    }} catch (_err) {{}}
+  }}, 3000);
+}})();
 </script>"""
-    return _layout(title="Scan", body=body, active="scan", auto_refresh=5 if running else None)
+    return _layout(title="Scan", body=body, active="scan")
 
 
 def render_history_page(*, history: list[dict], notice: str = "", error: str = "") -> bytes:
