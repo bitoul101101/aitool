@@ -200,6 +200,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True) -
             f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan Results</a>'
             f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
             f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
+            f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
             '</div>'
             '<div class="header-actions">'
             '<form class="exit-form" method="post" action="/app/exit"><button type="submit" class="warn">Exit</button></form>'
@@ -873,3 +874,93 @@ def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, 
   </form>
 </section>"""
     return _layout(title="Settings", body=body, active="settings")
+
+
+def render_help_page(*, notice: str = "", error: str = "") -> bytes:
+    body = f"""
+{_flash(notice, error)}
+<section class="card stack" style="max-width:1080px">
+  <h2 style="margin:0">Help</h2>
+  <p class="muted" style="margin:0">Reference documentation for the AI Security &amp; Compliance Scanner.</p>
+
+  <section>
+    <h3 style="margin:0 0 8px">Purpose</h3>
+    <p>This tool scans Bitbucket repositories to identify AI usage, insecure AI patterns, policy-relevant findings, and related code or configuration risks. It is optimized for internal review workflows where signal quality matters more than broad coverage.</p>
+  </section>
+
+  <section>
+    <h3 style="margin:0 0 8px">Main Components</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td>Bitbucket Access</td><td>Connects to the on-prem Bitbucket server, lists projects and repositories, and clones selected repositories for scanning.</td></tr>
+        <tr><td>Detector</td><td>Parses repository content and identifies AI-related patterns, secrets, local model usage, model-serving indicators, and risky AI data flows.</td></tr>
+        <tr><td>Security Analyzer</td><td>Applies policy logic, context awareness, and severity normalization so findings are more precise and less noisy.</td></tr>
+        <tr><td>LLM Review</td><td>Uses a local model through Ollama to review eligible findings and downgrade, dismiss, or keep them with rationale-oriented structured output.</td></tr>
+        <tr><td>Triage Store</td><td>Persists To Mitigate, Accept Risk, and Suppress decisions so they survive page refreshes and future scan sessions.</td></tr>
+        <tr><td>Reporting</td><td>Generates CSV and HTML reports, keeps scan history, and exposes logs for review and download.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3 style="margin:0 0 8px">How It Works</h3>
+    <ol style="margin:0;padding-left:18px">
+      <li>Login with a Bitbucket Personal Access Token.</li>
+      <li>Select a project and one or more repositories in <strong>New Scan</strong>.</li>
+      <li>Choose the LLM model used for review, then start the scan.</li>
+      <li>The tool clones repositories, scans files, optionally runs LLM review, then generates reports.</li>
+      <li>During or after the scan, use <strong>To Mitigate</strong>, <strong>Accept Risk</strong>, or <strong>Suppress</strong> to triage findings.</li>
+      <li>Use <strong>History</strong> to revisit prior scans, open reports, download CSV output, or inspect logs.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h3 style="margin:0 0 8px">Pages</h3>
+    <table>
+      <thead><tr><th>Page</th><th>What It Is For</th></tr></thead>
+      <tbody>
+        <tr><td>New Scan</td><td>Select project, repositories, and LLM model for a new run.</td></tr>
+        <tr><td>Scan Results</td><td>Monitor the live activity log, phase timeline, findings sections, and report download buttons for the active or last run.</td></tr>
+        <tr><td>History</td><td>Search, filter, sort, and open results from previous scans.</td></tr>
+        <tr><td>Settings</td><td>Configure output directory and LLM connection settings.</td></tr>
+        <tr><td>Help</td><td>Understand the tool architecture, workflow, and limitations.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3 style="margin:0 0 8px">Outputs</h3>
+    <ul style="margin:0;padding-left:18px">
+      <li><strong>HTML Report:</strong> analyst-friendly report with summary, findings, and remediation context.</li>
+      <li><strong>CSV Report:</strong> flat export for filtering, tracking, and external review.</li>
+      <li><strong>Scan Log:</strong> terminal-like execution log showing scan phases and processing activity.</li>
+      <li><strong>History Record:</strong> persisted scan metadata including duration, status, model used, and report references.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3 style="margin:0 0 8px">Triage States</h3>
+    <table>
+      <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>To Mitigate</td><td>The finding remains relevant and should be tracked for remediation.</td></tr>
+        <tr><td>Accept Risk</td><td>The finding is acknowledged but intentionally accepted with a reason.</td></tr>
+        <tr><td>Suppress</td><td>The finding is considered noise or not actionable and is hidden from the active findings set.</td></tr>
+        <tr><td>Reset</td><td>Removes the triage decision and returns the finding to the active findings flow.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3 style="margin:0 0 8px">Known Limitations</h3>
+    <ul style="margin:0;padding-left:18px">
+      <li>LLM review quality depends heavily on the selected local model. Small models may fail structured review or produce weak decisions.</li>
+      <li>The tool is currently optimized for a single trusted operator workflow, even though parts of the architecture already anticipate stronger access control.</li>
+      <li>Static scanning can identify likely issues, but it cannot prove exploitability or runtime behavior on its own.</li>
+      <li>Generated reports reflect the scan state at generation time. Triage actions performed after report generation do not automatically rewrite those files.</li>
+      <li>Precision is intentionally prioritized over maximum coverage, so some low-signal or ambiguous patterns may be skipped.</li>
+    </ul>
+  </section>
+</section>"""
+    return _layout(title="Help", body=body, active="help")

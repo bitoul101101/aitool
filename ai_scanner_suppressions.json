@@ -10,6 +10,36 @@
       "note": "test",
       "marked_by": "Unknown",
       "marked_at": "2026-03-17"
+    },
+    {
+      "hash": "b39e768a8d1185954a40ac57710f1e24",
+      "file": "src\\federated\\conversion.consts.ts",
+      "capability": "Template Injection Risk (Jinja2/SSTI)",
+      "repo": "cogi-nexyte-mediator",
+      "status": "reviewed",
+      "note": "tttt",
+      "marked_by": "Unknown",
+      "marked_at": "2026-03-17"
+    },
+    {
+      "hash": "627a44511d78e05ac0342723bf832b6a",
+      "file": "src\\federated\\conversion.consts.ts",
+      "capability": "Template Injection Risk (Jinja2/SSTI)",
+      "repo": "cogi-nexyte-mediator",
+      "status": "false_positive",
+      "note": "fdfdfd",
+      "marked_by": "Unknown",
+      "marked_at": "2026-03-17"
+    },
+    {
+      "hash": "c0b18301e04e6ddf59affdc1d710b113",
+      "file": "src\\federated\\conversion.consts.ts",
+      "capability": "Template Injection Risk (Jinja2/SSTI)",
+      "repo": "cogi-nexyte-mediator",
+      "status": "false_positive",
+      "note": "fdfdfd",
+      "marked_by": "Unknown",
+      "marked_at": "2026-03-17"
     }
   ]
 }

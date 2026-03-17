@@ -1079,6 +1079,18 @@ def test_settings_page_is_server_rendered():
     assert srv.BITBUCKET_URL in html
 
 
+def test_help_page_is_server_rendered():
+    import app_server as srv
+
+    html = srv.render_help_page().decode("utf-8")
+
+    assert 'href="/help"' in html
+    assert '<a class="nav active" href="/help">Help</a>' in html
+    assert "Reference documentation for the AI Security &amp; Compliance Scanner." in html
+    assert "Main Components" in html
+    assert "Known Limitations" in html
+
+
 def test_allowed_origin_only_permits_local_app_hosts():
     import app_server as srv
 

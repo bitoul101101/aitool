@@ -11,6 +11,7 @@ GET  /                → scan page (HTML)
 GET  /scan            → scan page (HTML)
 GET  /history         → history page (HTML)
 GET  /settings        → settings page (HTML)
+GET  /help            → help page (HTML)
 GET  /api/status      → server health + config
 POST /api/connect     → validate PAT, return projects
 GET  /api/projects    → list projects (cached)
@@ -76,7 +77,7 @@ from services.report_access import (
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
-from services.web_pages import render_history_page, render_login_page, render_scan_page, render_settings_page
+from services.web_pages import render_help_page, render_history_page, render_login_page, render_scan_page, render_settings_page
 from services.runtime_support import (
     ensure_ollama_running,
     load_llm_config as load_llm_config_file,
@@ -644,6 +645,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not _is_connected():
                 return self._redirect("/login")
             self._render_settings_page()
+        elif p == "/help":
+            if not _is_connected():
+                return self._redirect("/login")
+            self._render_help_page()
         elif p == "/api/status":
             self._json({
                 "ok": True,
@@ -820,6 +825,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             bitbucket_url=BITBUCKET_URL,
             output_dir=str(Path(OUTPUT_DIR).resolve()),
             llm_cfg=load_llm_config(),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
+    def _render_help_page(self, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        html = render_help_page(
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
