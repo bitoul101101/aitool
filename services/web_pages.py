@@ -892,12 +892,28 @@ def render_help_page(*, notice: str = "", error: str = "") -> bytes:
     <table>
       <thead><tr><th>Component</th><th>Role</th></tr></thead>
       <tbody>
-        <tr><td>Bitbucket Access</td><td>Connects to the on-prem Bitbucket server, lists projects and repositories, and clones selected repositories for scanning.</td></tr>
-        <tr><td>Detector</td><td>Parses repository content and identifies AI-related patterns, secrets, local model usage, model-serving indicators, and risky AI data flows.</td></tr>
-        <tr><td>Security Analyzer</td><td>Applies policy logic, context awareness, and severity normalization so findings are more precise and less noisy.</td></tr>
-        <tr><td>LLM Review</td><td>Uses a local model through Ollama to review eligible findings and downgrade, dismiss, or keep them with rationale-oriented structured output.</td></tr>
-        <tr><td>Triage Store</td><td>Persists To Mitigate, Accept Risk, and Suppress decisions so they survive page refreshes and future scan sessions.</td></tr>
-        <tr><td>Reporting</td><td>Generates CSV and HTML reports, keeps scan history, and exposes logs for review and download.</td></tr>
+        <tr><td>Bitbucket Access</td><td>Connects to the on-prem Bitbucket server, validates the PAT, lists visible projects and repositories, fetches repository metadata, and clones the selected repositories into a temporary workspace for local analysis.</td></tr>
+        <tr><td>Detector</td><td>Parses repository content and identifies AI-related patterns, secrets, local model usage, model-serving indicators, risky AI data flows, and context such as documentation, tests, deleted files, and production-relevant paths.</td></tr>
+        <tr><td>Security Analyzer</td><td>Applies internal policy logic, context-aware severity adjustments, provider classification, and remediation mapping so raw detections become prioritized security findings with better precision.</td></tr>
+        <tr><td>LLM Review</td><td>Uses a local model through Ollama to review eligible findings, attempt structured adjudication, and downgrade, dismiss, or keep them with model-assisted reasoning when the selected model is reliable enough.</td></tr>
+        <tr><td>Triage Store</td><td>Persists To Mitigate, Accept Risk, and Suppress decisions with actor, timestamp, and reason so analyst decisions survive page refreshes, report review, and later scan sessions.</td></tr>
+        <tr><td>Reporting</td><td>Generates CSV and HTML reports, records scan history, exposes logs for review and download, and provides a durable artifact for engineers, AppSec reviewers, and management summaries.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3 style="margin:0 0 8px">Technology Stack</h3>
+    <table>
+      <thead><tr><th>Area</th><th>Technology</th><th>Usage</th></tr></thead>
+      <tbody>
+        <tr><td>Backend</td><td>Python 3</td><td>Core scan orchestration, report generation, persistence, and HTTP server behavior.</td></tr>
+        <tr><td>Web Server</td><td>Built-in `http.server`</td><td>Serves the local internal web UI, APIs, and SSE activity-log stream.</td></tr>
+        <tr><td>Frontend</td><td>Server-rendered HTML, CSS, and targeted JavaScript</td><td>Implements the local web interface without a full SPA framework.</td></tr>
+        <tr><td>Source Control Access</td><td>Git + Bitbucket REST API</td><td>Lists repositories, resolves metadata, and performs local shallow clones for scanning.</td></tr>
+        <tr><td>LLM Runtime</td><td>Ollama</td><td>Provides local LLM-based review and report enrichment without external cloud dependency.</td></tr>
+        <tr><td>Persistence</td><td>SQLite + JSON files</td><td>Stores scan history, logs, triage state, configuration, and generated artifacts.</td></tr>
+        <tr><td>Reports</td><td>HTML + CSV</td><td>Produces analyst-friendly and export-friendly scan outputs.</td></tr>
       </tbody>
     </table>
   </section>
