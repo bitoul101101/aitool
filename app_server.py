@@ -39,6 +39,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
+from dateutil import tz
 
 # ── Project imports ───────────────────────────────────────────────────────────
 import sys
@@ -95,6 +96,7 @@ LLM_CFG_FILE  = str(_BASE_DIR / "ai_scanner_llm_config.json")
 ACCESS_FILE   = str(_BASE_DIR / "access_control.json")
 APP_PORT      = 5757   # fixed port for the app (report servers use random ports)
 APP_VERSION   = "19.1"
+ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
 
 
 def _default_temp_dir(os_name: Optional[str] = None,
@@ -422,7 +424,11 @@ def _format_log_text(entries: list[dict]) -> str:
 def _format_log_entry(entry: dict) -> str:
     ts = entry.get("ts")
     try:
-        stamp = datetime.fromtimestamp(float(ts)).strftime("%H:%M:%S")
+        stamp = (
+            datetime.fromtimestamp(float(ts), ISRAEL_TZ).strftime("%H:%M:%S")
+            if ISRAEL_TZ
+            else datetime.fromtimestamp(float(ts)).strftime("%H:%M:%S")
+        )
     except Exception:
         stamp = "--:--:--"
     msg = str(entry.get("msg", "")).strip()
@@ -769,6 +775,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         qs = parse_qs(urlparse(self.path).query)
         project_key = (qs.get("project", [""])[0] or _session.project_key or "").strip()
+        fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
         if project_key and _require_project_access(self, project_key):
             return
         repos = _repos_for_project(project_key) if project_key else []
@@ -786,6 +793,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             llm_models=_ollama_list_models(load_llm_config().get("base_url", "http://localhost:11434")),
             log_text=_format_log_text(_session.log_lines[-500:]),
             phase_timeline=_phase_timeline(_session.log_lines, _session.state),
+            force_selection=fresh_scan,
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )

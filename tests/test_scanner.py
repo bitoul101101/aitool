@@ -770,6 +770,13 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
 
     session = srv.ScanSession()
     session.state = "done"
+    session.scan_id = "20260317_154037"
+    session.report_paths = {
+        "__all__": {
+            "html_name": "scan.html",
+            "csv_name": "scan.csv",
+        }
+    }
     session.findings = [
         {
             "_hash": "hash-0",
@@ -835,6 +842,10 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "Suppression reason" in html
     assert "Expected internal example" in html
     assert "reviewed" in html.lower()
+    assert 'id="new-scan-btn"' in html
+    assert html.index("Phase Timeline") < html.index("Open HTML Report")
+    assert "Download CSV File" in html
+    assert "Download Logs" in html
 
 
 def test_scan_session_log_normalizes_blank_lines():
@@ -852,11 +863,38 @@ def test_scan_session_log_normalizes_blank_lines():
 
 def test_sse_log_formatter_matches_page_log_format():
     import app_server as srv
+    from datetime import datetime
+    from dateutil import tz
 
     line = srv._format_log_entry({"msg": "Scan complete.", "ts": 1773754860.0})
+    expected = datetime.fromtimestamp(1773754860.0, tz.gettz("Asia/Jerusalem")).strftime("%H:%M:%S")
 
-    assert line.startswith("[")
+    assert line.startswith(f"[{expected}]")
     assert line.endswith("Scan complete.")
+
+
+def test_scan_page_can_force_new_scan_selection_after_completion():
+    import app_server as srv
+
+    session = srv.ScanSession()
+    session.state = "done"
+    session.findings = [{"_hash": "h1", "repo": "repo1", "file": "app.py", "line": 1, "severity": 2, "severity_label": "High", "capability": "OpenAI"}]
+
+    html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}],
+        selected_repos=["repo1"],
+        status=session.to_status(),
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["m1"],
+        log_text="line 1",
+        phase_timeline=[("scan", "00:02")],
+        force_selection=True,
+    ).decode("utf-8")
+
+    assert "Current Findings" not in html
+    assert "Start Scan" in html
 
 
 def test_history_page_is_server_rendered():

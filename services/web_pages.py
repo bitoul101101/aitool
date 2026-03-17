@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from html import escape
 from urllib.parse import quote
+from dateutil import tz
+
+
+ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
 
 
 def _esc(value: object) -> str:
@@ -14,6 +18,8 @@ def _fmt_dt(value: str) -> tuple[str, str, int]:
         return "-", "", 0
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo and ISRAEL_TZ:
+            dt = dt.astimezone(ISRAEL_TZ)
         return dt.strftime("%d/%m/%y"), dt.strftime("%H:%M:%S"), int(dt.timestamp())
     except Exception:
         return value, "", 0
@@ -33,6 +39,8 @@ def _fmt_triage_time(value: str) -> str:
         return ""
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo and ISRAEL_TZ:
+            dt = dt.astimezone(ISRAEL_TZ)
         return dt.strftime("%d/%m/%y %H:%M")
     except Exception:
         return str(value)
@@ -116,11 +124,11 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
 .state-icon.pending{background:#bfa78c}
 .state-icon.running{animation:blink 1s ease-in-out infinite}
-.state-icon.done{background:#20a955}
-.state-icon.done::before{content:"V"}
+.state-icon.done{background:#20a955;box-shadow:0 0 0 2px rgba(255,255,255,.18) inset}
 .state-icon.stopped{background:#a2392f}
 .state-icon.stopped::before{content:"!"}
 .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
+.timeline-row.total-row,.timeline .timeline-row:last-child{margin-top:8px;padding-top:12px;border-top:2px solid #cfae8a;border-radius:0 0 10px 10px}
 .timeline-name{text-transform:capitalize}
 .terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:420px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
@@ -143,7 +151,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .suppressed-section{margin-top:14px}
 .suppressed-section h3{margin:0 0 8px;font-size:15px}
 .suppressed-wrap{max-height:220px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
-.report-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0}
+.report-actions{display:grid;gap:8px;margin:12px 0 0}
 button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
@@ -237,6 +245,7 @@ def render_scan_page(
     status: dict,
     log_text: str,
     phase_timeline: list[tuple[str, str]],
+    force_selection: bool = False,
     notice: str = "",
     error: str = "",
 ) -> bytes:
@@ -360,7 +369,7 @@ def render_scan_page(
             name, duration = item
             normalized_timeline.append({"name": name, "duration": duration, "state": "pending"})
     timeline_html = "".join(
-        f'<div class="timeline-row">'
+        f'<div class="timeline-row{" total-row" if str(item.get("name","")).lower() == "total" else ""}">'
         f'<span class="state-icon {_esc(item.get("state","pending"))}"></span>'
         f'<span class="timeline-name">{_esc(item.get("name",""))}</span>'
         f'<strong>{_esc(item.get("duration","—"))}</strong>'
@@ -389,6 +398,10 @@ def render_scan_page(
         if log_url:
             buttons.append(f'<a class="btn ghost" id="download-log-report" href="{log_url}" download>Download Logs</a>')
         report_actions = f'<div class="report-actions" id="report-actions">{"".join(buttons)}</div>'
+    new_scan_button = ""
+    if scan_complete:
+        project_q = f"?project={quote(selected_project)}&new=1" if selected_project else "?new=1"
+        new_scan_button = f'<a class="btn" id="new-scan-btn" href="/scan{project_q}">New Scan</a>'
     selection_view = f"""
 <section class="selection-grid">
   <aside class="card project-panel">
@@ -424,7 +437,7 @@ def render_scan_page(
           <div id="scan-state-text" class="muted">{_esc(state_text)}</div>
         </div>
       </div>
-      <div class="inline">{stop_button if running else ""}</div>
+      <div class="inline">{stop_button if running else ""}{new_scan_button}</div>
     </div>
     <div>
       <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
@@ -448,18 +461,18 @@ def render_scan_page(
         </table>
       </div>
     </div>
-    {report_actions}
   </section>
   <aside class="card">
     <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
     <div class="timeline" id="phase-timeline">{timeline_html}</div>
+    {report_actions}
   </aside>
 </section>
 <form method="post" action="/scan/stop" id="stop-form"></form>"""
     body = f"""
 {_flash(notice, error)}
 <section class="scan-shell">
-  {running_view if running or state in ("done", "stopped") and log_text else selection_view}
+  {running_view if (not force_selection and (running or state in ("done", "stopped") and log_text)) else selection_view}
 </section>
 <script>
 const repoSearch=document.getElementById('repo-search');
@@ -504,7 +517,7 @@ filterRepos();
     mount.id='report-actions';
     mount.className='report-actions';
     mount.innerHTML=actions.join('');
-    findingsBody.closest('.findings-panel')?.insertAdjacentElement('afterend', mount);
+    timelineEl?.parentElement?.appendChild(mount);
   }}
   const stream=new EventSource('/api/scan/stream');
   stream.onmessage=(event)=>{{

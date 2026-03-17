@@ -8,9 +8,11 @@ from typing import List, Dict, Any
 from collections import defaultdict, Counter
 import html as html_mod
 from datetime import datetime
+from dateutil import tz
 
 SEV_COLOR = {1: "#C00000", 2: "#e05c00", 3: "#c87800", 4: "#5a8a3a"}
 SEV_LABEL = {1: "Critical", 2: "High", 3: "Medium", 4: "Low"}
+ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
 
 POLICY_COLOR = {
     "CRITICAL":   "#C00000",
@@ -539,40 +541,29 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   font-family:'Cascadia Code',Consolas,monospace;white-space:nowrap;
 }
 
-/* ── Right: stat strip — 4 horizontal counters ── */
+/* ── Right: stat list mirrors the left metadata layout ── */
 .hdr-stats{
   flex-shrink:0;width:360px;
-  padding:10px 16px;
-  display:flex;flex-direction:column;justify-content:center;gap:6px;
-}
-.hdr-stat{
-  display:flex;align-items:center;gap:10px;
-  padding:5px 10px 5px 12px;
-  border-left:3px solid rgba(255,255,255,.18);
-  border-radius:0 6px 6px 0;
-  background:rgba(255,255,255,.05);
+  padding:10px 22px;
+  display:grid;grid-template-columns:auto 1fr;
+  column-gap:14px;row-gap:4px;align-content:start;
 }
 .hdr-stat-label{
-  flex:1;font-size:11px;font-weight:500;
-  color:rgba(255,255,255,.7);white-space:nowrap;
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:rgba(255,255,255,.55);white-space:nowrap;padding-top:2px;
 }
 .hdr-stat-val{
-  font-size:20px;font-weight:800;line-height:1;color:#fff;
-  white-space:nowrap;text-align:right;min-width:36px;
+  font-size:12px;font-weight:600;color:rgba(255,255,255,.92);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .hdr-stat-sub{
-  font-size:10px;color:rgba(255,255,255,.5);white-space:nowrap;
-  text-align:right;margin-top:1px;display:none;
+  display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.62);
+  margin-top:2px;white-space:normal;
 }
-/* accent colours */
-.hdr-stat.s-warn { border-left-color:#ffb74d; }
-.hdr-stat.s-warn .hdr-stat-val { color:#ffb74d; }
-.hdr-stat.s-crit { border-left-color:#ef9a9a; }
-.hdr-stat.s-crit .hdr-stat-val { color:#ef9a9a; }
-.hdr-stat.s-ok   { border-left-color:#81c995; }
-.hdr-stat.s-ok   .hdr-stat-val { color:#81c995; }
-.hdr-stat.s-blue { border-left-color:#90caf9; }
-.hdr-stat.s-blue .hdr-stat-val { color:#90caf9; }
+.hdr-stat-val.s-warn { color:#ffcc80; }
+.hdr-stat-val.s-crit { color:#ef9a9a; }
+.hdr-stat-val.s-ok   { color:#81c995; }
+.hdr-stat-val.s-blue { color:#90caf9; }
 
 /* ── KPI bar ── */
 .kpis{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:26px;}
@@ -743,7 +734,6 @@ tr.detail-row:hover td{background:#faf9ff !important;}
     def _header(self, findings=None):
         findings = findings or []
         commit = html_mod.escape(self.meta.get("commit", ""))
-        started_at = self.meta.get("started_at_utc", "")
         suppressed_count = int(self.meta.get("suppressed_count", 0) or 0)
         reviewed_count = int(self.meta.get("reviewed_count", 0) or 0)
         accepted_risk_count = int(self.meta.get("accepted_risk_count", 0) or 0)
@@ -761,18 +751,12 @@ tr.detail-row:hover td{background:#faf9ff !important;}
 
         # ── Scan date ─────────────────────────────────────────────
         try:
-            dt      = datetime.strptime(raw_sid[:15], "%Y%m%d_%H%M%S")
+            dt = datetime.strptime(raw_sid[:15], "%Y%m%d_%H%M%S")
+            if ISRAEL_TZ:
+                dt = dt.replace(tzinfo=ISRAEL_TZ)
             scan_dt = dt.strftime("%d %b %Y  %H:%M:%S")
         except Exception:
             scan_dt = raw_sid or "—"
-
-        def _fmt_utc(ts: str) -> str:
-            if not ts:
-                return "—"
-            try:
-                return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").strftime("%d %b %Y  %H:%M:%S UTC")
-            except Exception:
-                return ts
 
         # ── Duration ──────────────────────────────────────────────
         if dur_s is not None:
@@ -954,22 +938,21 @@ tr.detail-row:hover td{background:#faf9ff !important;}
             f'<div class="hdr-meta-val"><div class="lang-chips">{lang_chips_html}</div></div>'
         )
         # ── Stat rows ─────────────────────────────────────────────
-        def stat(label, val, sub="", extra_cls=""):
-            sub_html = f'<div class="hdr-stat-sub" title="{html_mod.escape(sub)}">{html_mod.escape(sub)}</div>' if sub else ""
-            return (f'<div class="hdr-stat {extra_cls}">'
-                    f'<div class="hdr-stat-label">{label}</div>'
-                    f'<div class="hdr-stat-val">{val}</div>'
-                    f'{sub_html}'
-                    f'</div>')
+        def stat_row(label, val, sub="", extra_cls=""):
+            sub_html = f'<div class="hdr-stat-sub">{html_mod.escape(sub)}</div>' if sub else ""
+            return (
+                f'<div class="hdr-stat-label">{label}</div>'
+                f'<div class="hdr-stat-val {extra_cls}">{val}{sub_html}</div>'
+            )
 
         stats_html = (
-            stat("Files Scanned",       files_str,    "unique files with findings", "s-blue") +
-            stat("Pattern Matches",     matches_str,  matches_sub) +
-            stat("Policy Violations",   policy_str,   policy_sub_str, policy_cls) +
-            stat("LLM Dismissal Rate",  dismiss_str,  dismiss_sub,    dismiss_cls) +
-            stat("Reviewed",            str(reviewed_count), "analyst-reviewed findings") +
-            stat("Accepted Risk",       str(accepted_risk_count), "documented accepted risk") +
-            stat("Suppressed",          str(suppressed_count), "suppressed by analyst workflow")
+            stat_row("Files Scanned", files_str, "unique files with findings", "s-blue") +
+            stat_row("Pattern Matches", matches_str, matches_sub) +
+            stat_row("Policy Violations", policy_str, policy_sub_str, policy_cls) +
+            stat_row("LLM Dismissal Rate", dismiss_str, dismiss_sub, dismiss_cls) +
+            stat_row("Reviewed", str(reviewed_count), "analyst-reviewed findings") +
+            stat_row("Accepted Risk", str(accepted_risk_count), "documented accepted risk") +
+            stat_row("Suppressed", str(suppressed_count), "suppressed by analyst workflow")
         )
 
         return f"""<div class="hdr {risk_cls}">
