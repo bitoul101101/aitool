@@ -833,7 +833,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_login_page(error=str(e))
-        self._redirect(_with_query("/scan", notice="Connected to Bitbucket"))
+        self._redirect(_with_query("/scan", new="1", notice="Connected to Bitbucket"))
 
     def _page_app_exit(self):
         if _require_role(self, ROLE_ADMIN):

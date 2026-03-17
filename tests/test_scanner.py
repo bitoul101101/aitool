@@ -718,6 +718,26 @@ def test_login_page_is_server_rendered_and_does_not_embed_saved_pat():
     assert 'action="/login"' in html
 
 
+def test_login_redirects_to_new_scan_view():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.location = None
+
+        def _redirect(self, location: str):
+            self.location = location
+
+        def _render_login_page(self, *, notice: str = "", error: str = ""):
+            raise AssertionError(error or "login page should not render on success")
+
+    handler = DummyHandler()
+    with patch.object(srv, "connect_operator", return_value={"ok": True}):
+        srv._Handler._page_connect(handler, {"token": "demo-token"})
+
+    assert handler.location == "/scan?new=1&notice=Connected+to+Bitbucket"
+
+
 def test_scan_page_selection_view_stays_pre_scan():
     import app_server as srv
 
