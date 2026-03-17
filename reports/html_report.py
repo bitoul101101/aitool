@@ -853,16 +853,6 @@ tr.detail-row:hover td{background:#faf9ff !important;}
             f'<span class="lang-chip">{html_mod.escape(l)}</span>'
             for l in langs_sorted
         ) if langs_sorted else '<span class="lang-chip" style="opacity:.45">—</span>'
-        framework_names = sorted({
-            fp(f.get("provider_or_lib", ""))
-            for f in findings
-            if f.get("provider_or_lib", "")
-        })
-        framework_chips_html = "".join(
-            f'<span class="lang-chip">{html_mod.escape(name)}</span>'
-            for name in framework_names[:12]
-        ) if framework_names else '<span class="lang-chip" style="opacity:.45">—</span>'
-
         # ── 6. LLM dismissal rate ─────────────────────────────────
         if pre_llm and post_llm is not None and pre_llm > 0:
             dismissed     = pre_llm - post_llm
@@ -963,11 +953,6 @@ tr.detail-row:hover td{background:#faf9ff !important;}
             f'<div class="hdr-meta-key">Languages</div>'
             f'<div class="hdr-meta-val"><div class="lang-chips">{lang_chips_html}</div></div>'
         )
-        meta_rows += (
-            f'<div class="hdr-meta-key">Frameworks</div>'
-            f'<div class="hdr-meta-val"><div class="lang-chips">{framework_chips_html}</div></div>'
-        )
-
         # ── Stat rows ─────────────────────────────────────────────
         def stat(label, val, sub="", extra_cls=""):
             sub_html = f'<div class="hdr-stat-sub" title="{html_mod.escape(sub)}">{html_mod.escape(sub)}</div>' if sub else ""

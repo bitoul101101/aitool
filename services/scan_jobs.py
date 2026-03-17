@@ -91,9 +91,18 @@ class ScanSession:
         }
 
     def log(self, msg: str, level: str = "info") -> None:
-        entry = {"msg": msg, "level": level, "ts": time.time()}
-        self.log_lines.append(entry)
-        self.log_queue.put(entry)
+        text = "" if msg is None else str(msg)
+        parts = []
+        for part in text.splitlines():
+            cleaned = part.rstrip("\r")
+            if cleaned.strip():
+                parts.append(cleaned)
+        if not parts:
+            return
+        for part in parts:
+            entry = {"msg": part, "level": level, "ts": time.time()}
+            self.log_lines.append(entry)
+            self.log_queue.put(entry)
 
     def to_status(self) -> dict:
         sev = Counter(f.get("severity", 4) for f in self.findings)
@@ -708,9 +717,9 @@ class ScanJobService:
                             log_fn=log,
                             stop_event=stop,
                         )
-                        log(f"  [LLM] Reviewing {len(analyzed)} finding(s)...", "dim")
+                        log(f"  [LLM] Evaluating {len(analyzed)} finding(s) for review...", "dim")
                         analyzed = reviewer.review(analyzed, file_contents)
-                        log(f"  [LLM] Review done -> {len(analyzed)} finding(s)", "dim")
+                        log(f"  [LLM] Review stage complete -> {len(analyzed)} finding(s)", "dim")
                     except Exception as exc:
                         log(f"  [LLM] Review skipped: {exc}", "dim")
 

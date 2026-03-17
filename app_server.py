@@ -313,10 +313,31 @@ def _is_within_roots(path: Path, roots: List[Path]) -> bool:
     return False
 
 
-def _delete_managed_history_file(path_str: str, *, roots: List[Path]) -> str | None:
-    path = Path(path_str)
+def _normalize_history_path(path_str: str) -> Path:
+    raw = str(path_str or "").strip()
+    if raw.startswith("\\\\?\\"):
+        raw = raw[4:]
+    return Path(raw)
+
+
+def _is_tool_generated_legacy_file(path: Path, *, scan_id: str, artifact: str) -> bool:
+    lowered = [part.lower() for part in path.parts]
+    if "output" not in lowered:
+        return False
+    if artifact == "log":
+        return path.name == f"{scan_id}.log" and path.parent.name.lower() == "logs"
+    if artifact == "html":
+        return path.suffix.lower() == ".html" and path.name.lower().startswith("ai_scan_")
+    if artifact == "csv":
+        return path.suffix.lower() == ".csv" and path.name.lower().startswith("ai_scan_")
+    return False
+
+
+def _delete_managed_history_file(path_str: str, scan_id: str, artifact: str, *, roots: List[Path]) -> str | None:
+    path = _normalize_history_path(path_str)
     if not _is_within_roots(path, roots):
-        return f"refused to delete unmanaged path: {path}"
+        if not _is_tool_generated_legacy_file(path, scan_id=scan_id, artifact=artifact):
+            return f"refused to delete unmanaged path: {path}"
     if path.exists():
         path.unlink()
     return None
@@ -395,20 +416,25 @@ def _current_session_history_record() -> dict | None:
 
 
 def _format_log_text(entries: list[dict]) -> str:
-    lines = []
-    for entry in entries:
-        ts = entry.get("ts")
-        try:
-            stamp = datetime.fromtimestamp(float(ts)).strftime("%H:%M:%S")
-        except Exception:
-            stamp = "--:--:--"
-        lines.append(f"[{stamp}] {entry.get('msg', '')}")
-    return "\n".join(lines)
+    return "\n".join(_format_log_entry(entry) for entry in entries if _format_log_entry(entry))
 
 
-def _phase_timeline(entries: list[dict]) -> list[tuple[str, str]]:
+def _format_log_entry(entry: dict) -> str:
+    ts = entry.get("ts")
+    try:
+        stamp = datetime.fromtimestamp(float(ts)).strftime("%H:%M:%S")
+    except Exception:
+        stamp = "--:--:--"
+    msg = str(entry.get("msg", "")).strip()
+    if not msg:
+        return ""
+    return f"[{stamp}] {msg}"
+
+
+def _phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
     if not entries:
         return []
+    state = (state or "").lower()
     first_ts = float(entries[0].get("ts") or time.time())
     markers = {
         "init": first_ts,
@@ -425,7 +451,7 @@ def _phase_timeline(entries: list[dict]) -> list[tuple[str, str]]:
             markers["clone"] = ts
         if markers["scan"] is None and "Starting parallel scan" in msg:
             markers["scan"] = ts
-        if markers["llm review"] is None and "[LLM] Reviewing" in msg:
+        if markers["llm review"] is None and "[LLM]" in msg and ("Evaluating" in msg or "Reviewing" in msg):
             markers["llm review"] = ts
         if markers["report"] is None and "Generating reports" in msg:
             markers["report"] = ts
@@ -436,14 +462,27 @@ def _phase_timeline(entries: list[dict]) -> list[tuple[str, str]]:
         ("clone", markers["clone"], markers["scan"] or markers["llm review"] or markers["report"] or markers["end"]),
         ("scan", markers["scan"], markers["llm review"] or markers["report"] or markers["end"]),
         ("llm review", markers["llm review"], markers["report"] or markers["end"]),
+        ("report", markers["report"], markers["end"]),
     ]
     timeline = []
+    active_name = ""
+    started_names = [name for name, start, _ in points if start is not None]
+    if state == "running" and started_names:
+        active_name = started_names[-1]
     for name, start, end in points:
         if start is None:
-            timeline.append((name, "—"))
+            timeline.append({"name": name, "duration": "—", "state": "pending"})
             continue
         seconds = max(int((end or start) - start), 0)
-        timeline.append((name, f"{seconds // 60:02d}:{seconds % 60:02d}"))
+        phase_state = "done"
+        if state in ("stopped", "error") and name == active_name:
+            phase_state = "stopped"
+        elif state == "running" and name == active_name:
+            phase_state = "running"
+        timeline.append({"name": name, "duration": f"{seconds // 60:02d}:{seconds % 60:02d}", "state": phase_state})
+    total_seconds = max(int(markers["end"] - first_ts), 0)
+    total_state = "running" if state == "running" else "stopped" if state in ("stopped", "error") else "done"
+    timeline.append({"name": "total", "duration": f"{total_seconds // 60:02d}:{total_seconds % 60:02d}", "state": total_state})
     return timeline
 
 
@@ -612,7 +651,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif p == "/api/scan/status":
             if _require_role(self, ROLE_VIEWER):
                 return
-            self._json(_session.to_status())
+            status = _session.to_status()
+            status["phase_timeline"] = _phase_timeline(_session.log_lines, _session.state)
+            status["log_url"] = f"/api/history/log/{_session.scan_id}" if _session.scan_id else ""
+            self._json(status)
         elif p == "/api/history":
             if _require_role(self, ROLE_VIEWER):
                 return
@@ -743,7 +785,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             llm_cfg=load_llm_config(),
             llm_models=_ollama_list_models(load_llm_config().get("base_url", "http://localhost:11434")),
             log_text=_format_log_text(_session.log_lines[-500:]),
-            phase_timeline=_phase_timeline(_session.log_lines),
+            phase_timeline=_phase_timeline(_session.log_lines, _session.state),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
@@ -790,7 +832,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         _audit_event("app_shutdown_requested")
         _request_app_shutdown()
-        self._send(200, "text/html; charset=utf-8", b"<html><body style='font-family:Segoe UI,system-ui,sans-serif;padding:24px'>Shutting down...</body></html>")
+        self._send(
+            200,
+            "text/html; charset=utf-8",
+            b"<html><body><script>window.open('','_self');window.close();setTimeout(()=>{document.body.innerHTML='';location.replace('about:blank');},250);</script></body></html>",
+        )
 
     def _page_scan_start(self, body: dict):
         global _session
@@ -835,7 +881,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             result = delete_history_records(
                 body={"scan_ids": scan_ids},
                 history_records=_history_records_for_user(),
-                delete_managed_file=lambda path_str: _delete_managed_history_file(path_str, roots=managed_roots),
+                delete_managed_file=lambda path_str, sid, artifact: _delete_managed_history_file(path_str, sid, artifact, roots=managed_roots),
                 delete_history=_delete_history,
                 audit_event=_audit_event,
             )
@@ -1014,7 +1060,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     break
 
     def _sse_write(self, entry: dict):
-        data = json.dumps(entry)
+        line = _format_log_entry(entry)
+        if not line:
+            return
+        data = json.dumps(line)
         self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
         self.wfile.flush()
 
@@ -1069,7 +1118,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json(delete_history_records(
                 body=body,
                 history_records=_history_records_for_user(),
-                delete_managed_file=lambda path_str: _delete_managed_history_file(path_str, roots=managed_roots),
+                delete_managed_file=lambda path_str, sid, artifact: _delete_managed_history_file(path_str, sid, artifact, roots=managed_roots),
                 delete_history=_delete_history,
                 audit_event=_audit_event,
             ))

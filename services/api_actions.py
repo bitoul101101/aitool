@@ -103,7 +103,7 @@ def delete_history_records(
     *,
     body: dict,
     history_records: list[dict],
-    delete_managed_file: Callable[[str], str | None],
+    delete_managed_file: Callable[[str, str, str], str | None],
     delete_history: Callable[[list[str]], None],
     audit_event: Callable[..., None],
 ) -> dict:
@@ -121,12 +121,12 @@ def delete_history_records(
         for key in ("html", "csv"):
             fpath = rp.get(key, "")
             if fpath:
-                err = delete_managed_file(fpath)
+                err = delete_managed_file(fpath, sid, key)
                 if err:
                     errors.append(f"{sid} {key}: {err}")
         log_file = rec.get("log_file", "")
         if log_file:
-            err = delete_managed_file(log_file)
+            err = delete_managed_file(log_file, sid, "log")
             if err:
                 errors.append(f"{sid} log: {err}")
         deleted.append(sid)

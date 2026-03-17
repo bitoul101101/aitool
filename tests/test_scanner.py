@@ -727,6 +727,28 @@ def test_scan_page_contains_server_rendered_findings_forms():
     assert "Current Findings" not in html
 
 
+def test_scan_session_log_normalizes_blank_lines():
+    import app_server as srv
+
+    session = srv.ScanSession()
+    session.log("\nGenerating reports...\n", "dim")
+    session.log("\nOK repo1 -> 3 findings", "info")
+
+    assert [entry["msg"] for entry in session.log_lines] == [
+        "Generating reports...",
+        "OK repo1 -> 3 findings",
+    ]
+
+
+def test_sse_log_formatter_matches_page_log_format():
+    import app_server as srv
+
+    line = srv._format_log_entry({"msg": "Scan complete.", "ts": 1773754860.0})
+
+    assert line.startswith("[")
+    assert line.endswith("Scan complete.")
+
+
 def test_history_page_is_server_rendered():
     import app_server as srv
 

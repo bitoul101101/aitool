@@ -1007,7 +1007,7 @@ class LLMReviewer:
         ineligible = [f for f in findings if not _is_eligible(f)]
 
         if not eligible:
-            self.log_fn("  [LLM] No findings eligible for review")
+            self.log_fn(f"  [LLM] 0 findings eligible for review ({len(ineligible)} skipped)")
             return findings
 
         # Compute adaptive batch size from model parameter count + free VRAM

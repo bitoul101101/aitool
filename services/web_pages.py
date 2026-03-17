@@ -84,6 +84,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .login-shell{max-width:540px;margin:48px auto 0}
 .login-grid{display:grid;gap:14px}
 .login-actions{display:flex;justify-content:flex-end}
+.login-title{text-align:center;margin:0 0 6px}
 .scan-shell{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
 .selection-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
 .project-panel,.repo-panel,.activity-panel{min-height:calc(100vh - 132px)}
@@ -103,17 +104,21 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .scan-header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
 .scan-status{display:flex;align-items:center;gap:10px}
 .state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+.state-icon.pending{background:#bfa78c}
 .state-icon.running{animation:blink 1s ease-in-out infinite}
 .state-icon.done{background:#20a955}
 .state-icon.done::before{content:"V"}
 .state-icon.stopped{background:#a2392f}
 .state-icon.stopped::before{content:"!"}
+.timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
+.timeline-name{text-transform:capitalize}
 .terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:420px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
-.timeline-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px}
 .timeline-row strong{justify-self:end}
 .findings-panel{margin-top:12px}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
+.report-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0}
+button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
@@ -180,8 +185,7 @@ def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = 
     body = f"""
 {_flash(notice, error)}
 <section class="card login-shell">
-  <h2 style="margin:0 0 12px">Login</h2>
-  <p class="muted" style="margin:0">Connect to {_esc(bitbucket_url)} with a Personal Access Token.</p>
+  <h2 class="login-title">Login to Bitbucket</h2>
   <form method="post" action="/login" class="login-grid" style="margin-top:18px">
     <div>
       <label>Personal Access Token</label>
@@ -212,6 +216,7 @@ def render_scan_page(
 ) -> bytes:
     state = str(status.get("state", "")).lower()
     running = state == "running"
+    scan_complete = state in {"done", "stopped", "error"}
     selected = set(selected_repos)
     repo_count = len(repos)
     repo_cols = "cols-2" if repo_count <= 18 else "cols-3"
@@ -228,17 +233,48 @@ def render_scan_page(
         f'<option value="{_esc(model)}"{" selected" if model == llm_cfg.get("model", "") else ""}>{_esc(model)}</option>'
         for model in models
     )
+    findings = status.get("finding_details", [])[:20]
     findings_rows = "".join(
         f"<tr><td>{_esc(f.get('repo',''))}</td><td>{_esc(f.get('file',''))}:{_esc(f.get('line',''))}</td><td>{_esc(f.get('severity_label', f.get('severity','')))}</td><td>{_esc(f.get('capability',''))}</td></tr>"
-        for f in status.get("finding_details", [])[:20]
+        for f in findings
     ) or '<tr><td colspan="4">No current findings.</td></tr>'
+    normalized_timeline = []
+    for item in phase_timeline:
+        if isinstance(item, dict):
+            normalized_timeline.append(item)
+        else:
+            name, duration = item
+            normalized_timeline.append({"name": name, "duration": duration, "state": "pending"})
     timeline_html = "".join(
-        f'<div class="timeline-row"><span>{_esc(name.title())}</span><strong>{_esc(duration)}</strong></div>'
-        for name, duration in phase_timeline
+        f'<div class="timeline-row">'
+        f'<span class="state-icon {_esc(item.get("state","pending"))}"></span>'
+        f'<span class="timeline-name">{_esc(item.get("name",""))}</span>'
+        f'<strong>{_esc(item.get("duration","—"))}</strong>'
+        f"</div>"
+        for item in normalized_timeline
     ) or '<div class="muted">Timeline will appear after the scan starts.</div>'
-    stop_button = '<button type="button" class="warn" onclick="document.getElementById(\'stop-form\').submit()">Stop Scan</button>'
+    stop_button = (
+        '<button type="button" id="stop-scan-btn" class="warn" onclick="document.getElementById(\'stop-form\').submit()">Stop Scan</button>'
+        if running
+        else '<button type="button" id="stop-scan-btn" class="warn" disabled>Stop Scan</button>'
+    )
     state_icon_class = "running" if running else "done" if state == "done" else "stopped" if state == "stopped" else ""
     state_text = "Running" if running else "Done" if state == "done" else "Stopped" if state == "stopped" else "Ready"
+    report = status.get("report") or {}
+    scan_id = status.get("scan_id", "")
+    report_actions = ""
+    if scan_complete and findings:
+        html_name = report.get("html_name", "")
+        csv_name = report.get("csv_name", "")
+        log_url = f"/api/history/log/{_esc(scan_id)}" if scan_id else ""
+        buttons = []
+        if html_name:
+            buttons.append(f'<a class="btn" id="open-html-report" href="/reports/{_esc(html_name)}" target="_blank">Open HTML Report</a>')
+        if csv_name:
+            buttons.append(f'<a class="btn alt" id="download-csv-report" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
+        if log_url:
+            buttons.append(f'<a class="btn ghost" id="download-log-report" href="{log_url}" download>Download Logs</a>')
+        report_actions = f'<div class="report-actions" id="report-actions">{"".join(buttons)}</div>'
     selection_view = f"""
 <section class="selection-grid">
   <aside class="card project-panel">
@@ -285,14 +321,15 @@ def render_scan_page(
       <div class="finding-table-wrap">
         <table>
           <thead><tr><th>Repo</th><th>Location</th><th>Severity</th><th>Capability</th></tr></thead>
-          <tbody>{findings_rows}</tbody>
+          <tbody id="current-findings-body">{findings_rows}</tbody>
         </table>
       </div>
     </div>
+    {report_actions}
   </section>
   <aside class="card">
     <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
-    <div class="timeline">{timeline_html}</div>
+    <div class="timeline" id="phase-timeline">{timeline_html}</div>
   </aside>
 </section>
 <form method="post" action="/scan/stop" id="stop-form"></form>"""
@@ -316,11 +353,46 @@ filterRepos();
   const logEl=document.getElementById('scan-log');
   const iconEl=document.getElementById('scan-state-icon');
   const textEl=document.getElementById('scan-state-text');
+  const findingsBody=document.getElementById('current-findings-body');
+  const timelineEl=document.getElementById('phase-timeline');
   if(!logEl) return;
+  function findingRows(items){{
+    if(!items || !items.length) return '<tr><td colspan="4">No current findings.</td></tr>';
+    return items.slice(0,20).map(f=>`<tr><td>${{f.repo||''}}</td><td>${{f.file||''}}:${{f.line||''}}</td><td>${{f.severity_label||f.severity||''}}</td><td>${{f.capability||''}}</td></tr>`).join('');
+  }}
+  function timelineRows(items){{
+    if(!items || !items.length) return '<div class="muted">Timeline will appear after the scan starts.</div>';
+    return items.map(item=>`<div class="timeline-row"><span class="state-icon ${{item.state||'pending'}}"></span><span class="timeline-name">${{item.name||''}}</span><strong>${{item.duration||'—'}}</strong></div>`).join('');
+  }}
+  function reportActions(data){{
+    const shell=document.getElementById('report-actions');
+    if(!shell) {{
+      if(!data || !findingsBody) return;
+    }}
+    const report=data.report||{{}};
+    const findings=data.finding_details||[];
+    if(!findings.length || !(data.state==='done' || data.state==='stopped')) {{
+      if(shell) shell.remove();
+      return;
+    }}
+    const actions=[];
+    if(report.html_name) actions.push(`<a class="btn" id="open-html-report" href="/reports/${{report.html_name}}" target="_blank">Open HTML Report</a>`);
+    if(report.csv_name) actions.push(`<a class="btn alt" id="download-csv-report" href="/reports/${{report.csv_name}}" download>Download CSV File</a>`);
+    if(data.scan_id) actions.push(`<a class="btn ghost" id="download-log-report" href="/api/history/log/${{data.scan_id}}" download>Download Logs</a>`);
+    if(!actions.length) return;
+    if(shell) {{ shell.innerHTML=actions.join(''); return; }}
+    const mount=document.createElement('div');
+    mount.id='report-actions';
+    mount.className='report-actions';
+    mount.innerHTML=actions.join('');
+    findingsBody.closest('.findings-panel')?.insertAdjacentElement('afterend', mount);
+  }}
   const stream=new EventSource('/api/scan/stream');
   stream.onmessage=(event)=>{{
     if(!event.data) return;
-    logEl.textContent += (logEl.textContent.trim()? '\\n' : '') + event.data;
+    let line=event.data;
+    try {{ line=JSON.parse(event.data); }} catch (_err) {{}}
+    logEl.textContent += (logEl.textContent.trim()? '\\n' : '') + line;
     logEl.scrollTop = logEl.scrollHeight;
   }};
   const timer=setInterval(async ()=>{{
@@ -328,11 +400,16 @@ filterRepos();
       const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
       const data=await res.json();
       const state=(data.state||'').toLowerCase();
+      if(findingsBody) findingsBody.innerHTML=findingRows(data.finding_details||[]);
+      if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[]);
+      reportActions(data);
       if(state==='running') return;
       clearInterval(timer);
       stream.close();
       if(iconEl) iconEl.className='state-icon ' + (state==='done' ? 'done' : state==='stopped' ? 'stopped' : '');
       if(textEl) textEl.textContent=state ? state.charAt(0).toUpperCase()+state.slice(1) : 'Ready';
+      const stopBtn=document.getElementById('stop-scan-btn');
+      if(stopBtn) stopBtn.disabled=true;
     }} catch (_err) {{}}
   }}, 3000);
 }})();
@@ -423,7 +500,7 @@ const delBtn=document.getElementById('delete-selected-btn');
 function rows(){{return Array.from(hBody.querySelectorAll('tr')).filter(r=>r.querySelectorAll('td').length>1);}}
 function updateDelete(){{delBtn.classList.toggle('hidden',!rows().some(r=>r.querySelector('.history-check')?.checked));}}
 function applyFilters(){{const q=(search.value||'').toLowerCase().trim();rows().forEach(row=>{{const text=row.textContent.toLowerCase();const ok=!q||text.includes(q);const okP=!fp.value||row.dataset.project===fp.value;const okR=!fr.value||row.dataset.repo===fr.value;const okS=!fs.value||row.dataset.status===fs.value;const okM=!fm.value||row.dataset.model===fm.value;row.style.display=(ok&&okP&&okR&&okS&&okM)?'':'none';}});updateDelete();}}
-let sortState={{index:1,dir:-1,kind:'datetime'}};
+let sortState={{index:null,dir:-1,kind:'datetime'}};
 function cellValue(row,index,kind){{if(kind==='datetime') return Number(row.dataset.ts)||0; const text=(row.children[index]?.innerText||'').trim(); if(kind==='number') return Number(text.replace(':','.'))||0; return text.toLowerCase();}}
 function sortHistory(index,kind){{const rs=rows(); if(sortState.index===index) sortState.dir*=-1; else sortState={{index,dir:kind==='datetime'?-1:1,kind}}; rs.sort((a,b)=>{{const av=cellValue(a,sortState.index,sortState.kind); const bv=cellValue(b,sortState.index,sortState.kind); if(av<bv) return -1*sortState.dir; if(av>bv) return 1*sortState.dir; return 0;}}); rs.forEach(r=>hBody.appendChild(r)); applyFilters();}}
 document.querySelectorAll('#history-table thead th[data-sort]').forEach((th,index)=>th.addEventListener('click',()=>sortHistory(index+1,th.dataset.sort)));
