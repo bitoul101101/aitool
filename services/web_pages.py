@@ -521,11 +521,17 @@ filterRepos();
     timelineEl?.parentElement?.appendChild(mount);
   }}
   const stream=new EventSource('/api/scan/stream');
+  let replaceInitialLog = Boolean(logEl.textContent.trim());
   stream.onmessage=(event)=>{{
     if(!event.data) return;
     let line=event.data;
     try {{ line=JSON.parse(event.data); }} catch (_err) {{}}
-    logEl.textContent += (logEl.textContent.trim()? '\\n' : '') + line;
+    if(replaceInitialLog){{
+      logEl.textContent = line;
+      replaceInitialLog = false;
+    }} else {{
+      logEl.textContent += (logEl.textContent.trim()? '\\n' : '') + line;
+    }}
     logEl.scrollTop = logEl.scrollHeight;
   }};
   const timer=setInterval(async ()=>{{

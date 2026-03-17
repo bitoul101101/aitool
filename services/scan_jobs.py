@@ -905,15 +905,24 @@ class ScanJobService:
                     include_snippets=True,
                     meta=report_meta,
                 )
+                report_progress = {"last_logged": 0}
+
+                def _report_progress(i: int, n: int, cap: str) -> None:
+                    if n <= 0:
+                        return
+                    step = max(1, n // 5)
+                    should_log = i == 1 or i == n or (i - report_progress["last_logged"]) >= step
+                    if not should_log:
+                        return
+                    report_progress["last_logged"] = i
+                    log(f"  [Report] LLM analysis {i}/{n}...", "dim")
+
                 html_path = html_reporter.write(
                     final,
                     policy=policy,
                     ollama_url=session.llm_url,
                     ollama_model=session.llm_model,
-                    progress_fn=lambda i, n, cap: log(
-                        f"  [Report] LLM analysis {i}/{n}: {cap[:50]}...",
-                        "dim",
-                    ),
+                    progress_fn=_report_progress,
                 )
                 report_paths["__all__"] = {
                     "csv": str(Path(csv_path).resolve()),

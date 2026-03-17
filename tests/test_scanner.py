@@ -895,6 +895,53 @@ def test_sse_log_formatter_matches_page_log_format():
     assert line.endswith("Scan complete.")
 
 
+def test_llm_fallback_parsing_does_not_emit_low_signal_operator_logs():
+    from scanner import llm_reviewer as reviewer
+
+    logs = []
+    responses = [b"not-json", b'[{"verdict":"dismiss","reason":"docs","confidence":80}]']
+
+    with patch.object(reviewer, "_post", side_effect=lambda *args, **kwargs: responses.pop(0)), \
+         patch.object(reviewer, "_extract_json_array", side_effect=[None, [{"verdict": "dismiss", "reason": "docs", "confidence": 80}]]), \
+         patch.object(reviewer, "_debug_log"):
+        verdicts = reviewer._call_ollama(
+            "http://localhost:11434",
+            "demo-model",
+            "[]",
+            logs.append,
+        )
+
+    assert verdicts == [{"verdict": "dismiss", "reason": "docs", "confidence": 80}]
+    assert logs == []
+
+
+def test_llm_review_logs_explicit_warning_when_batches_fail():
+    from scanner import llm_reviewer as reviewer
+
+    logs = []
+    findings = [
+        {
+            "_hash": "h1",
+            "provider_or_lib": "openai",
+            "confidence": 10,
+            "context": "test",
+            "severity": 2,
+            "file": "app.py",
+            "line": 4,
+            "snippet": "import openai",
+        }
+    ]
+    reviewer_obj = reviewer.LLMReviewer(model="demo-model", log_fn=logs.append)
+
+    with patch.object(reviewer, "_available_vram_gb", return_value=0.0), \
+         patch.object(reviewer, "compute_batch_size", return_value=1), \
+         patch.object(reviewer, "_call_ollama", return_value=None):
+        result = reviewer_obj.review(findings, {})
+
+    assert result == findings
+    assert any("Review failed for 1 finding(s); results kept without LLM refinement" in line for line in logs)
+
+
 def test_scan_page_can_force_new_scan_selection_after_completion():
     import app_server as srv
 

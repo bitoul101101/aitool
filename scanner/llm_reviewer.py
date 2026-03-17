@@ -852,17 +852,19 @@ def _call_ollama(base_url: str,
                 verdicts = _extract_json_array(raw)
                 if verdicts is not None:
                     if use_schema is False or attempt > 1:
-                        # Only log fallback/retry usage — schema success is silent
-                        log_fn(f"  [LLM] Response parsed via {mode} "
-                               f"(attempt {attempt})")
+                        # Fallback/retry details belong in the debug log, not the main UI.
+                        _debug_log(
+                            f"fallback parse mode={mode} attempt={attempt} model={model}",
+                            raw,
+                        )
                     return verdicts
 
                 # Schema-mode failures are expected for small models and always
                 # followed by the json-mode fallback — don't surface in the UI log.
                 if not use_schema:
-                    log_fn(
-                        f"  [LLM] [{mode} attempt {attempt}] "
-                        f"Could not parse response — retrying"
+                    _debug_log(
+                        f"parse retry mode={mode} attempt={attempt} model={model}",
+                        raw,
                     )
                 if attempt <= MAX_RETRIES:
                     time.sleep(RETRY_DELAY)
@@ -870,8 +872,10 @@ def _call_ollama(base_url: str,
             except urllib.error.HTTPError as e:
                 # 400 from structured schema = Ollama too old — skip to fallback
                 if use_schema and e.code == 400:
-                    log_fn("  [LLM] Structured schema not supported "
-                           "— falling back to json-mode")
+                    _debug_log(
+                        f"schema unsupported model={model} code={e.code}",
+                        str(e).encode("utf-8", errors="replace"),
+                    )
                     break
                 log_fn(f"  [LLM] [{mode}] HTTP {e.code} (attempt {attempt})")
                 if attempt <= MAX_RETRIES:
@@ -1161,6 +1165,11 @@ class LLMReviewer:
         if salvaged_count:
             parts.append(f"unreviewed:{salvaged_count}")
 
+        if error_count:
+            self.log_fn(
+                f"  [LLM] Review failed for {error_count} finding(s); "
+                "results kept without LLM refinement"
+            )
         self.log_fn(f"  [LLM] Done — " + "  ".join(parts))
         self.log_fn(f"  [LLM] Debug log: {LLM_DEBUG_LOG}")
 
