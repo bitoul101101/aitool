@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 
 output/*.db
+output/ai_scan_*.csv
+output/ai_scan_*.html
 output/scan_history.json
 output/logs/
 
