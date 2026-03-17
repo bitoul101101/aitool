@@ -919,6 +919,13 @@ def render_help_page(*, notice: str = "", error: str = "") -> bytes:
   </section>
 
   <section>
+    <h3 style="margin:0 0 8px">Detection Engine</h3>
+    <p>The detection engine is regex- and context-driven. It scans repository content for known AI usage patterns, secret exposure, risky AI integrations, model-serving indicators, and unsafe data flows, then applies context-aware filtering before policy analysis and optional LLM review.</p>
+    <p><strong>Pattern categories:</strong> provider and SDK usage, secrets and tokens, prompt and output handling risks, local model and serving patterns, vector/RAG components, configuration exposure, CI/CD and infrastructure references, and agent or gateway frameworks.</p>
+    <p><strong>Scanned file types:</strong> common source files, configuration files, notebooks, scripts, markup, manifests, dependency files, environment files, and selected structured text formats such as JSON, YAML, TOML, INI, Docker-related files, and CI definitions.</p>
+  </section>
+
+  <section>
     <h3 style="margin:0 0 8px">How It Works</h3>
     <ol style="margin:0;padding-left:18px">
       <li>Login with a Bitbucket Personal Access Token.</li>
