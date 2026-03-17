@@ -895,6 +895,7 @@ def test_scan_page_can_force_new_scan_selection_after_completion():
 
     assert "Current Findings" not in html
     assert "Start Scan" in html
+    assert '/scan?project=COGI&new=1' in html
 
 
 def test_history_page_is_server_rendered():

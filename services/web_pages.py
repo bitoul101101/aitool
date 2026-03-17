@@ -73,11 +73,12 @@ header h1{margin:0;font-size:18px}
 .nav.active,.nav:hover{background:#6d3514;color:#fff}
 .exit-form{margin:0}
 main{max-width:1340px;margin:0 auto;padding:16px 18px}
+.login-page main{min-height:calc(100vh - 70px);display:flex;align-items:center;justify-content:center}
 .card{background:#fffaf4;border:1px solid #d8b995;border-radius:14px;padding:14px}
 .notice,.error{padding:10px 12px;border-radius:10px}
 .notice{background:#e8f5e5;border:1px solid #b8d3b0;color:#224d22}
 .error{background:#f8e5e2;border:1px solid #dfb1aa;color:#7d2a22}
-.toast-wrap{position:fixed;top:14px;right:14px;display:grid;gap:8px;z-index:1000}
+.toast-wrap{position:fixed;left:14px;bottom:14px;display:grid;gap:8px;z-index:1000}
 .toast{min-width:260px;max-width:420px;box-shadow:0 10px 24px rgba(0,0,0,.14);animation:fadein .2s ease}
 .muted{color:#705333}
 button,.btn{border:0;border-radius:8px;padding:9px 13px;background:#6d3514;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
@@ -99,7 +100,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .checkline{display:flex;align-items:center;gap:8px;font-size:14px;text-transform:none;color:#261507}
 .checkline input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
-.login-shell{max-width:540px;margin:48px auto 0}
+.login-shell{width:min(100%,420px);margin:0 auto}
 .login-grid{display:grid;gap:14px}
 .login-actions{display:flex;justify-content:flex-end}
 .login-title{text-align:center;margin:0 0 6px}
@@ -120,7 +121,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .repo-row span{display:block}
 .running-shell{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:14px;align-items:start}
 .scan-header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
-.scan-status{display:flex;align-items:center;gap:10px}
+.scan-status{display:flex;align-items:baseline;gap:10px}
 .state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
 .state-icon.pending{background:#bfa78c}
 .state-icon.running{animation:blink 1s ease-in-out infinite}
@@ -177,6 +178,7 @@ def _flash(notice: str = "", error: str = "") -> str:
 
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True) -> bytes:
     nav = ""
+    body_class = "login-page" if not show_nav else ""
     if show_nav:
         nav = (
             '<div class="header-nav">'
@@ -196,7 +198,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True) -
 <title>{_esc(title)}</title>
 <style>{_base_style()}</style>
 </head>
-<body>
+<body class="{body_class}">
 <header><h1>AI Security & Compliance Scanner</h1>{nav if nav else ""}</header>
 <main>{body}</main>
 <script>
@@ -249,6 +251,7 @@ def render_scan_page(
     notice: str = "",
     error: str = "",
 ) -> bytes:
+    project_query_suffix = "&new=1" if force_selection else ""
     def triage_badge(status_name: str) -> str:
         if not status_name:
             return ""
@@ -345,7 +348,7 @@ def render_scan_page(
     repo_count = len(repos)
     repo_cols = "cols-2" if repo_count <= 18 else "cols-3"
     project_links = "".join(
-        f'<a class="project-link{" active" if p.get("key","") == selected_project else ""}" href="/scan?project={_esc(p.get("key",""))}">{_esc(p.get("key",""))}</a>'
+        f'<a class="project-link{" active" if p.get("key","") == selected_project else ""}" href="/scan?project={_esc(p.get("key",""))}{project_query_suffix}">{_esc(p.get("key",""))}</a>'
         for p in projects
     ) or '<div class="muted">No projects loaded.</div>'
     repo_rows = "".join(
@@ -431,11 +434,8 @@ def render_scan_page(
   <section class="card activity-panel">
     <div class="scan-header">
       <div class="scan-status">
-        <span id="scan-state-icon" class="state-icon {state_icon_class}"></span>
-        <div>
-          <div style="font-size:16px;font-weight:700">Scan</div>
-          <div id="scan-state-text" class="muted">{_esc(state_text)}</div>
-        </div>
+        <div style="font-size:16px;font-weight:700">Scan</div>
+        <div id="scan-state-text" class="muted">{_esc(state_text)}</div>
       </div>
       <div class="inline">{stop_button if running else ""}{new_scan_button}</div>
     </div>
