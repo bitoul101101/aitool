@@ -823,6 +823,65 @@ def test_shallow_clone_cleans_partial_destination_on_failure():
     assert not dest.exists(), "Partial clone directory should be cleaned up after failure"
 
 
+def test_stop_active_scan_kills_processes_and_marks_stopped():
+    import app_server as srv
+
+    class FakeProc:
+        def __init__(self):
+            self.killed = False
+
+        def kill(self):
+            self.killed = True
+
+    class FakePool:
+        def __init__(self):
+            self.shutdown_calls = []
+
+        def shutdown(self, wait=False, cancel_futures=False):
+            self.shutdown_calls.append((wait, cancel_futures))
+
+    orig_session = srv._session
+    session = srv.ScanSession()
+    session.state = "running"
+    proc = FakeProc()
+    pool = FakePool()
+    session.proc_holder = [proc]
+    session._active_pool = pool
+
+    try:
+        srv._session = session
+        assert srv._stop_active_scan() is True
+        assert session.state == "stopped"
+        assert proc.killed is True
+        assert pool.shutdown_calls == [(False, True)]
+        assert session.proc_holder == []
+    finally:
+        srv._session = orig_session
+
+
+def test_request_app_shutdown_sets_exit_event_and_stops_server():
+    import app_server as srv
+
+    class FakeServer:
+        def __init__(self):
+            self.shutdown_called = threading.Event()
+
+        def shutdown(self):
+            self.shutdown_called.set()
+
+    orig_server = srv._server_instance
+    srv._server_instance = FakeServer()
+    srv._app_exit_event.clear()
+
+    try:
+        srv._request_app_shutdown()
+        assert srv.wait_for_exit(0.5) is True
+        assert srv._server_instance.shutdown_called.wait(0.5) is True
+    finally:
+        srv._server_instance = orig_server
+        srv._app_exit_event.clear()
+
+
 def test_run_scan_with_no_repos_completes_cleanly():
     import app_server as srv
 

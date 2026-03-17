@@ -198,6 +198,8 @@ _projects_cache: List[dict] = []
 _repos_cache: Dict[str, List[dict]] = {}
 _connected_user: str = "Unknown"
 _state_lock = threading.Lock()
+_app_exit_event = threading.Event()
+_server_instance: Optional[http.server.ThreadingHTTPServer] = None
 
 
 # ── Scan job service ─────────────────────────────────────────────────────────
@@ -265,6 +267,38 @@ def _delete_history(scan_ids: List[str]) -> None:
 def _cleanup_stale_temp_clones() -> None:
     _sync_scan_service_paths()
     _scan_service.cleanup_stale_temp_clones()
+
+
+def _stop_active_scan() -> bool:
+    if _session.state != "running":
+        return False
+    _session.stop_event.set()
+    with _session.proc_lock:
+        for proc in list(_session.proc_holder):
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        _session.proc_holder.clear()
+    pool = getattr(_session, "_active_pool", None)
+    if pool:
+        try:
+            pool.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            try:
+                pool.shutdown(wait=False)
+            except Exception:
+                pass
+    _session.state = "stopped"
+    return True
+
+
+def _request_app_shutdown() -> None:
+    _stop_active_scan()
+    _app_exit_event.set()
+    server = _server_instance
+    if server is not None:
+        threading.Thread(target=server.shutdown, daemon=True).start()
 
 
 def _run_scan(session: ScanSession):
@@ -345,6 +379,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._api_settings_save(body)
         elif p == "/api/history/delete":
             self._api_history_delete(body)
+        elif p == "/api/app/shutdown":
+            self._api_app_shutdown()
         else:
             self._404()
 
@@ -413,26 +449,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._json({"ok": True, "scan_id": _session.scan_id})
 
     def _api_scan_stop(self):
-        _session.stop_event.set()
-        # Kill active git subprocesses immediately
-        with _session.proc_lock:
-            for proc in list(_session.proc_holder):
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-            _session.proc_holder.clear()
-        # Cancel pending ThreadPoolExecutor futures
-        pool = getattr(_session, '_active_pool', None)
-        if pool:
-            try:
-                pool.shutdown(wait=False, cancel_futures=True)
-            except TypeError:
-                try:
-                    pool.shutdown(wait=False)
-                except Exception:
-                    pass
-        _session.state = "stopped"
+        stopped = _stop_active_scan()
+        self._json({"ok": True, "stopped": stopped})
+
+    def _api_app_shutdown(self):
+        _request_app_shutdown()
         self._json({"ok": True})
 
 
@@ -707,6 +728,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .logo-icon{width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.15);
   display:flex;align-items:center;justify-content:center;font-size:15px}
 .logo-sub{font-size:11px;font-weight:400;color:rgba(255,255,255,.45);margin-left:4px}
+.top-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.top-actions .btn-xs{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);color:#fff}
+.top-actions .btn-xs:hover{color:#fff;border-color:rgba(255,255,255,.38);background:rgba(255,255,255,.14)}
 #conn-info{margin-left:auto;font-size:12px;color:rgba(255,255,255,.45);font-family:var(--mono)}
 
 #body-wrap{flex:1;display:flex;overflow:hidden}
@@ -940,6 +964,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .lh-icon.running{background:var(--lgrn);animation:pulse 1.2s ease-in-out infinite}
 .lh-title{font-size:14px;font-weight:700;color:#fff;flex:1}
 .lh-eta{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.4)}
+.scan-action-btn{flex-shrink:0}
 .prog-wrap{height:4px;background:rgba(255,255,255,.08);flex-shrink:0}
 .prog-fill{height:100%;background:linear-gradient(90deg,#6b2d0a,#a0522d);
   transition:width .5s ease;width:0%}
@@ -1132,7 +1157,7 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 ::-webkit-scrollbar-thumb:hover{background:var(--dim)}
 </style>
 <script>
-// Shutdown the server when the browser tab is closed
+// Browser-side UI logic
 </script>
 </head>
 <body>
@@ -1143,6 +1168,9 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
     <div class="logo-icon">AI</div>
     AI Security &amp; Compliance Scanner
     <span class="logo-sub">Bitbucket Edition</span>
+  </div>
+  <div class="top-actions">
+    <button class="btn-xs" id="exit-btn" onclick="exitTool()">Exit Tool</button>
   </div>
 </div>
 
@@ -1677,6 +1705,7 @@ function _tabPanelHTML(tid){
         <div class="lh-icon" id="run-dot-${tid}"></div>
         <span class="lh-title" id="scan-title-${tid}">Scanning...</span>
         <span class="lh-eta" id="scan-eta-${tid}"></span>
+        <button class="btn-xs scan-action-btn" id="scan-stop-${tid}" onclick="stopScan(${tid})">Cancel Scan</button>
       </div>
       <div class="prog-wrap"><div class="prog-fill" id="prog-bar-${tid}"></div></div>
       <div id="log-out-${tid}" class="log-out-pane"></div>
@@ -1942,6 +1971,34 @@ async function startScan(){
   }catch(e){alert('Failed to start scan: '+e.message); _closeTab(tid)}
 }
 
+async function stopScan(tid){
+  const btn=document.getElementById(`scan-stop-${tid}`);
+  if(btn) btn.disabled=true;
+  try{
+    const r=await fetch('/api/scan/stop',{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed to stop scan');
+  }catch(e){
+    if(btn) btn.disabled=false;
+    alert('Failed to stop scan: '+e.message);
+  }
+}
+
+async function exitTool(){
+  const running=_tabs.some(t=>t.state==='running');
+  const msg=running
+    ? 'A scan is still running. Exit the tool and stop all related processes?'
+    : 'Exit the tool now?';
+  if(!confirm(msg)) return;
+  const btn=document.getElementById('exit-btn');
+  if(btn) btn.disabled=true;
+  try{
+    await fetch('/api/app/shutdown',{method:'POST'});
+  }catch(_){}
+  document.body.innerHTML='<div style="padding:40px;font-family:Segoe UI,system-ui,sans-serif;color:#2c1a08;background:#f5ede0">Shutting down the scanner...</div>';
+  setTimeout(()=>window.close(), 300);
+}
+
 // ── SSE ────────────────────────────────────────────────────────────
 // ── PHASE TIMELINE + MONITOR LOG ─────────────────────────────────
 
@@ -2087,6 +2144,8 @@ async function _pollTab(tab){
 }
 
 function _updateScanUI(tid, d){
+  const stopBtn=document.getElementById(`scan-stop-${tid}`);
+  if(stopBtn) stopBtn.disabled = d.state !== 'running';
   const pct=d.total_files>0?Math.round(d.file_index/d.total_files*100)
            :(d.total>0?Math.round(d.progress/d.total*100):0);
   const pb=document.getElementById(`prog-bar-${tid}`); if(pb) pb.style.width=pct+'%';
@@ -2158,6 +2217,8 @@ function _buildRepoCards(tid, d){
 function _onTabFinished(tab, d){
   _setTabState(tab.id, d.state||'done');
   _finalisePhases(tab.id);
+  const stopBtn=document.getElementById(`scan-stop-${tab.id}`);
+  if(stopBtn) stopBtn.disabled = true;
   const dotEl=document.getElementById(`run-dot-${tab.id}`);
   if(dotEl) dotEl.classList.remove('running');
   const titleMap={done:'Scan complete',stopped:'Scan stopped',skipped:'Scan skipped'};
@@ -2654,14 +2715,16 @@ _Handler.do_GET = _patched_get
 # ── Server startup ────────────────────────────────────────────────────────────
 
 def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.ThreadingHTTPServer:
-    global _HTML
+    global _HTML, _server_instance
     _HTML = _build_spa()
+    _app_exit_event.clear()
     _cleanup_stale_temp_clones()
 
     # Inject into handler
     _Handler.html_bytes_app = _HTML  # not used directly; _HTML global is read
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), _Handler)
+    _server_instance = server
 
 
     t = threading.Thread(target=server.serve_forever, daemon=True)
@@ -2674,6 +2737,10 @@ def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.Thread
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
 
     return server
+
+
+def wait_for_exit(timeout: Optional[float] = None) -> bool:
+    return _app_exit_event.wait(timeout)
 
 
 if __name__ == "__main__":

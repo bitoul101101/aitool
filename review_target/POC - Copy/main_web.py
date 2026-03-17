@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from app_server import start
+    from app_server import start, wait_for_exit
 except ImportError as _e:
     print(f"""
 ERROR: Could not import 'start' from app_server.py.
@@ -25,10 +25,12 @@ Please replace it with the latest version from your download package.
 if __name__ == "__main__":
     srv = start(open_browser=True)
     print("  Press Ctrl+C to quit.")
-    print("  Closing the browser tab will also stop the server.")
+    print("  Use the Exit Tool button or Ctrl+C to stop the server.")
     try:
-        while True:
-            time.sleep(1)
+        wait_for_exit()
     except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
         srv.shutdown()
+        srv.server_close()
         print("\nScanner stopped.")
