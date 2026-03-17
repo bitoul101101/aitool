@@ -919,6 +919,45 @@ def test_scan_page_can_force_new_scan_selection_after_completion():
     assert "Start Scan" in html
     assert '/scan?project=COGI&new=1' in html
     assert 'class="nav active"' in html
+    assert 'value="repo1" checked' in html
+
+
+def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():
+    import app_server as srv
+
+    orig_session = srv._session
+    try:
+        session = srv.ScanSession()
+        session.state = "done"
+        session.project_key = "COGI"
+        session.repo_slugs = ["repo1"]
+        srv._session = session
+
+        class DummyHandler:
+            path = "/scan?project=COGI&new=1"
+            headers = {}
+
+            def __init__(self):
+                self.sent = None
+
+            def _send(self, status, ct, body):
+                self.sent = (status, ct, body)
+
+        handler = DummyHandler()
+        with patch.object(srv, "_require_role", return_value=False), \
+             patch.object(srv, "_require_project_access", return_value=False), \
+             patch.object(srv, "_is_connected", return_value=True), \
+             patch.object(srv, "_repos_for_project", return_value=[{"slug": "repo1"}, {"slug": "repo2"}]), \
+             patch.object(srv, "filter_projects", return_value=[{"key": "COGI"}]), \
+             patch.object(srv, "load_llm_config", return_value={"base_url": "http://localhost:11434", "model": "m1"}), \
+             patch.object(srv, "_ollama_list_models", return_value=["m1"]):
+            srv._Handler._render_scan_page(handler)
+
+        html = handler.sent[2].decode("utf-8")
+        assert 'value="repo1" checked' not in html
+        assert 'value="repo2" checked' not in html
+    finally:
+        srv._session = orig_session
 
 
 def test_history_page_is_server_rendered():

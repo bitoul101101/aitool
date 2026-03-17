@@ -780,9 +780,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         repos = _repos_for_project(project_key) if project_key else []
         status = _session.to_status() if _is_connected() else {}
-        effective_selected_repos = selected_repos if selected_repos is not None else (
-            list(_session.repo_slugs) if project_key and project_key == _session.project_key else []
-        )
+        if selected_repos is not None:
+            effective_selected_repos = selected_repos
+        elif fresh_scan:
+            effective_selected_repos = []
+        else:
+            effective_selected_repos = list(_session.repo_slugs) if project_key and project_key == _session.project_key else []
         html = render_scan_page(
             projects=filter_projects(_operator_state.projects_cache, _operator_state.ctx),
             selected_project=project_key,
