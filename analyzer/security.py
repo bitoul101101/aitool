@@ -205,6 +205,18 @@ RISK_LABELS = {
     4: "Low",
 }
 
+_ALWAYS_CRITICAL_SECURITY_PATTERNS = {
+    "hardcoded_key",
+    "openai_key_pattern",
+    "anthropic_key_pattern",
+    "js_hardcoded_key",
+    "entropy_secret",
+    "notebook_output_secret",
+    "minified_bundle_secret",
+}
+
+_NON_PROD_CONTEXTS = {"docs", "test", "deleted_file"}
+
 
 class SecurityAnalyzer:
 
@@ -230,11 +242,23 @@ class SecurityAnalyzer:
     def _apply_policy(self, f: Dict) -> Dict:
         lib = f.get("provider_or_lib", "")
         cat = f.get("category", "")
+        context = str(f.get("context", "production")).lower()
 
-        # Security findings are always CRITICAL policy-wise → severity=1
-        if cat == "Security":
+        # High-signal secret exposure stays critical everywhere.
+        if lib in _ALWAYS_CRITICAL_SECURITY_PATTERNS:
             f["policy_status"] = "CRITICAL"
             f["severity"] = 1
+            return f
+
+        # Other security findings should respect context. Docs/test hits are often
+        # instructional examples or fixtures and should not be escalated to critical.
+        if cat == "Security":
+            if context in _NON_PROD_CONTEXTS:
+                f["policy_status"] = "REVIEW"
+                f["severity"] = max(f.get("severity", 3), 3)
+            else:
+                f["policy_status"] = "CRITICAL"
+                f["severity"] = 1
             return f
 
         # Check against policy lists

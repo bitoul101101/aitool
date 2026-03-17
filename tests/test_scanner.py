@@ -148,7 +148,7 @@ POLICY = {
 }
 
 
-def make_finding(provider="openai", sev=2, cat="External AI API"):
+def make_finding(provider="openai", sev=2, cat="External AI API", context="production"):
     return {
         "repo": "test-repo",
         "category": cat,
@@ -160,6 +160,7 @@ def make_finding(provider="openai", sev=2, cat="External AI API"):
         "snippet": "import openai",
         "policy_status": "REVIEW",
         "is_notebook": False,
+        "context": context,
         "description": "Test",
         "_hash": "abc123",
     }
@@ -191,6 +192,32 @@ def test_banned_policy():
 def test_security_category_critical():
     analyzer = SecurityAnalyzer(policy=POLICY)
     f = make_finding(provider="hardcoded_key", sev=2, cat="Security")
+    results = analyzer.analyze([f])
+    assert results[0]["policy_status"] == "CRITICAL"
+    assert results[0]["severity"] == 1
+
+
+def test_non_production_security_context_is_not_escalated_to_critical():
+    analyzer = SecurityAnalyzer(policy=POLICY)
+    f = make_finding(
+        provider="unsafe_code_exec",
+        sev=2,
+        cat="Security",
+        context="docs",
+    )
+    results = analyzer.analyze([f])
+    assert results[0]["policy_status"] == "REVIEW"
+    assert results[0]["severity"] >= 3
+
+
+def test_real_secret_remains_critical_even_in_test_context():
+    analyzer = SecurityAnalyzer(policy=POLICY)
+    f = make_finding(
+        provider="openai_key_pattern",
+        sev=3,
+        cat="Security",
+        context="test",
+    )
     results = analyzer.analyze([f])
     assert results[0]["policy_status"] == "CRITICAL"
     assert results[0]["severity"] == 1
