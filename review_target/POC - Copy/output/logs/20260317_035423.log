@@ -1,0 +1,20 @@
+[03:54:23] Scan ID  : 20260317_035423
+[03:54:23] Project  : AA
+[03:54:23] Repos    : 1
+[03:54:27] LLM      : gemma3:270m | 268.10M | Q8_0
+[03:54:27] ==========================================================
+[03:54:28]   appsc-export-service  branch:master  owner:nechami hartman
+[03:54:28] ==========================================================
+[03:54:30] Starting parallel scan (workers=1)...
+[03:54:37]   [appsc-export-service] Scanning: 0% (1/140 files)
+[03:54:37]   [appsc-export-service] Scanning: 5% (7/140 files)
+[03:54:50] 
+==========================================================
+[03:54:50] Total findings (deduped): 0
+[03:54:50] 
+Generating reports...
+[03:54:50]   appsc-export-service: skipped (no findings recorded)
+[03:54:50]   No findings - no report generated.
+[03:54:50] 
+Scan stopped.
+[03:54:50] Duration: 27s  |  Findings: 0

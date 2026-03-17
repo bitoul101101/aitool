@@ -2499,3 +2499,1525 @@ mode=json-mode attempt=2 model=gemma3:270m
   ]
 }
 ```
+
+============================================================
+mode=schema attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Trunk\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.4\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+     ملی = "USA"
+};
+```
+
+**Explanation:**
+
+*   **`subprocess.run()`:** This is the core function for executing commands in a shell. It takes a command as input and returns a string containing the output of the command.
+*   **`subprocess.check_return()`:** This function checks the return code of a command. If the return code is non-zero, the command will be executed. If the return code is zero, the command will be skipped.
+*   **`subprocess.check_return()`:** This function checks the return code of a command. If the return code is non-zero, the command will be executed. If the return code is zero, the command will be skipped.
+*   **`subprocess.check_return()`:** This function checks the return code of a command. If the return code is zero, the command will be executed. If the return code is non-zero, the command will be skipped.
+
+**How to use it:**
+
+1.  **Define your command:**  Create a command that you want to execute.
+2.  **Run the command:**  Use the `subprocess.run()` function to execute the command.
+3.  **Check the return code:**  The `subprocess.check_return()` function will return a non-zero code value.  If the return code is non-zero, the command will be executed.  If the return code is zero, the command will be skipped.
+
+**Example:**
+
+Let's say you want to run a command that checks the return code of a command.
+
+```bash
+# Create a command to check the return code of a command
+command = "ls -l"
+result = subprocess.check_return(command, shell=True)
+print(result.returncode)
+```
+
+This will print the return code of the command, which will be 0 if the command was successful, and a non-zero value if it failed.
+
+**Important Considerations:**
+
+*   **Error Handling:**  The `subprocess.check_return()` function is designed to handle errors gracefully.  If the command fails, the function will return a non-zero code value.  You can add error handling to your commands to prevent them from crashing.
+*   **Shell:**  The `subprocess.check_return()` function is designed to be shell-based.  If you want to execute commands in a different shell (e.g., bash, zsh), you'll need to modify the `subprocess.check_return()` function to use a different shell.
+*   **Permissions:**  You might need to specify the correct permissions to run commands in a shell.  For example, if you want to run a command with root privileges, you might need to use `sudo` or `sudoers` (the shell's configuration file).
+*   **Alternatives:**  There are other ways to execute commands in a shell, such as using `subprocess.run` with a `shell=True` argument.  However, `subprocess.check_return()` is generally the most reliable and recommended approach for running commands in a shell.
+
+This comprehensive explanation should help you understand how to use `subprocess.run()` and `subprocess.check_return()` effectively. Remember to adapt the commands and error handling to your specific needs.
+
+
+============================================================
+mode=schema attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Trunk\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.4\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+     Europe/Germany | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germany" | "Germanyঘাত" | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+
+============================================================
+mode=json-mode attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Trunk\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.4\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\ উদ্দিন.pdf",
+    "return_code": 0,
+    "return_code": 0,
+    "match": "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "return_code": 0,
+    "document.pdf": "The document was created by the user. It is a PDF file."
+}
+```
+
+**Explanation:**
+
+*   `file`: The file name.
+*   `return_code`: The return code of the executed file.
+*   `return_code`: The return code of the executed file.
+*   `return_code`: The return code of the executed file.
+*   `document.pdf`: The document content.
+
+**Important Considerations:**
+
+*   **File Paths:** The `file` and `return_code` variables are relative to the script's location.  You need to ensure that the file paths are correct and that the script is running in the correct environment.
+*   **Error Handling:**  The code assumes that the file is valid and that the user has permission to access it.  You should add error handling to gracefully handle cases where the file doesn't exist, is invalid, or contains malicious content.
+*   **Security:**  This code assumes that the file is a valid PDF.  If the file is not a PDF, you should consider adding security measures to prevent file corruption or other issues.
+*   **Permissions:**  The script needs to be able to access the file and the return code to execute the file.
+*   **File Size:**  The `return_code` should be a reasonable value, considering the file size.  If the file is very large, you might need to adjust the `return_code` to be a value that is appropriate for the file's size.
+*   **File Extension:**  The `file` variable should contain the file extension.
+
+This example provides a basic structure for a file-based script. You can expand upon it to include more features, such as:
+
+*   **File Handling:**  Handling file operations (e.g., reading, writing, deleting).
+*   **Error Handling:**  Providing more informative error messages.
+*   **Security:**  Implementing more robust security measures.
+*   **User Interaction:**  Allowing the user to interact with the script.
+*   **Configuration:**  Setting parameters for the script.
+
+This example is a starting point.  You should thoroughly test the script with different scenarios to ensure that it works correctly and that it meets your requirements.  Remember to always validate the code before deploying it to production.
+
+
+============================================================
+mode=json-mode attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Trunk\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.4\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet": "      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def shell_execute(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    "file": "Tags\\1.7.1.3.3\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.","snippet":"      11 | \n      12 | def execute_file(args):\n      13 |     \"\"\"Execute file and returns status code, stdout and stderr\n      14 | \n      15 |     Any exceptions in running subprocess are allowed to raise to caller\n      16 |     \"\"\"\n>>>   17 |     process = subprocess.Popen(args, stdo\n...(truncated)"},{"pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,"context": "production",
+    estered = True
+}
+```
+
+**Explanation:**
+
+*   `` represents the beginning of a line.
+*   `` represents the end of a line.
+*   `` represents a semicolon (`;`) as a delimiter.
+*   `{}` represents a curly brace.
+
+The `if` statement checks if the `if` condition is true. If it is, the code inside the `if` block is executed.
+
+**Example:**
+
+Let's say you have a script that performs a simple data extraction from a CSV file.
+
+```python
+import pandas as pd
+
+df = pd.read_csv('data.csv')
+
+if df['column_name'] == 'column_name':
+    print("Data extracted successfully.")
+else:
+    print("Data extraction failed.")
+```
+
+In this case, the `if` statement will evaluate to `True`.  The code inside the `if` block will be executed.
+
+**Important Considerations:**
+
+*   **Error Handling:**  The code assumes that the CSV file has a column named `column_name`.  If the column name is missing or contains invalid data, the script will likely fail.  You should add error handling to check for these cases.
+*   **Data Types:**  The `column_name` argument should be a column that can be converted to a string (e.g., `column_name = 'column_name'`).
+*   **Data Validation:**  You might want to add data validation to ensure that the `column_name` is a valid column in the CSV file.
+*   **Performance:**  For very large CSV files, consider using a more efficient data processing library if performance is a critical concern.
+*   **Security:**  Be careful about the security implications of reading sensitive data from a CSV file.  Avoid reading data from untrusted sources.
+
+This example demonstrates how to use the `if` statement to check for the existence of a column named `column_name` in a CSV file.  Remember to handle potential errors and validate the data before using the code.
+
+
+============================================================
+mode=schema attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+ígena = "I"
+}
+```
+
+**Explanation:**
+
+* **`unsafe_code`**: This is a special type of command that is not part of the standard command-line interface (CLI). It's used to execute arbitrary commands without any user intervention.
+* **`I`**: This is a special type of command that is part of the standard command-line interface (CLI). It's used to execute commands without any user intervention.
+
+The `unsafe_code` command is used to execute arbitrary commands without any user intervention. This is a common and useful technique for security-sensitive tasks.
+
+**Important Considerations:**
+
+* **Security:** Be extremely careful when using `unsafe_code` commands. They can be used to execute arbitrary commands, potentially compromising your system or data. Always review the command's purpose before executing it.
+* **Error Handling:**  The `unsafe_code` command typically doesn't have built-in error handling.  You'll need to implement error handling mechanisms in your application to gracefully handle unexpected situations.
+* **Context:** The context of the command is crucial.  The context provides information about the command's purpose and the potential consequences of executing it.
+* **Alternatives:**  Consider using more robust and secure command-line tools for tasks that involve user interaction or data manipulation.
+
+This example demonstrates the use of `unsafe_code` to execute arbitrary commands.  It's important to understand the implications of using `unsafe_code` and to be aware of the potential risks involved. Always prioritize security when working with commands that could potentially be used to compromise your system.
+
+
+============================================================
+mode=schema attempt=2 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+ событие_завершение_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_в_процесс_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_в_процесс_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_в_процесс_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_в_процесс_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_задачи_ своего_موضوع. 1.  **Объяснение:**  Понимание того, что это не просто набор правил, а скорее **инструмент для анализа и понимания** процесса принятия решений.  Это позволяет увидеть, как разные факторы влияют на результат, и как можно более улучшить качество принимаемых решений.  Это не просто "задавать" вопросы, а скорее **проводить эксперименты** и **сравнение результатов**.
+
+2.  **Примеры:**  Понимание, что разные факторы могут влиять на разные аспекты процесса принятия решений, например, на качество продукта, на эффективность работы команды или на экономическую эффективность.  Это помогает понять, как разные факторы могут быть связаны и как можно более оптимизировать процессы.
+
+3.  **Практические применения:**  Понимание, что это может быть полезно в различных областях, таких как:
+    *   **Финансы:**  Оценка рисков, разработка стратегий инвестирования, управление инвестициями.
+    *   **Медицина:**  Оценка эффективности лечения, разработка новых лекарств, мониторинг состояния пациентов.
+    *   **Экономика:**  Оценка эффективности государственных программ, разработка стратегий развития, управление ресурсами.
+    *   **Промышленность:**  Оценка эффективности производственных процессов, разработка новых технологий, управление цепочками поставок.
+
+4.  **Обоснование:**  Понимание, что это не просто "задавать" вопросы, а скорее **проводить эксперименты** и **сравнение результатов**.  Это позволяет увидеть, как разные факторы влияют на результат, и как можно более улучшить качество принимаемых решений.  Это не просто "записывать" данные, а скорее **проводить эксперименты** и **сравнение результатов**.
+
+В заключение, это мощный инструмент для анализа и понимания процессов принятия решений, который может быть полезен в самых разных областях.  Он позволяет лучше понимать, как разные факторы влияют на результат и как можно более оптимизировать процессы.
+
+
+============================================================
+mode=json-mode attempt=1 model=gemma3:270m
+============================================================
+```json
+[
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+ sup
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n      16 |  \"\"\n>>>   17 |   process = subprocess.Popen(args, stdo\n...(truncated)"
+  },
+  {
+    "pattern_name": "unsafe_code_exec",
+    "capability": "Code Execution Risk",
+    "category": "Security",
+    "base_severity": 1,
+    "context": "production",
+    "file": "Tags\\1.7.1.3.2\\airflow_files\\security\\createuser.py",
+    "file_ext": ".py",
+    "match": "subprocess.Execute args and returns status code, stdout and stderr",
+    "snippet": "      11 | \n      12 | def shell(args):\n      13 |  \"\"\"Execute args and returns status code, stdout and stderr\n      14 | \n      15 |  Any exceptions in running subprocess are allowed to raise to caller\n   द 10000000000000000000000000000000

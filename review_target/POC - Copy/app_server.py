@@ -836,7 +836,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 
 /* ════ SIDEBAR ════ */
 #sidebar{
-  width:200px;flex-shrink:0;
+  width:184px;flex-shrink:0;
   background:var(--surface);border-right:1px solid var(--border);
   display:none;flex-direction:column;
   transition:width .2s ease;
@@ -852,7 +852,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 }
 .nav-item:hover{background:var(--card);color:var(--text)}
 .nav-item.active{background:rgba(139,69,19,.18);color:#5c2e0e;font-weight:700}
-.nav-item .ni-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
 .nav-spacer{flex:1}
 .nav-version{padding:12px 14px;font-family:var(--mono);font-size:10px;color:var(--dim)}
 
@@ -1079,7 +1078,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .lv-warn .log-msg{color:#fcd34d}
 .lv-info .log-msg{color:var(--text)}
 .lv-dim  .log-msg{color:var(--dim)}
-.findings-panel{display:flex;flex-direction:column;overflow:hidden;background:var(--surface)}
+.findings-panel{display:grid;grid-template-rows:auto auto minmax(120px,1fr) auto;overflow:hidden;background:var(--surface);min-height:0}
 .fp-header{background:linear-gradient(135deg,#1a0545 0%,#2d0e7a 55%,#3d1599 100%);
   padding:8px 14px;border-bottom:2px solid rgba(255,255,255,.1);flex-shrink:0}
 .fp-title{font-size:13px;font-weight:800;color:#fff;display:block;margin-bottom:1px}
@@ -1093,7 +1092,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .kpi-l{font-size:9px;font-weight:700;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
 .k1 .kpi-n{color:var(--red)} .k2 .kpi-n{color:var(--ora)}
 .k3 .kpi-n{color:var(--yel)} .k4 .kpi-n{color:var(--lgrn)}
-#repo-cards,[id^="repo-cards-"]{max-height:180px;overflow-y:auto;padding:10px;flex-shrink:0}
+#repo-cards,[id^="repo-cards-"]{min-height:0;overflow-y:auto;padding:10px}
 .finding-drawer{border-top:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:220px;max-height:300px}
 .finding-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:rgba(0,0,0,.03);border-bottom:1px solid var(--border);flex-wrap:wrap}
 .finding-drawer-title{font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.06em}
@@ -1108,7 +1107,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .finding-empty{padding:10px 12px;color:var(--dim);font-size:12px}
 .finding-item{padding:10px 12px;border-top:1px solid rgba(0,0,0,.06)}
 .finding-item:first-child{border-top:none}
-.finding-main{display:flex;align-items:flex-start;gap:10px}
+.finding-main{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:flex-start;gap:10px}
 .finding-badge{padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.04em;color:#fff;flex-shrink:0}
 .finding-badge.sev-1{background:var(--red)} .finding-badge.sev-2{background:var(--ora)}
 .finding-badge.sev-3{background:var(--yel);color:#1a1c24} .finding-badge.sev-4{background:var(--lgrn)}
@@ -1116,16 +1115,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .finding-title{font-size:12px;font-weight:700;color:var(--text)}
 .finding-meta{font-size:11px;color:var(--dim);font-family:var(--mono);margin-top:2px}
 .finding-desc{font-size:11px;color:var(--text2);margin-top:4px}
-.finding-actions{display:flex;gap:8px;margin-top:8px}
+.finding-actions{display:flex;gap:8px;align-self:flex-start;justify-self:end}
 .finding-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--card2);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer}
 .finding-btn:hover{border-color:var(--pur2);color:var(--text)}
 .finding-btn.warn{background:#fff4d6;border-color:#e0b050}
 .finding-btn.safe{background:#e7f6ea;border-color:#6fb07a}
 .finding-note{font-size:11px;color:var(--dim);margin-top:4px}
 /* ── Monitor panel (phase timeline + live log) ── */
-.monitor-panel{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0}
-.monitor-spacer{flex:1}
-.phase-timeline{flex-shrink:0;padding:10px 14px 12px;background:var(--surface);border-top:1px solid var(--border);min-height:170px}
+.monitor-panel{display:block;overflow:visible;min-height:0}
+.monitor-spacer{display:none}
+.phase-timeline{padding:10px 14px 12px;background:var(--surface);border-top:1px solid var(--border);min-height:170px}
 .phase-row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;color:var(--dim);line-height:1.3}
 .phase-row.ph-done{color:var(--text2)}
 .phase-row.ph-active{color:var(--text);font-weight:600}
@@ -1306,15 +1305,9 @@ table.hist td.td-llm{max-width:140px;overflow:hidden;text-overflow:ellipsis;whit
 <!-- SIDEBAR -->
 <nav id="sidebar">
   <div class="nav-section">Navigation</div>
-  <div class="nav-item active" id="nav-scan" onclick="navTo('scan')">
-    <span class="ni-icon">S</span> Scan
-  </div>
-  <div class="nav-item" id="nav-history" onclick="navTo('history')">
-    <span class="ni-icon">H</span> Scan History
-  </div>
-  <div class="nav-item" id="nav-settings" onclick="navTo('settings')">
-    <span class="ni-icon">Cfg</span> Settings
-  </div>
+  <div class="nav-item active" id="nav-scan" onclick="navTo('scan')">Scan</div>
+  <div class="nav-item" id="nav-history" onclick="navTo('history')">Scan History</div>
+  <div class="nav-item" id="nav-settings" onclick="navTo('settings')">Settings</div>
   <div class="nav-spacer"></div>
   <div class="nav-version">v19.1</div>
 </nav>
@@ -1544,11 +1537,28 @@ function showTabsArea(){
   const hdr=document.querySelector('#v-scan .page-hdr');
   if(hdr) hdr.style.display='none';
 }
-function _openSelectorTab(){
+async function ensureProjectsLoaded(){
+  if(_projects.length) return true;
+  try{
+    const r=await fetch('/api/projects');
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed to load projects');
+    _projects=d.projects||[];
+    _owner=d.owner||_owner;
+    return _projects.length>0;
+  }catch(e){
+    console.error('ensureProjectsLoaded:', e);
+    return false;
+  }
+}
+async function _openSelectorTab(){
   // If selector tab already exists, switch to it
   if(_selectorTabId && _getTab(_selectorTabId)){
     _switchTab(_selectorTabId);
     showSelector();
+    await ensureProjectsLoaded();
+    buildProjectList();
+    refreshModels();
     return;
   }
   // Create a new "New Scan" tab
@@ -1557,7 +1567,7 @@ function _openSelectorTab(){
   const tabEl=document.createElement('div');
   tabEl.className='scan-tab';
   tabEl.id=`tab-${tid}`;
-  tabEl.onclick=()=>{ _switchTab(tid); show('v-scan'); showSelector(); };
+  tabEl.onclick=()=>{ _switchTab(tid); show('v-scan'); showSelector(); ensureProjectsLoaded().then(()=>buildProjectList()); };
   const lblEl=document.createElement('span');
   lblEl.className='tab-label';
   lblEl.textContent='＋ New Scan';
@@ -1586,6 +1596,7 @@ function _openSelectorTab(){
   _syncTabBar();
   show('v-scan');
   showSelector();
+  await ensureProjectsLoaded();
   buildProjectList();
   refreshModels();
 }
@@ -1692,7 +1703,15 @@ function buildProjectList(){
     div.className='proj-item';div.textContent=key;div.dataset.key=key;
     div.addEventListener('click',()=>pickProject(key,div));el.appendChild(div);
   });
-  if(_projects.length){const f=el.querySelector('.proj-item');if(f)f.click()}
+  if(_projects.length){
+    const wanted=[...el.querySelectorAll('.proj-item')].find(item=>item.dataset.key===_curProj);
+    const target=wanted||el.querySelector('.proj-item');
+    if(target) target.click();
+  }else{
+    document.getElementById('repo-hdr').textContent='Repositories';
+    document.getElementById('repo-list').innerHTML='';
+    updateSelCount();
+  }
 }
 async function pickProject(key,el){
   document.querySelectorAll('.proj-item').forEach(e=>e.classList.remove('active'));
@@ -2186,8 +2205,8 @@ function _renderFindingCard(f, suppressed, tid){
         ${desc?`<div class="finding-desc">${desc}</div>`:''}
         ${policy}
         ${note}
-        <div class="finding-actions">${action}</div>
       </div>
+      <div class="finding-actions">${action}</div>
     </div>
   </div>`;
 }
@@ -2953,7 +2972,12 @@ function _esc(s){
 _orig_get = _Handler.do_GET
 def _patched_get(self):
     p = self.path.split("?")[0]
-    if p == "/api/repos":
+    if p == "/api/projects":
+        self._json({
+            "projects": _projects_cache,
+            "owner": _connected_user,
+        })
+    elif p == "/api/repos":
         from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
         key = qs.get("project", [""])[0]

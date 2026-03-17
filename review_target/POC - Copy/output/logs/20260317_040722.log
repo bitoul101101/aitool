@@ -1,0 +1,40 @@
+[04:07:22] Scan ID  : 20260317_040722
+[04:07:22] Project  : COGI
+[04:07:22] Repos    : 1
+[04:07:27] LLM      : gemma3:270m | 268.10M | Q8_0
+[04:07:27] ==========================================================
+[04:07:27]   cogi-host-app  branch:master  owner:Tatarski, Nikola
+[04:07:27] ==========================================================
+[04:07:27] Starting parallel scan (workers=1)...
+[04:07:36]   [cogi-host-app] Scanning: 5% (1/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 10% (2/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 15% (3/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 20% (4/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 25% (5/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 30% (6/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 35% (7/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 40% (8/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 45% (9/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 50% (10/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 55% (11/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 60% (12/20 files)
+[04:07:36]   [cogi-host-app] Scanning: 65% (13/20 files)
+[04:07:38]   [cogi-host-app] Scanning: 70% (14/20 files)
+[04:07:38]   [cogi-host-app] Scanning: 75% (15/20 files)
+[04:07:38]   [cogi-host-app] Scanning: 80% (16/20 files)
+[04:07:38]   [cogi-host-app] Scanning: 85% (17/20 files)
+[04:07:38]   [cogi-host-app] Scanning: 90% (18/20 files)
+[04:07:38]   [cogi-host-app] Scanning: 95% (19/20 files)
+[04:07:38]   [cogi-host-app] Scanning: 100% (20/20 files)
+[04:07:39] 
+OK cogi-host-app -> 0 findings  (Crit:0 High:0)
+[04:07:39] 
+==========================================================
+[04:07:39] Total findings (deduped): 0
+[04:07:39] 
+Generating reports...
+[04:07:39]   cogi-host-app: clean - no findings
+[04:07:39]   No findings - no report generated.
+[04:07:39] 
+Scan complete.
+[04:07:39] Duration: 16s  |  Findings: 0

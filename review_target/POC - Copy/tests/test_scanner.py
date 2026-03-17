@@ -697,12 +697,53 @@ def test_build_spa_uses_restore_action_and_findings_drawer():
     assert "finding-pane-suppressed-${tid}" in html
 
 
+def test_build_spa_uses_plain_nav_labels_and_project_reload_hook():
+    import app_server as srv
+
+    html = srv._build_spa().decode("utf-8")
+
+    assert 'id="nav-scan" onclick="navTo(\'scan\')">Scan</div>' in html
+    assert 'id="nav-history" onclick="navTo(\'history\')">Scan History</div>' in html
+    assert 'id="nav-settings" onclick="navTo(\'settings\')">Settings</div>' in html
+    assert "async function ensureProjectsLoaded()" in html
+    assert "fetch('/api/projects')" in html
+
+
 def test_allowed_origin_only_permits_local_app_hosts():
     import app_server as srv
 
     assert srv._allowed_origin(f"http://127.0.0.1:{srv.APP_PORT}") == f"http://127.0.0.1:{srv.APP_PORT}"
     assert srv._allowed_origin(f"http://localhost:{srv.APP_PORT}") == f"http://localhost:{srv.APP_PORT}"
     assert srv._allowed_origin("https://evil.example") is None
+
+
+def test_api_projects_returns_cached_projects():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/api/projects"
+
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+    orig_projects = srv._projects_cache
+    orig_owner = srv._connected_user
+    srv._projects_cache = [{"key": "COGI"}, {"key": "APPSEC"}]
+    srv._connected_user = "Security Engineer"
+
+    try:
+        handler = DummyHandler()
+        srv._Handler.do_GET(handler)
+
+        assert handler.payload[0] == 200
+        assert handler.payload[1]["projects"] == [{"key": "COGI"}, {"key": "APPSEC"}]
+        assert handler.payload[1]["owner"] == "Security Engineer"
+    finally:
+        srv._projects_cache = orig_projects
+        srv._connected_user = orig_owner
 
 
 def test_default_temp_dir_prefers_system_temp_on_windows():
