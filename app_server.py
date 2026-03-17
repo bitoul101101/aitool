@@ -3,11 +3,14 @@ app_server.py
 ─────────────
 Single-file web application server for the AI Security & Compliance Scanner.
 
-Replaces the Tkinter GUI with a browser-based SPA.
+Serves a simple server-rendered web UI with targeted dynamic endpoints.
 
 Routes
 ──────
-GET  /                → SPA shell (HTML)
+GET  /                → scan page (HTML)
+GET  /scan            → scan page (HTML)
+GET  /history         → history page (HTML)
+GET  /settings        → settings page (HTML)
 GET  /api/status      → server health + config
 POST /api/connect     → validate PAT, return projects
 GET  /api/projects    → list projects (cached)
@@ -35,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, urlencode, urlparse
 
 # ── Project imports ───────────────────────────────────────────────────────────
 import sys
@@ -70,8 +74,8 @@ from services.report_access import (
 )
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
-from services.spa_ui import build_spa
 from services.single_user_state import SingleUserState, load_single_user_config
+from services.web_pages import render_history_page, render_scan_page, render_settings_page
 from services.runtime_support import (
     ensure_ollama_running,
     load_llm_config as load_llm_config_file,
@@ -144,6 +148,13 @@ def _allowed_origin(origin: str) -> str | None:
         f"http://localhost:{APP_PORT}",
     }
     return origin if origin in allowed else None
+
+
+def _with_query(path: str, **params: str) -> str:
+    clean = {key: value for key, value in params.items() if value}
+    if not clean:
+        return path
+    return f"{path}?{urlencode(clean)}"
 
 
 def _git_head_commit(repo_dir: Path) -> str:
@@ -327,6 +338,16 @@ def _triage_by_hash() -> Dict[str, dict]:
     return triage_by_hash(SUPPRESSIONS_FILE)
 
 
+def _repos_for_project(project_key: str) -> list[dict]:
+    if not project_key or not _operator_state.client:
+        return []
+    repos = _operator_state.repos_cache.get(project_key)
+    if repos is None:
+        repos = _operator_state.client.list_repos(project_key)
+        _operator_state.repos_cache[project_key] = repos
+    return repos
+
+
 _settings_service = SettingsService(
     load_llm_config=load_llm_config,
     save_llm_config=save_llm_config,
@@ -454,8 +475,6 @@ def _run_scan(session: ScanSession):
 
 # ── HTTP handler ──────────────────────────────────────────────────────────────
 
-_HTML: bytes = b""   # injected at startup
-
 
 class _Handler(http.server.BaseHTTPRequestHandler):
 
@@ -464,9 +483,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     # ── Routing ───────────────────────────────────────────────────────────────
 
     def do_GET(self):
-        p = self.path.split("?")[0]
-        if p in ("/", "/index.html"):
-            self._send(200, "text/html; charset=utf-8", _HTML)
+        parsed = urlparse(self.path)
+        p = parsed.path
+        if p in ("/", "/index.html", "/scan"):
+            self._render_scan_page()
+        elif p == "/history":
+            self._render_history_page()
+        elif p == "/settings":
+            self._render_settings_page()
         elif p == "/api/status":
             self._json({
                 "ok": True,
@@ -510,9 +534,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif p == "/api/ollama/models":
             if _require_role(self, ROLE_ADMIN):
                 return
-            # Accept ?url=... so the UI can pass the current input value
-            from urllib.parse import urlparse, parse_qs
-            qs  = parse_qs(urlparse(self.path).query)
+            qs  = parse_qs(parsed.query)
             url = (qs.get("url", [None])[0] or
                    load_llm_config().get("base_url", "http://localhost:11434"))
             url = url.strip()
@@ -526,8 +548,22 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._404()
 
     def do_POST(self):
-        p = self.path.split("?")[0]
+        p = urlparse(self.path).path
         body = self._read_body()
+        if p == "/connect":
+            return self._page_connect(body)
+        elif p == "/scan/start":
+            return self._page_scan_start(body)
+        elif p == "/scan/stop":
+            return self._page_scan_stop()
+        elif p == "/history/delete":
+            return self._page_history_delete(body)
+        elif p == "/settings/save":
+            return self._page_settings_save(body)
+        elif p == "/findings/triage":
+            return self._page_finding_triage(body)
+        elif p == "/findings/reset":
+            return self._page_finding_reset(body)
         if p == "/api/connect":
             self._api_connect(body)
         elif p == "/api/scan/start":
@@ -561,6 +597,174 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(204)
         self._cors()
         self.end_headers()
+
+    # ── Page handlers ─────────────────────────────────────────────────────────
+
+    def _render_scan_page(self, *, notice: str = "", error: str = "", selected_repos: list[str] | None = None):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        project_key = (qs.get("project", [""])[0] or "").strip()
+        if project_key and _require_project_access(self, project_key):
+            return
+        repos = _repos_for_project(project_key) if project_key else []
+        html = render_scan_page(
+            bitbucket_url=BITBUCKET_URL,
+            connected_owner=_operator_state.connected_owner,
+            has_saved_pat=bool(load_pat()),
+            projects=filter_projects(_operator_state.projects_cache, _operator_state.ctx),
+            selected_project=project_key,
+            repos=repos,
+            selected_repos=selected_repos or [],
+            status=_session.to_status(),
+            llm_cfg=load_llm_config(),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+            log_text="\n".join(entry.get("msg", "") for entry in _session.log_lines[-30:]),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
+    def _render_history_page(self, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        html = render_history_page(
+            history=list(reversed(_history_records_for_user())),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
+    def _render_settings_page(self, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_ADMIN):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        html = render_settings_page(
+            bitbucket_url=BITBUCKET_URL,
+            output_dir=str(Path(OUTPUT_DIR).resolve()),
+            llm_cfg=load_llm_config(),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
+    def _page_connect(self, body: dict):
+        try:
+            connect_operator(
+                body=body,
+                bitbucket_url=BITBUCKET_URL,
+                operator_state=_operator_state,
+                audit_event=_audit_event,
+            )
+        except Exception as e:
+            return self._render_scan_page(error=str(e))
+        self._redirect(_with_query("/scan", notice="Connected to Bitbucket"))
+
+    def _page_scan_start(self, body: dict):
+        global _session
+        if _require_role(self, ROLE_SCANNER):
+            return
+        repo_slugs = body.get("repo_slugs", [])
+        if isinstance(repo_slugs, str):
+            repo_slugs = [repo_slugs]
+        project_key = body.get("project_key", "").strip()
+        if _require_project_access(self, project_key):
+            return
+        page_body = dict(body)
+        page_body["repo_slugs"] = repo_slugs
+        try:
+            _session = start_scan(
+                body=page_body,
+                session_factory=ScanSession,
+                current_session=_session,
+                operator_state=_operator_state,
+                save_llm_config=save_llm_config,
+                audit_event=_audit_event,
+            )
+        except (ValueError, PermissionError, RuntimeError) as e:
+            return self._render_scan_page(error=str(e), selected_repos=repo_slugs)
+        threading.Thread(target=_run_scan, args=(_session,), daemon=True).start()
+        self._redirect(_with_query("/scan", project=project_key, notice="Scan started"))
+
+    def _page_scan_stop(self):
+        if _require_role(self, ROLE_SCANNER):
+            return
+        stop_scan(current_session=_session, stop_scan_fn=_stop_active_scan, audit_event=_audit_event)
+        self._redirect(_with_query("/scan", notice="Stop requested"))
+
+    def _page_history_delete(self, body: dict):
+        if _require_role(self, ROLE_ADMIN):
+            return
+        scan_ids = body.get("scan_ids", [])
+        if isinstance(scan_ids, str):
+            scan_ids = [scan_ids]
+        managed_roots = [Path(OUTPUT_DIR).resolve(), Path(LOG_DIR).resolve()]
+        try:
+            result = delete_history_records(
+                body={"scan_ids": scan_ids},
+                history_records=_history_records_for_user(),
+                delete_managed_file=lambda path_str: _delete_managed_history_file(path_str, roots=managed_roots),
+                delete_history=_delete_history,
+                audit_event=_audit_event,
+            )
+        except Exception as e:
+            return self._render_history_page(error=str(e))
+        if result["errors"]:
+            return self._render_history_page(error="; ".join(result["errors"]))
+        self._redirect(_with_query("/history", notice=f"Deleted {len(result['deleted'])} scan record(s)"))
+
+    def _page_settings_save(self, body: dict):
+        if _require_role(self, ROLE_ADMIN):
+            return
+        try:
+            llm_url = body.get("llm_url", "").strip()
+            llm_model = body.get("llm_model", "").strip()
+            output_dir = body.get("output_dir", "").strip()
+            if llm_url or llm_model:
+                _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
+            if output_dir:
+                _settings_service.save_output_dir(
+                    output_dir=output_dir,
+                    is_scan_running=_session.state == "running",
+                    set_paths=_set_output_paths,
+                )
+        except Exception as e:
+            return self._render_settings_page(error=str(e))
+        self._redirect(_with_query("/settings", notice="Settings saved"))
+
+    def _page_finding_triage(self, body: dict):
+        if _require_role(self, ROLE_TRIAGE):
+            return
+        try:
+            triage_finding(
+                body=body,
+                session=_session,
+                suppressions_file=SUPPRESSIONS_FILE,
+                triage_lookup=_triage_by_hash,
+                apply_triage_metadata=_apply_triage_metadata,
+                persist_session_state=_persist_session_state,
+                marked_by=_operator_state.ctx.username,
+                audit_event=_audit_event,
+            )
+        except Exception as e:
+            return self._render_scan_page(error=str(e))
+        self._redirect(_with_query("/scan", notice="Finding triage updated"))
+
+    def _page_finding_reset(self, body: dict):
+        if _require_role(self, ROLE_TRIAGE):
+            return
+        try:
+            reset_finding(
+                body=body,
+                session=_session,
+                suppressions_file=SUPPRESSIONS_FILE,
+                clear_finding_triage=_clear_finding_triage,
+                persist_session_state=_persist_session_state,
+                audit_event=_audit_event,
+            )
+        except Exception as e:
+            return self._render_scan_page(error=str(e))
+        self._redirect(_with_query("/scan", notice="Finding triage reset"))
 
     # ── API handlers ──────────────────────────────────────────────────────────
 
@@ -803,8 +1007,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         if not length:
             return {}
+        raw = self.rfile.read(length)
+        content_type = (self.headers.get("Content-Type", "") or "").split(";")[0].strip().lower()
+        if content_type == "application/x-www-form-urlencoded":
+            parsed = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+            body = {}
+            list_keys = {"repo_slugs", "scan_ids"}
+            for key, values in parsed.items():
+                if key in list_keys:
+                    body[key] = values
+                else:
+                    body[key] = values[0] if len(values) == 1 else values
+            return body
         try:
-            return json.loads(self.rfile.read(length))
+            return json.loads(raw)
         except Exception:
             return {}
 
@@ -823,6 +1039,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _redirect(self, location: str):
+        body = b""
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
     def _404(self):
         self.send_response(404)
         self.end_headers()
@@ -834,11 +1059,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
-
-
-def _build_spa() -> bytes:
-    return build_spa(has_saved_pat=bool(load_pat()), llm_cfg=load_llm_config())
-
 
 # ── Add GET /api/repos to handler ─────────────────────────────────────────────
 # Patch _Handler to handle /api/repos
@@ -857,7 +1077,6 @@ def _patched_get(self):
     elif p == "/api/repos":
         if _require_role(self, ROLE_VIEWER):
             return
-        from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
         key = qs.get("project", [""])[0]
         if not key or not _operator_state.client:
@@ -880,13 +1099,9 @@ _Handler.do_GET = _patched_get
 # ── Server startup ────────────────────────────────────────────────────────────
 
 def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.ThreadingHTTPServer:
-    global _HTML, _server_instance
-    _HTML = _build_spa()
+    global _server_instance
     _app_exit_event.clear()
     _cleanup_stale_temp_clones()
-
-    # Inject into handler
-    _Handler.html_bytes_app = _HTML  # not used directly; _HTML global is read
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     _server_instance = server

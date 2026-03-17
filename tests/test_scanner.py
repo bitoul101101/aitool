@@ -677,50 +677,97 @@ def test_atomic_history_write():
         srv._invalidate_history_cache()
 
 
-def test_build_spa_does_not_embed_saved_pat():
+def test_scan_page_is_server_rendered_and_does_not_embed_saved_pat():
     import app_server as srv
 
     with patch.object(srv, "load_pat", return_value="secret-token-123"):
-        html = srv._build_spa().decode("utf-8")
+        html = srv.render_scan_page(
+            bitbucket_url=srv.BITBUCKET_URL,
+            connected_owner="Security Engineer",
+            has_saved_pat=True,
+            projects=[],
+            selected_project="",
+            repos=[],
+            selected_repos=[],
+            status=srv._session.to_status(),
+            llm_cfg=srv.load_llm_config(),
+        ).decode("utf-8")
 
     assert "secret-token-123" not in html
-    assert "__SAVED_PAT__" not in html
-    assert "const HAS_SAVED_PAT = (true === true);" in html
+    assert "Saved token available: Yes" in html
+    assert 'action="/connect"' in html
 
 
-def test_build_spa_uses_restore_action_and_findings_drawer():
+def test_scan_page_contains_server_rendered_findings_forms():
     import app_server as srv
 
-    html = srv._build_spa().decode("utf-8")
+    session = srv.ScanSession()
+    session.findings = [
+        {
+            "_hash": "hash-1",
+            "repo": "repo1",
+            "file": "app.py",
+            "line": 10,
+            "severity": 2,
+            "severity_label": "High",
+            "capability": "OpenAI",
+            "policy_status": "fail",
+            "description": "Example finding",
+        }
+    ]
+    html = srv.render_scan_page(
+        bitbucket_url=srv.BITBUCKET_URL,
+        connected_owner="Security Engineer",
+        has_saved_pat=False,
+        projects=[],
+        selected_project="",
+        repos=[],
+        selected_repos=[],
+        status=session.to_status(),
+        llm_cfg=srv.load_llm_config(),
+    ).decode("utf-8")
 
-    assert "Finding Details" in html
-    assert "showFindingPane" in html
-    assert ">Restore</button>" in html
-    assert "finding-pane-active-${tid}" in html
-    assert "finding-pane-suppressed-${tid}" in html
+    assert 'action="/findings/triage"' in html
+    assert 'action="/findings/reset"' in html
+    assert "Example finding" in html
 
 
-def test_build_spa_uses_plain_nav_labels_and_project_reload_hook():
+def test_history_page_is_server_rendered():
     import app_server as srv
 
-    html = srv._build_spa().decode("utf-8")
+    html = srv.render_history_page(
+        history=[
+            {
+                "scan_id": "20260317_120000",
+                "project_key": "COGI",
+                "repo_slugs": ["repo1"],
+                "state": "done",
+                "finding_total": 3,
+                "suppressed_total": 1,
+                "delta": {"new_count": 2, "fixed_count": 1},
+                "reports": {"__all__": {"html_name": "r.html", "csv_name": "r.csv"}},
+                "log_file": "x.log",
+            }
+        ]
+    ).decode("utf-8")
 
-    assert 'id="nav-scan" onclick="navTo(\'scan\')">Scan</div>' in html
-    assert 'id="nav-history" onclick="navTo(\'history\')">Scan History</div>' in html
-    assert 'id="nav-settings" onclick="navTo(\'settings\')">Settings</div>' in html
-    assert "async function ensureProjectsLoaded()" in html
-    assert "fetch('/api/projects')" in html
+    assert 'action="/history/delete"' in html
+    assert "/reports/r.html" in html
+    assert ">COGI<" in html
 
 
-def test_build_spa_includes_history_triage_and_delta_controls():
+def test_settings_page_is_server_rendered():
     import app_server as srv
 
-    html = srv._build_spa().decode("utf-8")
+    html = srv.render_settings_page(
+        bitbucket_url=srv.BITBUCKET_URL,
+        output_dir=srv.OUTPUT_DIR,
+        llm_cfg={"base_url": "http://localhost:11434", "model": "m"},
+    ).decode("utf-8")
 
-    assert 'id="hist-filter-triage"' in html
-    assert 'id="hist-filter-delta"' in html
-    assert ">Triage</th>" in html
-    assert ">Delta</th>" in html
+    assert 'action="/settings/save"' in html
+    assert "server-rendered" in html
+    assert srv.BITBUCKET_URL in html
 
 
 def test_allowed_origin_only_permits_local_app_hosts():
