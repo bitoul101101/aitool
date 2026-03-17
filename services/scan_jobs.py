@@ -37,7 +37,7 @@ class ScanSession:
         self.repo_slugs: List[str] = []
         self.llm_url: str = "http://localhost:11434"
         self.llm_model: str = "qwen2.5-coder:7b-instruct"
-        self.operator: str = "Unknown"
+        self.operator: str = "User"
         self.started_at_utc: str = ""
         self.completed_at_utc: str = ""
         self.policy_version: str = ""
@@ -633,7 +633,7 @@ class ScanJobService:
                 log(f"  {slug}  branch:{branch or '?'}  owner:{owner}", "dim")
             except Exception as exc:
                 log(f"  {slug}  metadata error: {exc}", "err")
-                repo_meta[slug] = {"branch": None, "owner": "Unknown", "url": ""}
+                repo_meta[slug] = {"branch": None, "owner": "User", "url": ""}
 
         log("=" * 58, "dim")
 
@@ -657,7 +657,7 @@ class ScanJobService:
                 return slug, None, "", 0, "scan stopped"
             meta = repo_meta.get(slug, {})
             branch = meta.get("branch")
-            owner = meta.get("owner", "Unknown")
+            owner = meta.get("owner", "User")
             clone_url = meta.get("url", "")
             clone_dir = Path(self.paths.temp_dir) / slug
             try:
@@ -848,7 +848,7 @@ class ScanJobService:
                     repos_meta_list = [
                         {
                             "slug": slug,
-                            "owner": repo_meta.get(slug, {}).get("owner", "Unknown"),
+                            "owner": repo_meta.get(slug, {}).get("owner", "User"),
                             "branch": repo_meta.get(slug, {}).get("branch") or "default",
                             "commit": repo_meta.get(slug, {}).get("commit", ""),
                         }
@@ -877,7 +877,7 @@ class ScanJobService:
                     }
                 else:
                     single_slug = label
-                    single_owner = next((finding.get("owner", "") for finding in final), "Unknown")
+                    single_owner = next((finding.get("owner", "") for finding in final), "User")
                     report_meta = {
                         "repo": single_slug,
                         "project_key": session.project_key,
@@ -940,7 +940,7 @@ class ScanJobService:
         session.completed_at_utc = self._utc_now_iso()
         session.repo_details = {
             slug: {
-                "owner": repo_meta.get(slug, {}).get("owner", "Unknown"),
+                "owner": repo_meta.get(slug, {}).get("owner", "User"),
                 "branch": repo_meta.get(slug, {}).get("branch") or "default",
                 "commit": repo_meta.get(slug, {}).get("commit", ""),
             }

@@ -140,7 +140,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:420px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
-.findings-panel{margin-top:12px}
+.findings-panel,.mitigate-section,.suppressed-section{margin-top:12px;padding:12px;border:2px solid #cda274;border-radius:14px;background:#fffdf8}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .finding-table-wrap table,.mitigate-wrap table,.suppressed-wrap table{font-size:12px}
 .finding-meta{display:grid;gap:4px}
@@ -162,7 +162,6 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .triage-form{display:flex;gap:6px;align-items:center;margin:0}
 .triage-form.inline-only{display:inline-flex}
 .triage-form button{padding:3px 6px;font-size:10px;width:100%}
-.mitigate-section,.suppressed-section{margin-top:14px}
 .mitigate-section h3,.suppressed-section h3{margin:0 0 8px;font-size:15px}
 .mitigate-wrap,.suppressed-wrap{max-height:220px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .report-actions{display:grid;gap:8px;margin:12px 0 0}
