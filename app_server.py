@@ -394,6 +394,59 @@ def _current_session_history_record() -> dict | None:
     }
 
 
+def _format_log_text(entries: list[dict]) -> str:
+    lines = []
+    for entry in entries:
+        ts = entry.get("ts")
+        try:
+            stamp = datetime.fromtimestamp(float(ts)).strftime("%H:%M:%S")
+        except Exception:
+            stamp = "--:--:--"
+        lines.append(f"[{stamp}] {entry.get('msg', '')}")
+    return "\n".join(lines)
+
+
+def _phase_timeline(entries: list[dict]) -> list[tuple[str, str]]:
+    if not entries:
+        return []
+    first_ts = float(entries[0].get("ts") or time.time())
+    markers = {
+        "init": first_ts,
+        "clone": None,
+        "scan": None,
+        "llm review": None,
+        "report": None,
+        "end": float(entries[-1].get("ts") or first_ts),
+    }
+    for entry in entries:
+        msg = str(entry.get("msg", ""))
+        ts = float(entry.get("ts") or first_ts)
+        if markers["clone"] is None and "branch:" in msg:
+            markers["clone"] = ts
+        if markers["scan"] is None and "Starting parallel scan" in msg:
+            markers["scan"] = ts
+        if markers["llm review"] is None and "[LLM] Reviewing" in msg:
+            markers["llm review"] = ts
+        if markers["report"] is None and "Generating reports" in msg:
+            markers["report"] = ts
+        if "Scan complete." in msg or "Scan stopped." in msg:
+            markers["end"] = ts
+    points = [
+        ("init", markers["init"], markers["clone"] or markers["scan"] or markers["end"]),
+        ("clone", markers["clone"], markers["scan"] or markers["llm review"] or markers["report"] or markers["end"]),
+        ("scan", markers["scan"], markers["llm review"] or markers["report"] or markers["end"]),
+        ("llm review", markers["llm review"], markers["report"] or markers["end"]),
+    ]
+    timeline = []
+    for name, start, end in points:
+        if start is None:
+            timeline.append((name, "—"))
+            continue
+        seconds = max(int((end or start) - start), 0)
+        timeline.append((name, f"{seconds // 60:02d}:{seconds % 60:02d}"))
+    return timeline
+
+
 _settings_service = SettingsService(
     load_llm_config=load_llm_config,
     save_llm_config=save_llm_config,
@@ -689,7 +742,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             status=status,
             llm_cfg=load_llm_config(),
             llm_models=_ollama_list_models(load_llm_config().get("base_url", "http://localhost:11434")),
-            log_text="\n".join(entry.get("msg", "") for entry in _session.log_lines[-400:]),
+            log_text=_format_log_text(_session.log_lines[-500:]),
+            phase_timeline=_phase_timeline(_session.log_lines),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )

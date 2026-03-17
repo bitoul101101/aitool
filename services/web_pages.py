@@ -11,7 +11,7 @@ def _esc(value: object) -> str:
 
 def _fmt_dt(value: str) -> tuple[str, str, int]:
     if not value:
-        return "—", "", 0
+        return "-", "", 0
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         return dt.strftime("%d/%m/%y"), dt.strftime("%H:%M:%S"), int(dt.timestamp())
@@ -55,9 +55,11 @@ nav{display:flex;gap:8px;margin-left:auto;align-items:center}
 .exit-form{margin:0}
 main{max-width:1340px;margin:0 auto;padding:16px 18px}
 .card{background:#fffaf4;border:1px solid #d8b995;border-radius:14px;padding:14px}
-.notice,.error{padding:10px 12px;border-radius:10px;margin-bottom:12px}
+.notice,.error{padding:10px 12px;border-radius:10px}
 .notice{background:#e8f5e5;border:1px solid #b8d3b0;color:#224d22}
 .error{background:#f8e5e2;border:1px solid #dfb1aa;color:#7d2a22}
+.toast-wrap{position:fixed;top:14px;right:14px;display:grid;gap:8px;z-index:1000}
+.toast{min-width:260px;max-width:420px;box-shadow:0 10px 24px rgba(0,0,0,.14);animation:fadein .2s ease}
 .muted{color:#705333}
 button,.btn{border:0;border-radius:8px;padding:9px 13px;background:#6d3514;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 button.alt,.btn.alt{background:#8a6c50}
@@ -76,19 +78,22 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .status-stopped{background:#f6dddd;color:#7b1d1d}
 .stack{display:grid;gap:10px}
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.checkline{display:flex;align-items:center;gap:8px;font-size:14px;text-transform:none;color:#261507}
+.checkline input{width:auto;margin:0}
 .scan-shell{display:grid;grid-template-columns:220px minmax(0,1fr) 380px;gap:14px;align-items:start}
 .project-panel,.repo-panel,.sidebar-panel{min-height:calc(100vh - 132px)}
 .project-list{display:grid;gap:3px;max-height:calc(100vh - 190px);overflow:auto;padding-right:4px}
 .project-link{display:block;padding:5px 8px;border-radius:8px;text-decoration:none;background:#f6ebdc;color:#5e3b16;font-size:13px}
 .project-link.active{background:#6d3514;color:#fff;font-weight:700}
-.repo-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) 220px auto auto auto;gap:8px;align-items:end;margin-bottom:10px}
+.repo-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) 220px auto;gap:8px;align-items:end;margin-bottom:8px}
 .repo-shell{border:1px solid #ead4ba;border-radius:12px;background:#fcf6ee;padding:8px}
 .repo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 10px;max-height:300px;overflow:auto;padding-right:4px}
 .repo-row{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:6px;font-size:13px;line-height:1.2}
 .repo-row input{width:auto;margin:0;flex:0 0 auto}
 .repo-row span{display:block}
-.scan-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
-.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:340px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:360px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.timeline{display:grid;gap:8px}
+.timeline-row{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px}
 .finding-shell{position:sticky;top:16px}
 .finding-table-wrap{max-height:calc(100vh - 170px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
@@ -97,18 +102,19 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .history-time{font-size:11px;color:#7a5d3e}
 .icon-link img{display:block;width:34px;height:34px}
 .filters-row{margin-bottom:12px}
-@media (max-width:1220px){.scan-shell{grid-template-columns:200px 1fr}.sidebar-panel{grid-column:1 / -1}.finding-shell{position:static}.repo-toolbar{grid-template-columns:1fr 1fr auto auto auto}}
+@media (max-width:1220px){.scan-shell{grid-template-columns:200px 1fr}.sidebar-panel{grid-column:1 / -1}.finding-shell{position:static}}
 @media (max-width:900px){header{flex-wrap:wrap}nav{margin-left:0}.scan-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.sidebar-panel{min-height:auto}.repo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar{grid-template-columns:1fr 1fr}.table-shell{max-height:none}}
+@keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 """
 
 
 def _flash(notice: str = "", error: str = "") -> str:
-    parts = []
+    items = []
     if notice:
-        parts.append(f'<div class="notice">{_esc(notice)}</div>')
+        items.append(f'<div class="notice toast">{_esc(notice)}</div>')
     if error:
-        parts.append(f'<div class="error">{_esc(error)}</div>')
-    return "".join(parts)
+        items.append(f'<div class="error toast">{_esc(error)}</div>')
+    return f'<div class="toast-wrap">{"".join(items)}</div>' if items else ""
 
 
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, auto_refresh: int | None = None) -> bytes:
@@ -133,6 +139,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, a
 <body>
 <header><h1>AI Security & Compliance Scanner</h1>{f"<nav>{nav}</nav>" if nav else ""}</header>
 <main>{body}</main>
+<script>setTimeout(()=>document.querySelectorAll('.toast').forEach(el=>el.remove()),5000);</script>
 </body>
 </html>"""
     return html.encode("utf-8")
@@ -145,11 +152,11 @@ def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = 
   <h2 style="margin:0 0 12px">Login</h2>
   <p class="muted">Connect to {_esc(bitbucket_url)} with a Personal Access Token.</p>
   <form method="post" action="/login" class="stack" style="margin-top:16px">
-    <div><label>Personal Access Token</label><input type="password" name="token" value=""></div>
-    <label><input type="checkbox" name="use_saved_token" value="true"> Use saved token</label>
-    <label><input type="checkbox" name="remember" value="true"> Remember token locally</label>
+    <div><label>Personal Access Token</label><input type="password" name="token" value="" style="max-width:100%"></div>
+    <label class="checkline"><input type="checkbox" name="use_saved_token" value="true"><span>Use saved token</span></label>
+    <label class="checkline"><input type="checkbox" name="remember" value="true"><span>Remember token locally</span></label>
     <div class="muted">Saved token available: {"Yes" if has_saved_pat else "No"}</div>
-    <div><button type="submit">Login</button></div>
+    <div class="inline" style="justify-content:flex-end"><button type="submit">Login</button></div>
   </form>
 </section>"""
     return _layout(title="Login", body=body, show_nav=False)
@@ -165,6 +172,7 @@ def render_scan_page(
     llm_models: list[str],
     status: dict,
     log_text: str,
+    phase_timeline: list[tuple[str, str]],
     notice: str = "",
     error: str = "",
 ) -> bytes:
@@ -187,18 +195,12 @@ def render_scan_page(
         f"<tr><td>{_esc(f.get('repo',''))}</td><td>{_esc(f.get('file',''))}:{_esc(f.get('line',''))}</td><td>{_esc(f.get('severity_label', f.get('severity','')))}</td><td>{_esc(f.get('capability',''))}</td></tr>"
         for f in status.get("finding_details", [])[:20]
     ) or '<tr><td colspan="4">No current findings.</td></tr>'
+    timeline_html = "".join(
+        f'<div class="timeline-row"><span>{_esc(name.title())}</span><strong>{_esc(duration)}</strong></div>'
+        for name, duration in phase_timeline
+    ) or '<div class="muted">Timeline will appear after the scan starts.</div>'
     stop_button = '<button type="button" class="warn" onclick="document.getElementById(\'stop-form\').submit()">Stop Scan</button>' if running else ""
-    banner = ""
-    if running:
-        banner = (
-            f'<div class="notice scan-banner"><span>Scan running for {_esc(status.get("project_key") or selected_project)} '
-            f'({int(status.get("progress",0))}/{int(status.get("total",0))} repos). '
-            f'Current repo: {_esc(status.get("current_repo","-"))}</span>{stop_button}</div>'
-        )
-    body = f"""
-{_flash(notice, error)}
-{banner}
-<section class="scan-shell">
+    selection_view = f"""
   <aside class="card project-panel">
     <h2 style="margin:0 0 8px;font-size:16px">Projects</h2>
     <div class="project-list">{project_links}</div>
@@ -209,25 +211,36 @@ def render_scan_page(
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
-        <button type="submit">Start Scan</button>
-        <button type="button" class="ghost" id="refresh-models-btn">Refresh Models</button>
-        <div class="inline" style="justify-content:flex-end">
-          <button type="button" class="ghost" id="select-all-repos-btn">All</button>
-          <button type="button" class="ghost" id="select-none-repos-btn">None</button>
-        </div>
+        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit">Start Scan</button>{stop_button}</div>
       </div>
-      <div class="inline" style="justify-content:space-between">
-        <div class="muted" id="repo-selection-count"></div>
-        <div class="muted" id="model-refresh-status"></div>
+      <div class="inline">
+        <span class="muted" id="repo-selection-count"></span>
+        <button type="button" class="ghost" id="select-all-repos-btn">All</button>
+        <button type="button" class="ghost" id="select-none-repos-btn">None</button>
       </div>
       <div class="repo-shell"><div id="repo-grid" class="repo-grid">{repo_rows}</div></div>
     </form>
     <form method="post" action="/scan/stop" id="stop-form"></form>
-    <div style="margin-top:12px">
-      <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
-      <div class="terminal">{_esc(log_text or "No activity yet.")}</div>
+  </section>"""
+    running_view = f"""
+  <section class="card repo-panel" style="grid-column:1 / span 2">
+    <div class="inline" style="justify-content:flex-start;margin-bottom:10px">{stop_button}</div>
+    <div class="stack">
+      <div>
+        <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
+        <div class="terminal">{_esc(log_text or "No activity yet.")}</div>
+      </div>
+      <div>
+        <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
+        <div class="timeline">{timeline_html}</div>
+      </div>
     </div>
-  </section>
+    <form method="post" action="/scan/stop" id="stop-form"></form>
+  </section>"""
+    body = f"""
+{_flash(notice, error)}
+<section class="scan-shell">
+  {running_view if running else selection_view}
   <aside class="card sidebar-panel">
     <div class="finding-shell">
       <h2 style="margin:0 0 8px;font-size:16px">Current Findings</h2>
@@ -244,29 +257,12 @@ def render_scan_page(
 const repoSearch=document.getElementById('repo-search');
 const repoCount=document.getElementById('repo-selection-count');
 function repoCheckboxes(){{return Array.from(document.querySelectorAll('.repo-checkbox'));}}
-function updateRepoCount(){{repoCount.textContent=`${{repoCheckboxes().filter(cb=>cb.checked && cb.closest('.repo-row').style.display!=='none').length}} selected`;}}
-function filterRepos(){{const q=(repoSearch.value||'').toLowerCase().trim();document.querySelectorAll('.repo-row').forEach(row=>{{row.style.display=!q || (row.dataset.repoName||'').includes(q)?'flex':'none';}});updateRepoCount();}}
+function updateRepoCount(){{if(repoCount) repoCount.textContent=`${{repoCheckboxes().filter(cb=>cb.checked && cb.closest('.repo-row').style.display!=='none').length}} selected`;}}
+function filterRepos(){{if(!repoSearch) return; const q=(repoSearch.value||'').toLowerCase().trim();document.querySelectorAll('.repo-row').forEach(row=>{{row.style.display=!q || (row.dataset.repoName||'').includes(q)?'flex':'none';}});updateRepoCount();}}
 repoSearch?.addEventListener('input',filterRepos);
 document.getElementById('select-all-repos-btn')?.addEventListener('click',()=>{{repoCheckboxes().forEach(cb=>{{if(cb.closest('.repo-row').style.display!=='none') cb.checked=true;}});updateRepoCount();}});
 document.getElementById('select-none-repos-btn')?.addEventListener('click',()=>{{repoCheckboxes().forEach(cb=>cb.checked=false);updateRepoCount();}});
 repoCheckboxes().forEach(cb=>cb.addEventListener('change',updateRepoCount));
-document.getElementById('refresh-models-btn')?.addEventListener('click',async()=>{{
- const status=document.getElementById('model-refresh-status');
- const select=document.getElementById('llm-model-select');
- status.textContent='Refreshing model list...';
- try {{
-   const resp=await fetch('/api/ollama/models');
-   const data=await resp.json();
-   const current=select.value;
-   const models=(data.models||[]);
-   select.innerHTML='';
-   models.forEach(model=>{{const opt=document.createElement('option');opt.value=model;opt.textContent=model;if(model===current) opt.selected=true;select.appendChild(opt);}});
-   if(current && !models.includes(current)) {{const opt=document.createElement('option');opt.value=current;opt.textContent=current+' (current)';opt.selected=true;select.appendChild(opt);}}
-   status.textContent='Model list refreshed.';
- }} catch (err) {{
-   status.textContent='Failed to refresh models.';
- }}
-}});
 filterRepos();
 </script>"""
     return _layout(title="Scan", body=body, active="scan", auto_refresh=5 if running else None)

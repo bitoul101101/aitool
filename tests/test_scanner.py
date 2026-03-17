@@ -717,12 +717,12 @@ def test_scan_page_contains_server_rendered_findings_forms():
         llm_cfg=srv.load_llm_config(),
         llm_models=["m1", "m2"],
         log_text="line 1\nline 2",
+        phase_timeline=[("init", "00:02")],
     ).decode("utf-8")
 
     assert 'id="repo-search"' in html
     assert 'id="llm-model-select"' in html
-    assert "Refresh Models" in html
-    assert "Activity Log" in html
+    assert "Start Scan" in html
     assert "repo1" in html
     assert "OpenAI" in html
 
