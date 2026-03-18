@@ -516,16 +516,31 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   color:rgba(255,255,255,.68);
 }
 
-/* body: unified details block */
-.hdr-body{padding:0 16px 14px;}
+/* body: metadata in two columns + stats in one */
+.hdr-body{
+  display:grid;
+  grid-template-columns:minmax(0,2fr) minmax(280px,1fr);
+  gap:10px;
+  padding:0 16px 14px;
+}
 
 .hdr-meta{
   width:100%;min-width:0;padding:10px 16px;
-  display:grid;grid-template-columns:auto 1fr;
-  column-gap:14px;row-gap:4px;align-content:start;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px 16px;
+  align-items:start;
   border:1px solid rgba(255,255,255,.1);
   border-radius:10px;
   background:rgba(255,255,255,.04);
+}
+.hdr-meta-item{
+  min-width:0;
+  display:grid;
+  grid-template-columns:auto 1fr;
+  column-gap:14px;row-gap:4px;align-content:start;
+  padding:8px 10px;
+  border-radius:10px;
+  background:rgba(255,255,255,.03);
 }
 .hdr-meta-key{
   font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
@@ -533,7 +548,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 }
 .hdr-meta-val{
   font-size:12px;font-weight:600;color:rgba(255,255,255,.92);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  white-space:normal;overflow:hidden;text-overflow:ellipsis;
 }
 .hdr-meta-val.mono{
   font-family:'Cascadia Code',Consolas,monospace;
@@ -548,12 +563,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   font-family:'Cascadia Code',Consolas,monospace;white-space:nowrap;
 }
 
-/* ── Right: stat list mirrors the left metadata layout ── */
 .hdr-stats{
-  flex-shrink:0;width:320px;
+  width:100%;
   padding:10px 16px;
-  display:grid;grid-template-columns:auto 1fr;
-  column-gap:14px;row-gap:4px;align-content:start;
+  display:grid;grid-template-columns:1fr;
+  gap:10px;
+  align-content:start;
   border:1px solid rgba(255,255,255,.1);
   border-radius:10px;
   background:rgba(255,255,255,.04);
@@ -566,6 +581,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 .hdr-meta-val.s-crit { color:#ef9a9a; }
 .hdr-meta-val.s-ok   { color:#81c995; }
 .hdr-meta-val.s-blue { color:#90caf9; }
+@media (max-width:980px){
+  .hdr-body{grid-template-columns:1fr;}
+}
+@media (max-width:720px){
+  .hdr-meta{grid-template-columns:1fr;}
+}
 
 /* ── KPI bar ── */
 .kpis{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:26px;}
@@ -885,8 +906,12 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
         def mrow(key, val, mono=False, raw=False):
             mono_cls = " mono" if mono else ""
             val_html = val if raw else html_mod.escape(str(val))
-            return (f'<div class="hdr-meta-key">{key}</div>'
-                    f'<div class="hdr-meta-val{mono_cls}">{val_html}</div>')
+            return (
+                '<div class="hdr-meta-item">'
+                f'<div class="hdr-meta-key">{key}</div>'
+                f'<div class="hdr-meta-val{mono_cls}">{val_html}</div>'
+                '</div>'
+            )
 
         meta_rows = ""
         if project and project != "—":
@@ -927,8 +952,10 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
                 f"</tr></thead><tbody>{trows}</tbody></table>"
             )
             meta_rows += (
+                '<div class="hdr-meta-item">'
                 f'<div class="hdr-meta-key" style="align-self:start;padding-top:4px">Repositories</div>'
                 f'<div class="hdr-meta-val">{repo_table}</div>'
+                '</div>'
             )
         else:
             if repo and repo not in ("—", "combined"):
@@ -947,15 +974,19 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
         if llm_label:
             meta_rows += mrow("Model Used", llm_label, raw=True)
         meta_rows += (
+            '<div class="hdr-meta-item">'
             f'<div class="hdr-meta-key">Languages</div>'
             f'<div class="hdr-meta-val"><div class="lang-chips">{lang_chips_html}</div></div>'
+            '</div>'
         )
         # ── Stat rows ─────────────────────────────────────────────
         def stat_row(label, val, sub="", extra_cls=""):
             sub_html = f'<div class="hdr-meta-sub">{html_mod.escape(sub)}</div>' if sub else ""
             return (
+                '<div class="hdr-meta-item">'
                 f'<div class="hdr-meta-key">{label}</div>'
                 f'<div class="hdr-meta-val {extra_cls}">{val}{sub_html}</div>'
+                '</div>'
             )
 
         stats_html = (
@@ -977,7 +1008,8 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
     </div>
   </div>
   <div class="hdr-body">
-    <div class="hdr-meta">{meta_rows}{stats_html}</div>
+    <div class="hdr-meta">{meta_rows}</div>
+    <div class="hdr-stats">{stats_html}</div>
   </div>
 </div>"""
 
