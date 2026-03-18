@@ -516,18 +516,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   color:rgba(255,255,255,.68);
 }
 
-/* body: metadata in two columns + stats in one */
+/* body: metadata and stats in a single three-column grid */
 .hdr-body{
-  display:grid;
-  grid-template-columns:minmax(0,2fr) minmax(280px,1fr);
-  gap:6px;
+  display:block;
   padding:0 8px 6px;
 }
 
 .hdr-meta{
   width:100%;min-width:0;padding:5px 8px;
-  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:4px 8px;
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:3px 7px;
   align-items:start;
   border:1px solid rgba(255,255,255,.1);
   border-radius:10px;
@@ -537,8 +535,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   min-width:0;
   display:grid;
   grid-template-columns:auto 1fr;
-  column-gap:8px;row-gap:0;align-content:start;
-  padding:3px 5px;
+  column-gap:6px;row-gap:0;align-content:start;
+  padding:2px 4px;
   border-radius:10px;
   background:rgba(255,255,255,.03);
 }
@@ -552,29 +550,18 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 }
 .hdr-meta-val.mono{
   font-family:'Cascadia Code',Consolas,monospace;
-  font-size:10px;font-weight:400;color:rgba(255,255,255,.78);
+  font-size:11px;font-weight:400;color:rgba(255,255,255,.78);
 }
 /* language chips */
 .lang-chips{display:flex;flex-wrap:wrap;gap:4px;}
 .lang-chip{
   background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);
   border-radius:4px;padding:1px 7px;
-  font-size:10px;font-weight:600;color:rgba(255,255,255,.88);
+  font-size:11px;font-weight:600;color:rgba(255,255,255,.88);
   font-family:'Cascadia Code',Consolas,monospace;white-space:nowrap;
 }
-
-.hdr-stats{
-  width:100%;
-  padding:5px 8px;
-  display:grid;grid-template-columns:1fr;
-  gap:4px;
-  align-content:start;
-  border:1px solid rgba(255,255,255,.1);
-  border-radius:10px;
-  background:rgba(255,255,255,.04);
-}
 .hdr-meta-sub{
-  display:inline;font-size:9px;font-weight:400;color:rgba(255,255,255,.62);
+  display:inline;font-size:11px;font-weight:400;color:rgba(255,255,255,.62);
   margin-left:8px;white-space:nowrap;
 }
 .hdr-meta-val.s-warn { color:#ffcc80; }
@@ -582,12 +569,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 .hdr-meta-val.s-ok   { color:#81c995; }
 .hdr-meta-val.s-blue { color:#90caf9; }
 @media (max-width:980px){
-  .hdr-body{grid-template-columns:1fr;}
   .inventory-layout{grid-template-columns:1fr;}
+  .hdr-meta{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 @media (max-width:720px){
   .hdr-meta{grid-template-columns:1fr;}
-  .inventory-grid{grid-template-columns:1fr;}
+  .inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 
 /* ── KPI bar ── */
@@ -700,13 +687,13 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
 .detail-panel li{margin-bottom:3px;}
 .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
-.inventory-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.9fr) minmax(0,1.2fr);gap:12px;align-items:start}
-.inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.inventory-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.95fr) minmax(0,1.1fr);gap:10px;align-items:start}
+.inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;height:100%}
 .inventory-card{padding:10px 12px;border:1px solid var(--bdr);border-radius:12px;background:var(--card)}
 .inventory-card strong{display:block;font-size:22px;line-height:1.1}
 .inventory-list{display:flex;gap:6px;flex-wrap:wrap}
 .inventory-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
-.inventory-stack{display:grid;gap:12px}
+.inventory-stack{display:grid;gap:10px;height:100%}
 .inventory-repos{display:grid;gap:8px;max-height:340px;overflow:auto}
 .inventory-repo{padding:9px 11px;border:1px solid var(--bdr);border-radius:12px;background:var(--card);margin-bottom:0}
 .inventory-repo-meta{font-size:12px;color:var(--dim);margin-top:4px}
@@ -773,9 +760,6 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
     def _header(self, findings=None):
         findings = findings or []
         commit = html_mod.escape(self.meta.get("commit", ""))
-        suppressed_count = int(self.meta.get("suppressed_count", 0) or 0)
-        reviewed_count = int(self.meta.get("reviewed_count", 0) or 0)
-        accepted_risk_count = int(self.meta.get("accepted_risk_count", 0) or 0)
         tool_version = html_mod.escape(self.meta.get("tool_version", ""))
         repo       = html_mod.escape(self.meta.get("repo", "—"))
         project    = html_mod.escape(self.meta.get("project_key", "—"))
@@ -918,9 +902,12 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
                 '</div>'
             )
 
-        meta_rows = ""
+        primary_rows = []
+        secondary_rows = []
+        stat_rows = []
+
         if project and project != "—":
-            meta_rows += mrow("Project", project)
+            primary_rows.append(mrow("Project", project))
         if repos_meta:
             # Multi-repo: show per-repo table instead of single repo/owner/branch rows
             # Compact dimmed table — no highlight, small font
@@ -956,7 +943,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
                 f"color:{_hc};text-align:left;text-transform:uppercase;letter-spacing:.04em'>Branch</th>"
                 f"</tr></thead><tbody>{trows}</tbody></table>"
             )
-            meta_rows += (
+            primary_rows.append(
                 '<div class="hdr-meta-item">'
                 f'<div class="hdr-meta-key" style="align-self:start;padding-top:4px">Repositories</div>'
                 f'<div class="hdr-meta-val">{repo_table}</div>'
@@ -964,21 +951,21 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
             )
         else:
             if repo and repo not in ("—", "combined"):
-                meta_rows += mrow("Repository", repo)
+                primary_rows.append(mrow("Repository", repo))
             if owner_val:
-                meta_rows += mrow("Owner", owner_val)
+                primary_rows.append(mrow("Owner", owner_val))
             branch_commit = branch if branch not in ("—", "") else ""
             if commit:
                 branch_commit = f"{branch_commit}/{commit[:12]}" if branch_commit else commit[:12]
             if branch_commit:
-                meta_rows += mrow("Branch/Commit", branch_commit, mono=True)
-        meta_rows += mrow("Scan Date", scan_dt)
-        meta_rows += mrow("Duration", dur_str)
+                primary_rows.append(mrow("Branch/Commit", branch_commit, mono=True))
+        secondary_rows.append(mrow("Scan Date", scan_dt))
+        secondary_rows.append(mrow("Duration", dur_str))
         if tool_version:
-            meta_rows += mrow("Tool Version", tool_version, mono=True)
+            secondary_rows.append(mrow("Tool Version", tool_version, mono=True))
         if llm_label:
-            meta_rows += mrow("Model Used", llm_label, raw=True)
-        meta_rows += (
+            secondary_rows.append(mrow("Model Used", llm_label, raw=True))
+        secondary_rows.append(
             '<div class="hdr-meta-item">'
             f'<div class="hdr-meta-key">Languages</div>'
             f'<div class="hdr-meta-val"><div class="lang-chips">{lang_chips_html}</div></div>'
@@ -994,15 +981,13 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
                 '</div>'
             )
 
-        stats_html = (
-            stat_row("Files Scanned", files_str, "unique files with findings", "s-blue") +
-            stat_row("Pattern Matches", matches_str, matches_sub) +
-            stat_row("Policy Violations", policy_str, policy_sub_str, policy_cls) +
-            stat_row("LLM Dismissal Rate", dismiss_str, dismiss_sub, dismiss_cls) +
-            stat_row("Reviewed", str(reviewed_count), "analyst-reviewed findings") +
-            stat_row("Accepted Risk", str(accepted_risk_count), "documented accepted risk") +
-            stat_row("Suppressed", str(suppressed_count), "suppressed by analyst workflow")
-        )
+        stat_rows.extend([
+            stat_row("Files Scanned", files_str, "unique files with findings", "s-blue"),
+            stat_row("Pattern Matches", matches_str, matches_sub),
+            stat_row("Policy Violations", policy_str, policy_sub_str, policy_cls),
+            stat_row("LLM Dismissal Rate", dismiss_str, dismiss_sub, dismiss_cls),
+        ])
+        meta_rows = "".join(primary_rows + secondary_rows + stat_rows)
 
         return f"""<div class="hdr {risk_cls}">
   <div class="hdr-accent"></div>
@@ -1014,7 +999,6 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
   </div>
   <div class="hdr-body">
     <div class="hdr-meta">{meta_rows}</div>
-    <div class="hdr-stats">{stats_html}</div>
   </div>
 </div>"""
 
@@ -1599,7 +1583,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
       <div class="inventory-list">{model_chips}</div>
     </div>
   </div>
-  <div class="card" style="margin-bottom:0">
+  <div class="card inventory-stack" style="margin-bottom:0">
     <h3>Repository Profiles</h3>
     <div class="inventory-repos">{repo_cards or "<p class='muted'>No repository profiles available.</p>"}</div>
   </div>

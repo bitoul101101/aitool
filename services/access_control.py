@@ -43,8 +43,8 @@ def resolve_user_context(path: str, username: str) -> UserContext:
     if not isinstance(entry, dict):
         entry = {}
 
-    roles = _normalise_roles(entry.get("roles") or cfg.get("default_roles") or DEFAULT_BOOTSTRAP_ROLES)
-    projects = _normalise_projects(entry.get("projects") or cfg.get("default_projects") or ["*"])
+    roles = _normalise_roles(entry.get("roles") or cfg.get("default_roles") or [])
+    projects = _normalise_projects(entry.get("projects") or cfg.get("default_projects") or [])
     return UserContext(username=username, roles=tuple(roles), allowed_projects=tuple(projects))
 
 
@@ -60,8 +60,6 @@ def _normalise_roles(raw_roles) -> list[str]:
         value = str(role).strip().lower()
         if value in ALL_ROLES and value not in roles:
             roles.append(value)
-    if not roles:
-        roles = list(DEFAULT_BOOTSTRAP_ROLES)
     return roles
 
 
@@ -71,6 +69,4 @@ def _normalise_projects(raw_projects) -> list[str]:
         value = str(project).strip()
         if value and value not in projects:
             projects.append(value)
-    if not projects:
-        return ["*"]
     return projects

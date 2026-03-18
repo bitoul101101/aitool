@@ -1380,6 +1380,41 @@ def test_history_access_uses_project_key_only():
     assert [record["scan_id"] for record in visible] == ["1"]
 
 
+def test_legacy_access_control_fails_closed_without_valid_config():
+    from services.access_control import resolve_user_context
+
+    d = Path(tempfile.mkdtemp())
+    missing = d / "missing-access.json"
+
+    ctx = resolve_user_context(str(missing), "analyst")
+
+    assert ctx.username == "analyst"
+    assert ctx.roles == ()
+    assert ctx.allowed_projects == ()
+
+
+def test_legacy_access_control_ignores_invalid_user_entry_and_uses_valid_defaults_only():
+    from services.access_control import resolve_user_context
+
+    d = Path(tempfile.mkdtemp())
+    cfg = d / "access.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "default_roles": ["admin", "bogus"],
+                "default_projects": ["", "COGI"],
+                "users": {"alice": "invalid"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ctx = resolve_user_context(str(cfg), "alice")
+
+    assert ctx.roles == ("admin",)
+    assert ctx.allowed_projects == ("COGI",)
+
+
 def test_llm_fallback_parsing_does_not_emit_low_signal_operator_logs():
     from scanner import llm_reviewer as reviewer
 
@@ -2407,7 +2442,7 @@ def test_api_finding_triage_marks_reviewed_and_reset_clears_it():
         srv._invalidate_history_cache()
 
 
-def test_html_report_renders_suppressed_stat():
+def test_html_report_header_excludes_triage_summary_stats():
     reporter = HTMLReporter(
         output_dir=tempfile.mkdtemp(),
         scan_id="20260317_024619",
@@ -2431,8 +2466,9 @@ def test_html_report_renders_suppressed_stat():
 
     html = reporter._render(findings, policy={})
 
-    assert "Suppressed" in html
-    assert "suppressed by analyst workflow" in html
+    assert "Reviewed" not in html
+    assert "Accepted Risk" not in html
+    assert "Suppressed" not in html
 
 
 def test_cleanup_stale_temp_clones_removes_leftovers():
