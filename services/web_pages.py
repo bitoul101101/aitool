@@ -279,7 +279,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{_esc(title)}</title>
-<style>{_base_style()}</style>
+<link rel="stylesheet" href="/assets/main.css">
 </head>
 <body class="{body_class}">
 <header><h1>AI Security & Compliance Scanner</h1>{nav if nav else ""}</header>

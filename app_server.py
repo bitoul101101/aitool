@@ -1330,20 +1330,62 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return True
         return False
 
-    # ── Routing ───────────────────────────────────────────────────────────────
+    def _serve_asset(self, filename: str):
+        safe = Path(filename).name
+        asset_path = ASSETS_DIR / safe
+        if not asset_path.exists():
+            return self._404()
+        content_types = {
+            ".js": "application/javascript; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+        }
+        self._send(200, content_types.get(asset_path.suffix.lower(), "application/octet-stream"), asset_path.read_bytes())
 
-    def do_GET(self):
-        parsed = urlparse(self.path)
+    def _api_projects_get(self):
+        if _Handler._require_browser_api_session(self):
+            return
+        if _require_role(self, ROLE_VIEWER):
+            return
+        self._json({
+            "projects": filter_projects(_operator_state.projects_cache, _operator_state.ctx),
+            "owner": _operator_state.connected_owner,
+            "auth": _operator_state.public_auth(),
+        })
+
+    def _api_repos_get(self, parsed):
+        if _Handler._require_browser_api_session(self):
+            return
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(parsed.query)
+        key = qs.get("project", [""])[0]
+        if not key or not _operator_state.client:
+            return self._json({"repos": []})
+        if _require_project_access(self, key):
+            return
+        try:
+            repos = _operator_state.repos_cache.get(key)
+            if repos is None:
+                repos = _operator_state.client.list_repos(key)
+                _operator_state.repos_cache[key] = repos
+            self._json({"repos": repos})
+        except Exception as e:
+            self._err(500, str(e))
+
+    def _handle_page_get(self, parsed) -> bool:
         p = parsed.path
         if p in ("/", "/index.html", "/login"):
             if _is_connected() and p in ("/", "/index.html"):
-                return self._redirect("/scan")
-            self._render_login_page()
-        elif p == "/scan":
+                self._redirect("/scan")
+            else:
+                self._render_login_page()
+            return True
+        if p == "/scan":
             if not _is_connected():
-                return self._redirect("/login")
+                self._redirect("/login")
+                return True
             if self._require_browser_session():
-                return
+                return True
             qs = parse_qs(parsed.query)
             fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
             current_scan_id = _current_session_snapshot().get("scan_id", "")
@@ -1351,50 +1393,65 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._render_scan_page()
             else:
                 self._redirect("/scan/" + quote(current_scan_id) + "?tab=activity")
-        elif p.startswith("/scan/"):
+            return True
+        if p.startswith("/scan/"):
             if not _is_connected():
-                return self._redirect("/login")
+                self._redirect("/login")
+                return True
             if self._require_browser_session():
-                return
+                return True
             self._render_scan_workspace_page(p[6:])
-        elif p.startswith("/results/"):
+            return True
+        if p.startswith("/results/"):
             if not _is_connected():
-                return self._redirect("/login")
+                self._redirect("/login")
+                return True
             if self._require_browser_session():
-                return
+                return True
             self._redirect("/scan/" + quote(Path(p[9:]).name) + "?tab=results")
-        elif p == "/history":
+            return True
+        if p == "/history":
             if not _is_connected():
-                return self._redirect("/login")
+                self._redirect("/login")
+                return True
             if self._require_browser_session():
-                return
+                return True
             self._render_history_page()
-        elif p == "/inventory":
+            return True
+        if p == "/inventory":
             if not _is_connected():
-                return self._redirect("/login")
+                self._redirect("/login")
+                return True
             if self._require_browser_session():
-                return
+                return True
             self._render_inventory_page()
-        elif p == "/settings":
+            return True
+        if p == "/settings":
             if not _is_connected():
-                return self._redirect("/login")
+                self._redirect("/login")
+                return True
             if self._require_browser_session():
-                return
+                return True
             self._render_settings_page()
-        elif p == "/help":
+            return True
+        if p == "/help":
             if not _is_connected():
-                return self._redirect("/login")
+                self._redirect("/login")
+                return True
             if self._require_browser_session():
-                return
+                return True
             self._render_help_page()
-        elif p == "/assets/scan_page.js":
-            asset_path = ASSETS_DIR / "scan_page.js"
-            if not asset_path.exists():
-                return self._404()
-            self._send(200, "application/javascript; charset=utf-8", asset_path.read_bytes())
-        elif p == "/api/status":
+            return True
+        if p.startswith("/assets/"):
+            _Handler._serve_asset(self, p[8:])
+            return True
+        return False
+
+    def _handle_api_get(self, parsed) -> bool:
+        p = parsed.path
+        if p == "/api/status":
             if _Handler._require_browser_api_session(self):
-                return
+                return True
             llm_cfg = load_llm_config()
             llm_info = _ollama_snapshot(llm_cfg.get("base_url", "http://localhost:11434"), refresh=False)
             self._json({
@@ -1412,11 +1469,18 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "auth": _operator_state.public_auth(),
                 "connected": _is_connected(),
             })
-        elif p == "/api/scan/status":
+            return True
+        if p == "/api/projects":
+            _Handler._api_projects_get(self)
+            return True
+        if p == "/api/repos":
+            _Handler._api_repos_get(self, parsed)
+            return True
+        if p == "/api/scan/status":
             if _Handler._require_browser_api_session(self):
-                return
+                return True
             if _require_role(self, ROLE_VIEWER):
-                return
+                return True
             snapshot = _current_session_snapshot(include_status=True)
             session = snapshot["session"]
             log_lines = list(snapshot["log_lines"])
@@ -1433,55 +1497,49 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 llm_model_info=status.get("llm_model_info") or {},
             )
             self._json(status)
-        elif p == "/api/history":
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_VIEWER):
-                return
+            return True
+        if p == "/api/history":
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
             self._json({"history": list(reversed(_history_records_for_user()))})
-        elif p == "/api/suppressions":
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_VIEWER):
-                return
+            return True
+        if p == "/api/suppressions":
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
             self._json({"suppressions": list_suppressions(SUPPRESSIONS_FILE)})
-        elif p == "/api/triage":
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_VIEWER):
-                return
+            return True
+        if p == "/api/triage":
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
             self._json({"triage": list_triage(SUPPRESSIONS_FILE)})
-        elif p.startswith("/api/history/log/"):
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_VIEWER):
-                return
+            return True
+        if p.startswith("/api/history/log/"):
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
             self._serve_log(p[17:])
-        elif p == "/api/settings":
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_ADMIN):
-                return
+            return True
+        if p == "/api/settings":
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_ADMIN):
+                return True
             self._json({
                 "bitbucket_url": BITBUCKET_URL,
                 "tls": load_tls_config(),
-                "output_dir":    str(Path(OUTPUT_DIR).resolve()),
-                "llm":           load_llm_config(),
+                "output_dir": str(Path(OUTPUT_DIR).resolve()),
+                "llm": load_llm_config(),
             })
-        elif p == "/api/scan/stream":
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_VIEWER):
-                return
+            return True
+        if p == "/api/scan/stream":
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
             self._sse_stream()
-        elif p == "/api/ollama/models":
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_VIEWER):
-                return
+            return True
+        if p == "/api/ollama/models":
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
             qs = parse_qs(parsed.query)
             if "url" in qs:
-                return self._err(400, "Overriding the Ollama URL is not allowed")
+                self._err(400, "Overriding the Ollama URL is not allowed")
+                return True
             url = load_llm_config().get("base_url", "http://localhost:11434").strip()
             refresh = (qs.get("refresh", [""])[0] or "").lower() in {"1", "true", "yes"}
             snapshot = _ollama_snapshot(url, refresh=refresh)
@@ -1492,14 +1550,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "stale": bool(snapshot.get("stale", False)),
                 "fetched_at": snapshot.get("fetched_at", 0),
             })
-        elif p.startswith("/reports/"):
-            if _Handler._require_browser_api_session(self):
-                return
-            if _require_role(self, ROLE_VIEWER):
-                return
+            return True
+        if p.startswith("/reports/"):
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
             self._serve_report(p[9:])
-        else:
-            self._404()
+            return True
+        return False
+
+    # ── Routing ───────────────────────────────────────────────────────────────
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if _Handler._handle_page_get(self, parsed):
+            return
+        if _Handler._handle_api_get(self, parsed):
+            return
+        self._404()
 
     def do_POST(self):
         p = urlparse(self.path).path
@@ -2291,46 +2358,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
-
-# ── Add GET /api/repos to handler ─────────────────────────────────────────────
-# Patch _Handler to handle /api/repos
-
-_orig_get = _Handler.do_GET
-def _patched_get(self):
-    p = self.path.split("?")[0]
-    if p == "/api/projects":
-        if _Handler._require_browser_api_session(self):
-            return
-        if _require_role(self, ROLE_VIEWER):
-            return
-        self._json({
-            "projects": filter_projects(_operator_state.projects_cache, _operator_state.ctx),
-            "owner": _operator_state.connected_owner,
-            "auth": _operator_state.public_auth(),
-        })
-    elif p == "/api/repos":
-        if _Handler._require_browser_api_session(self):
-            return
-        if _require_role(self, ROLE_VIEWER):
-            return
-        qs = parse_qs(urlparse(self.path).query)
-        key = qs.get("project", [""])[0]
-        if not key or not _operator_state.client:
-            return self._json({"repos": []})
-        if _require_project_access(self, key):
-            return
-        try:
-            repos = _operator_state.repos_cache.get(key)
-            if repos is None:
-                repos = _operator_state.client.list_repos(key)
-                _operator_state.repos_cache[key] = repos
-            self._json({"repos": repos})
-        except Exception as e:
-            self._err(500, str(e))
-    else:
-        _orig_get(self)
-_Handler.do_GET = _patched_get
-
 
 # ── Server startup ────────────────────────────────────────────────────────────
 

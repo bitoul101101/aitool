@@ -889,6 +889,8 @@ def test_login_page_is_server_rendered_and_does_not_embed_saved_pat():
     assert "Saved token available: Yes" in html
     assert 'action="/login"' in html
     assert 'name="csrf_token" value="csrf-demo"' in html
+    assert 'href="/assets/main.css"' in html
+    assert "<style>" not in html
 
 
 def test_login_redirects_to_new_scan_view():
@@ -1167,6 +1169,7 @@ def test_scan_page_selection_view_stays_pre_scan():
     assert "Past Scans" in html
     assert "repo1" in html
     assert "Current Findings" not in html
+    assert 'href="/assets/main.css"' in html
     assert 'src="/assets/scan_page.js"' in html
     assert 'current-findings-body' not in html
     assert 'id="inventory-summary"' not in html
@@ -1797,6 +1800,7 @@ def test_history_page_is_server_rendered():
     assert 'id="history-search"' in html
     assert 'id="history-prev-btn"' in html
     assert 'id="history-next-btn"' in html
+    assert 'href="/assets/main.css"' in html
     assert "Page 1 of 1" in html
     assert "New" in html
     assert "Existing" in html
@@ -1811,7 +1815,7 @@ def test_history_page_is_server_rendered():
     assert ">HTML</th>" not in html
     assert ">CSV</th>" not in html
     assert ">LOG</th>" not in html
-    assert ".table-shell tbody tr:hover" in html
+    assert 'href="/assets/main.css"' in html
 
 
 def test_results_page_is_server_rendered():
@@ -1895,6 +1899,29 @@ def test_render_results_page_resolves_current_session_report():
         assert handler.redirected == "/scan/20260318_150000?tab=results"
     finally:
         srv._session = orig_session
+
+
+def test_asset_route_serves_main_css():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/assets/main.css"
+
+        def __init__(self):
+            self.payload = None
+
+        def _send(self, status, content_type, body):
+            self.payload = (status, content_type, body)
+
+        def _404(self):
+            self.payload = ("404", None, None)
+
+    handler = DummyHandler()
+    srv._Handler.do_GET(handler)
+
+    assert handler.payload[0] == 200
+    assert handler.payload[1] == "text/css; charset=utf-8"
+    assert b".header-nav" in handler.payload[2]
 
 
 def test_scan_workspace_results_page_handles_missing_report():
@@ -2067,7 +2094,8 @@ def test_login_page_centers_login_action():
 
     html = srv.render_login_page(bitbucket_url=srv.BITBUCKET_URL, has_saved_pat=False).decode("utf-8")
 
-    assert ".login-actions{display:flex;justify-content:center}" in html
+    assert 'href="/assets/main.css"' in html
+    assert '<div class="login-actions"><button type="submit">Login</button></div>' in html
 
 
 def test_allowed_origin_only_permits_local_app_hosts():
