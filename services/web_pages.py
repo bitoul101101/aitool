@@ -137,7 +137,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
 .timeline-row.total-row,.timeline .timeline-row:last-child{margin-top:8px;padding-top:12px;border-top:2px solid #cfae8a;border-radius:0 0 10px 10px}
 .timeline-name{text-transform:capitalize}
-.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:420px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:560px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
 .findings-panel,.mitigate-section,.suppressed-section{margin-top:12px;padding:12px;border:2px solid #cda274;border-radius:14px;background:#fffdf8}
@@ -868,6 +868,7 @@ filterRepos();
         + `<td>${{triageActions(item, true)}}</td>`
         + `</tr>`;
     }}).join('');
+  }}
   function timelineRows(items, scanState){{
     if(!items || !items.length) return '<div class="muted">Timeline will appear after the scan starts.</div>';
     const finished=['done','stopped','error'].includes(String(scanState||'').toLowerCase());
@@ -875,8 +876,10 @@ filterRepos();
       .filter(item => finished || String(item.name || '').toLowerCase() !== 'total')
       .map(item=>`<div class="timeline-row${{String(item.name||'').toLowerCase()==='total' ? ' total-row' : ''}}"><span class="state-icon ${{item.state||'pending'}}"></span><span class="timeline-name">${{item.name||''}}</span><strong>${{item.duration||'???'}}</strong></div>`).join('');
   }}
+  /*
     return items.map(item=>`<div class="timeline-row"><span class="state-icon ${{item.state||'pending'}}"></span><span class="timeline-name">${{item.name||''}}</span><strong>${{item.duration||'—'}}</strong></div>`).join('');
   }}
+  */
   function reportActions(data){{
     const shell=document.getElementById('report-actions');
     if(!shell) {{
