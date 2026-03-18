@@ -783,9 +783,10 @@ class ScanJobService:
             try:
                 if client is None:
                     raise RuntimeError("Bitbucket client unavailable")
-                branch = client.get_default_branch(session.project_key, slug)
-                owner = client.get_repo_owner(session.project_key, slug)
-                url = client.get_clone_url(session.project_key, slug)
+                metadata = client.get_repo_metadata(session.project_key, slug)
+                branch = metadata.get("branch")
+                owner = metadata.get("owner", "User")
+                url = metadata.get("clone_url")
                 per_branch[slug] = branch or "default"
                 repo_meta[slug] = {"branch": branch, "owner": owner, "url": url}
                 log(f"  {slug}  branch:{branch or '?'}  owner:{owner}", "dim")

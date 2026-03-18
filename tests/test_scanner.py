@@ -2525,6 +2525,36 @@ def test_get_clone_url_does_not_embed_credentials():
     assert "alice@" not in clone_url
 
 
+def test_repo_metadata_cache_reuses_bitbucket_responses():
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient("https://bitbucket.example", token="pat-123")
+    calls = []
+
+    def fake_get(url, params=None):
+        calls.append((url, tuple(sorted((params or {}).items()))))
+        if url.endswith("/repos/repo1"):
+            return {"links": {"clone": [{"name": "http", "href": "https://bitbucket.example/scm/proj/repo1.git"}]}}
+        if url.endswith("/default-branch"):
+            return {"displayId": "main"}
+        if url.endswith("/commits"):
+            return {"values": [{"author": {"displayName": "Owner"}}]}
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    with patch.object(client, "_get", side_effect=fake_get):
+        first = client.get_repo_metadata("PROJ", "repo1")
+        second = client.get_repo_metadata("PROJ", "repo1")
+        branch = client.get_default_branch("PROJ", "repo1")
+        owner = client.get_repo_owner("PROJ", "repo1")
+        clone_url = client.get_clone_url("PROJ", "repo1")
+
+    assert first == second
+    assert branch == "main"
+    assert owner == "Owner"
+    assert clone_url == "https://bitbucket.example/scm/proj/repo1.git"
+    assert len(calls) == 3
+
+
 def test_build_git_auth_env_uses_header_not_url():
     from scanner.bitbucket import BitbucketClient
 
@@ -2848,7 +2878,7 @@ def test_run_scan_logs_structured_metadata_fetch_errors():
 
         fake_client = MagicMock()
         fake_client.build_git_auth_env.return_value = {}
-        fake_client.get_default_branch.side_effect = RequestException("bitbucket unavailable")
+        fake_client.get_repo_metadata.side_effect = RequestException("bitbucket unavailable")
         srv._operator_state.client = fake_client
 
         def _fake_clone(_url, dest, **_kwargs):
@@ -2885,9 +2915,11 @@ def test_run_scan_logs_structured_report_generation_errors():
 
         fake_client = MagicMock()
         fake_client.build_git_auth_env.return_value = {}
-        fake_client.get_default_branch.return_value = "main"
-        fake_client.get_repo_owner.return_value = "Owner"
-        fake_client.get_clone_url.return_value = "https://example.invalid/repo1.git"
+        fake_client.get_repo_metadata.return_value = {
+            "branch": "main",
+            "owner": "Owner",
+            "clone_url": "https://example.invalid/repo1.git",
+        }
         srv._operator_state.client = fake_client
 
         finding = {

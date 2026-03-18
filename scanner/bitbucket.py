@@ -20,6 +20,7 @@ from requests import RequestException
 _DEFAULT_MIN_INTERVAL = 0.12   # seconds between requests (≈8 req/s)
 _DEFAULT_MAX_RETRIES  = 3      # retries on 429 / 503
 _DEFAULT_RETRY_AFTER  = 10     # fallback wait (s) if no Retry-After header
+_DEFAULT_METADATA_CACHE_TTL = 300.0
 
 
 class BitbucketClient:
@@ -42,7 +43,8 @@ class BitbucketClient:
                  min_request_interval: float = _DEFAULT_MIN_INTERVAL,
                  max_retries: int = _DEFAULT_MAX_RETRIES,
                  retry_after_fallback: float = _DEFAULT_RETRY_AFTER,
-                 rate_limit_callback: Callable[[str], None] = None):
+                 rate_limit_callback: Callable[[str], None] = None,
+                 metadata_cache_ttl: float = _DEFAULT_METADATA_CACHE_TTL):
         self.base_url = base_url.rstrip("/")
         self.token    = token
         self.username = username
@@ -58,6 +60,9 @@ class BitbucketClient:
         self._rate_cb         = rate_limit_callback   # optional callback
         self._last_req_time   = 0.0                   # epoch seconds
         self._throttle_lock   = threading.Lock()      # guards _last_req_time
+        self._metadata_cache_ttl = max(0.0, float(metadata_cache_ttl))
+        self._metadata_cache: dict[tuple[str, str, str], tuple[float, object]] = {}
+        self._metadata_lock = threading.Lock()
 
         self.session = requests.Session()
         self.session.verify = self.ca_bundle if self.verify_ssl and self.ca_bundle else self.verify_ssl
@@ -188,12 +193,100 @@ class BitbucketClient:
         if self.is_cloud:
             return f"{self.base_url}/{project_key}/{repo_slug}.git"
 
+        data = self.get_repo_metadata(project_key, repo_slug, protocol=protocol)
+        return data.get("clone_url")
+
+    def _cache_key(self, kind: str, project_key: str, repo_slug: str = "") -> tuple[str, str, str]:
+        return kind, str(project_key), str(repo_slug)
+
+    def _cache_get(self, kind: str, project_key: str, repo_slug: str = ""):
+        if self._metadata_cache_ttl <= 0:
+            return None
+        key = self._cache_key(kind, project_key, repo_slug)
+        with self._metadata_lock:
+            cached = self._metadata_cache.get(key)
+            if not cached:
+                return None
+            stored_at, value = cached
+            if (time.monotonic() - stored_at) > self._metadata_cache_ttl:
+                self._metadata_cache.pop(key, None)
+                return None
+            return value
+
+    def _cache_set(self, kind: str, project_key: str, repo_slug: str, value):
+        if self._metadata_cache_ttl <= 0:
+            return value
+        key = self._cache_key(kind, project_key, repo_slug)
+        with self._metadata_lock:
+            self._metadata_cache[key] = (time.monotonic(), value)
+        return value
+
+    def _repo_info_cached(self, project_key: str, repo_slug: str) -> dict:
+        cached = self._cache_get("repo_info", project_key, repo_slug)
+        if cached is not None:
+            return cached
         url = f"{self.base_url}/rest/api/1.0/projects/{project_key}/repos/{repo_slug}"
+        return self._cache_set("repo_info", project_key, repo_slug, self._get(url))
+
+    def _project_info_cached(self, project_key: str) -> dict:
+        cached = self._cache_get("project_info", project_key)
+        if cached is not None:
+            return cached
+        url = f"{self.base_url}/rest/api/1.0/projects/{project_key}"
+        return self._cache_set("project_info", project_key, "", self._get(url))
+
+    def _default_branch_cached(self, project_key: str, repo_slug: str) -> Optional[str]:
+        cached = self._cache_get("default_branch", project_key, repo_slug)
+        if cached is not None:
+            return cached
+        url = (f"{self.base_url}/rest/api/1.0/projects/{project_key}"
+               f"/repos/{repo_slug}/default-branch")
         data = self._get(url)
-        for link in data.get("links", {}).get("clone", []):
+        branch = data.get("displayId") or data.get("id", "").replace("refs/heads/", "") or None
+        return self._cache_set("default_branch", project_key, repo_slug, branch)
+
+    def get_repo_metadata(self, project_key: str, repo_slug: str, protocol: str = "http") -> dict:
+        """Return branch, owner, and clone URL with a short-lived cache."""
+        cached = self._cache_get("repo_metadata", project_key, repo_slug)
+        if cached is not None:
+            return dict(cached)
+
+        repo_info = self._repo_info_cached(project_key, repo_slug)
+        clone_url = None
+        for link in repo_info.get("links", {}).get("clone", []):
             if link.get("name", "").lower() in (protocol, "https", "http"):
-                return link["href"]
-        return None
+                clone_url = link["href"]
+                break
+
+        try:
+            branch = self._default_branch_cached(project_key, repo_slug)
+        except (RequestException, ValueError, TypeError):
+            branch = None
+
+        owner = "User"
+        try:
+            url = (f"{self.base_url}/rest/api/1.0/projects/{project_key}"
+                   f"/repos/{repo_slug}/commits")
+            data = self._get(url, params={"limit": 1})
+            commits = data.get("values", [])
+            if commits:
+                author = commits[0].get("author", {})
+                owner = author.get("displayName") or author.get("name") or author.get("emailAddress", "") or owner
+        except (RequestException, ValueError, TypeError):
+            try:
+                data = self._project_info_cached(project_key)
+                lead = data.get("lead", {})
+                owner = lead.get("displayName") or lead.get("slug") or lead.get("name", "") or owner
+            except (RequestException, ValueError, TypeError):
+                pass
+
+        metadata = {
+            "branch": branch,
+            "owner": owner,
+            "clone_url": clone_url,
+        }
+        self._cache_set("repo_metadata", project_key, repo_slug, metadata)
+        return dict(metadata)
 
     def build_git_auth_env(self) -> dict[str, str]:
         """
@@ -217,8 +310,7 @@ class BitbucketClient:
 
     def get_repo_info(self, project_key: str, repo_slug: str) -> dict:
         """Get repo metadata."""
-        url = f"{self.base_url}/rest/api/1.0/projects/{project_key}/repos/{repo_slug}"
-        return self._get(url)
+        return self._repo_info_cached(project_key, repo_slug)
 
     def get_default_branch(self, project_key: str, repo_slug: str) -> Optional[str]:
         """
@@ -226,11 +318,7 @@ class BitbucketClient:
         Falls back to None if the endpoint is unavailable.
         """
         try:
-            url = (f"{self.base_url}/rest/api/1.0/projects/{project_key}"
-                   f"/repos/{repo_slug}/default-branch")
-            data = self._get(url)
-            # Bitbucket Server returns {"id": "refs/heads/main", "displayId": "main", ...}
-            return data.get("displayId") or data.get("id", "").replace("refs/heads/", "") or None
+            return self.get_repo_metadata(project_key, repo_slug).get("branch")
         except (RequestException, ValueError, TypeError):
             return None
 
@@ -240,26 +328,7 @@ class BitbucketClient:
         as surfaced by Bitbucket Server.  Falls back to 'User'.
         """
         try:
-            # Try repo-level: check the most recent commit author via commits API
-            url = (f"{self.base_url}/rest/api/1.0/projects/{project_key}"
-                   f"/repos/{repo_slug}/commits")
-            data = self._get(url, params={"limit": 1})
-            commits = data.get("values", [])
-            if commits:
-                author = commits[0].get("author", {})
-                name = author.get("displayName") or author.get("name") or author.get("emailAddress", "")
-                if name:
-                    return name
-        except (RequestException, ValueError, TypeError):
-            pass
-        try:
-            # Fall back: project lead
-            url = f"{self.base_url}/rest/api/1.0/projects/{project_key}"
-            data = self._get(url)
-            lead = data.get("lead", {})
-            name = lead.get("displayName") or lead.get("slug") or lead.get("name", "")
-            if name:
-                return name
+            return self.get_repo_metadata(project_key, repo_slug).get("owner") or "User"
         except (RequestException, ValueError, TypeError):
             pass
         return "User"
