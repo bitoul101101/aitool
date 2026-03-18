@@ -621,6 +621,7 @@ tr:hover td{background:#f4eadb;}
 
 /* ── Compact table (summary section) ── */
 table.compact{table-layout:fixed;width:100%;}
+table.compact th{color:#3f2810;background:#ead3b8;}
 table.compact td{padding:2px 8px;border-bottom:1px solid #f0f1f5;overflow:hidden;}
 table.compact tr:nth-child(even) td{background:none;}
 table.compact tr:hover td{background:#f4eadb;}
@@ -1341,7 +1342,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
   </div>
   <div class="card">
     <h3>Findings by Severity and Context</h3>
-    <table class="compact" style="font-size:13px">
+    <table class="compact severity-context-table" style="font-size:13px">
       <thead><tr>
         <th style="color:#fff">Severity</th>{ctx_th}<th class="num-cell" style="color:#fff">Total</th>
       </tr></thead>
