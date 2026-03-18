@@ -959,7 +959,7 @@ def test_scan_page_selection_view_stays_pre_scan():
     assert 'id="start-scan-btn" disabled' in html
     assert "New Scan" in html
     assert "AI Inventory" in html
-    assert "History" in html
+    assert "Past Scans" in html
     assert "repo1" in html
     assert "Current Findings" not in html
     assert 'src="/assets/scan_page.js"' in html
@@ -1015,6 +1015,20 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             }
         ],
     }
+    session.llm_model_info = {
+        "name": "qwen2.5-coder:7b-instruct",
+        "parameter_size": "7.6B",
+        "quantization": "Q4_K_M",
+    }
+    session.log_lines = [
+        {"msg": "[LLM] Evaluating 7 finding(s) for review...", "ts": 10.0},
+        {"msg": "[LLM] Reviewing 4 finding(s) via qwen2.5-coder:7b-instruct (3 skipped — high-confidence) batch=3 vram=5.9GB", "ts": 11.0},
+        {"msg": "[LLM] Batch 1/2 (3 finding(s))...", "ts": 12.0},
+        {"msg": "[LLM] ↓ DOWNGRADE direct_http_ai → MEDIUM in system-config-tool.py — API call in production code, but no sensitive data visible.", "ts": 13.0},
+        {"msg": "[LLM] Batch 2/2 (1 finding(s))...", "ts": 14.0},
+        {"msg": "[LLM] Done — dismissed:1  reinstated:1  downgraded:1  kept:1", "ts": 20.0},
+        {"msg": "[LLM] Review stage complete -> 6 finding(s)", "ts": 21.0},
+    ]
     session.findings = [
         {
             "_hash": "hash-0",
@@ -1094,10 +1108,18 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
     assert "Hardware Usage" in html
+    assert "LLM Stats" in html
     assert html.index("Phase Timeline") < html.index("Hardware Usage")
+    assert html.index("Hardware Usage") < html.index("LLM Stats")
     assert 'href="/scan/20260317_154037?tab=results"' in html
     assert 'href="/scan/20260317_154037?tab=activity"' in html
     assert 'id="hardware-gpu"' in html
+    assert 'id="hardware-disk-io"' in html
+    assert 'id="llm-model"' in html
+    assert 'id="llm-batch-progress"' in html
+    assert 'id="llm-reviewed-skipped"' in html
+    assert 'id="llm-dismissed-downgraded"' in html
+    assert 'id="llm-failed-batches"' in html
     assert "Results Actions" not in html
     assert 'id="reports-card"' not in html
     assert 'id="hardware-process"' not in html
@@ -1120,6 +1142,30 @@ def test_scan_page_asset_redirects_only_after_running_to_done_transition():
     assert "let previousScanState = null;" in script
     assert 'const justFinished = previousScanState === "running" && state === "done";' in script
     assert "!redirectedToResults && justFinished" in script
+    assert "function renderLlmStats(data)" in script
+
+
+def test_llm_stats_are_derived_from_log_entries():
+    import app_server as srv
+
+    entries = [
+        {"msg": "LLM      : qwen2.5-coder:7b-instruct | 7.6B | Q4_K_M", "ts": 5.0},
+        {"msg": "[LLM] Evaluating 7 finding(s) for review...", "ts": 10.0},
+        {"msg": "[LLM] Reviewing 4 finding(s) via qwen2.5-coder:7b-instruct (3 skipped — high-confidence) batch=3 vram=5.9GB", "ts": 11.0},
+        {"msg": "[LLM] Batch 1/2 (3 finding(s))...", "ts": 12.0},
+        {"msg": "[LLM] ↓ DOWNGRADE direct_http_ai → MEDIUM in app.py — context", "ts": 14.0},
+        {"msg": "[LLM] Batch 2/2 (1 finding(s))...", "ts": 16.0},
+        {"msg": "[LLM] Done — dismissed:1  reinstated:1  downgraded:1  kept:1", "ts": 20.0},
+    ]
+
+    stats = srv._llm_stats(entries, state="done")
+
+    assert stats["model"] == "qwen2.5-coder:7b-instruct | 7.6B | Q4_K_M"
+    assert stats["batch_progress"] == "2/2"
+    assert stats["elapsed"] == "00:10"
+    assert stats["reviewed_skipped"] == "4 / 3"
+    assert stats["dismissed_downgraded"] == "1 / 1"
+    assert stats["failed_batches"] == "0"
 
 
 def test_scan_workspace_tabs_disable_results_until_scan_completes():
@@ -1164,6 +1210,7 @@ def test_help_page_can_hide_scan_results_navigation():
 
     assert "New Scan" in html
     assert "AI Inventory" in html
+    assert "Past Scans" in html
     assert 'href="/scan">Scan Results</a>' not in html
 
 
@@ -1459,7 +1506,7 @@ def test_history_page_is_server_rendered():
     ).decode("utf-8")
 
     assert 'action="/history/delete"' in html
-    assert "Delete Selected Repos" in html
+    assert "Delete Selected Scans" in html
     assert 'id="history-search"' in html
     assert 'id="history-prev-btn"' in html
     assert 'id="history-next-btn"' in html

@@ -115,6 +115,7 @@ APP_VERSION   = "19.1"
 ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
 _RESOURCE_LOCK = threading.RLock()
 _CPU_TIMES_PREV: tuple[int, int, int] | None = None
+_PROCESS_IO_PREV: tuple[float, int, int] | None = None
 _WORKSPACE_USAGE_CACHE = {"scan_id": "", "ts": 0.0, "mb": 0.0}
 
 
@@ -775,6 +776,86 @@ def _phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
     return timeline
 
 
+def _format_mmss(seconds: int) -> str:
+    total = max(int(seconds or 0), 0)
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm_model_info: dict | None = None) -> dict:
+    model_info = dict(llm_model_info or {})
+    model_text = ""
+    model_name = str(model_info.get("name", "") or llm_model or "").strip()
+    model_parts = [model_name] if model_name else []
+    for key in ("parameter_size", "quantization"):
+        value = str(model_info.get(key, "") or "").strip()
+        if value:
+            model_parts.append(value)
+    if model_parts:
+        model_text = " | ".join(model_parts)
+
+    reviewed = 0
+    skipped = 0
+    dismissed = 0
+    downgraded = 0
+    failed_batches = 0
+    batch_current = 0
+    batch_total = 0
+    llm_start: float | None = None
+    llm_end: float | None = None
+
+    reviewing_re = re.compile(r"\[LLM\]\s+Reviewing\s+(\d+)\s+finding\(s\).*?(?:\((\d+)\s+skipped)", re.IGNORECASE)
+    batch_re = re.compile(r"\[LLM\]\s+Batch\s+(\d+)/(\d+)", re.IGNORECASE)
+    done_re = re.compile(r"dismissed:(\d+).*?downgraded:(\d+)", re.IGNORECASE)
+
+    for entry in entries:
+        msg = str(entry.get("msg", "") or "").strip()
+        if not msg:
+            continue
+        ts = float(entry.get("ts") or 0.0)
+        if not model_text and msg.startswith("LLM      :"):
+            model_text = msg.split(":", 1)[1].strip()
+        if "[LLM]" in msg and llm_start is None and ("Evaluating" in msg or "Reviewing" in msg):
+            llm_start = ts
+        if "[LLM]" in msg:
+            llm_end = ts
+        match = reviewing_re.search(msg)
+        if match:
+            reviewed += int(match.group(1) or 0)
+            skipped += int(match.group(2) or 0)
+        match = batch_re.search(msg)
+        if match:
+            batch_current = int(match.group(1) or 0)
+            batch_total = int(match.group(2) or 0)
+        if "[LLM] Batch" in msg and "failed" in msg.lower():
+            failed_batches += 1
+        if "[LLM] ↓ DOWNGRADE" in msg:
+            downgraded += 1
+        if "[LLM] Done" in msg:
+            match = done_re.search(msg)
+            if match:
+                dismissed += int(match.group(1) or 0)
+                downgraded = max(downgraded, int(match.group(2) or 0))
+
+    if llm_start is not None:
+        end_ts = llm_end if llm_end is not None else (float(entries[-1].get("ts") or llm_start) if entries else llm_start)
+        elapsed_text = _format_mmss(max(int(end_ts - llm_start), 0))
+    else:
+        elapsed_text = "—"
+
+    batch_progress = f"{batch_current}/{batch_total}" if batch_total else "—"
+    if str(state or "").lower() in {"done", "stopped", "error"} and batch_total and batch_current < batch_total:
+        batch_progress = f"{batch_total}/{batch_total}"
+
+    return {
+        "model": model_text or model_name or "Unavailable",
+        "batch_progress": batch_progress,
+        "elapsed": elapsed_text,
+        "reviewed_skipped": f"{reviewed} / {skipped}" if llm_start is not None or reviewed or skipped else "—",
+        "dismissed_downgraded": f"{dismissed} / {downgraded}" if llm_start is not None or dismissed or downgraded else "—",
+        "failed_batches": str(failed_batches),
+    }
+
+
 def _format_mb(value_mb: float) -> str:
     if value_mb <= 0:
         return "0 MB"
@@ -785,6 +866,15 @@ def _format_mb(value_mb: float) -> str:
 
 def _format_percent(value: float) -> str:
     return f"{max(0.0, min(100.0, value)):.0f}%"
+
+
+def _format_io_rate(bytes_per_second: float) -> str:
+    value = max(0.0, float(bytes_per_second or 0.0))
+    if value >= 1024 ** 2:
+        return f"{value / (1024 ** 2):.1f} MB/s"
+    if value >= 1024:
+        return f"{value / 1024:.0f} KB/s"
+    return f"{int(round(value))} B/s"
 
 
 def _system_cpu_percent() -> float | None:
@@ -886,6 +976,42 @@ def _process_memory_mb() -> float | None:
         return None
 
 
+def _process_disk_io_text() -> str:
+    if os.name != "nt":
+        return "Unavailable"
+    try:
+        import ctypes
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_uint64),
+                ("WriteOperationCount", ctypes.c_uint64),
+                ("OtherOperationCount", ctypes.c_uint64),
+                ("ReadTransferCount", ctypes.c_uint64),
+                ("WriteTransferCount", ctypes.c_uint64),
+                ("OtherTransferCount", ctypes.c_uint64),
+            ]
+
+        counters = IO_COUNTERS()
+        proc = ctypes.windll.kernel32.GetCurrentProcess()
+        if not ctypes.windll.kernel32.GetProcessIoCounters(proc, ctypes.byref(counters)):
+            return "Unavailable"
+        now = time.time()
+        with _RESOURCE_LOCK:
+            global _PROCESS_IO_PREV
+            previous = _PROCESS_IO_PREV
+            _PROCESS_IO_PREV = (now, int(counters.ReadTransferCount), int(counters.WriteTransferCount))
+        if previous is None:
+            return "Sampling..."
+        prev_ts, prev_read, prev_write = previous
+        elapsed = max(now - prev_ts, 0.001)
+        read_rate = (int(counters.ReadTransferCount) - prev_read) / elapsed
+        write_rate = (int(counters.WriteTransferCount) - prev_write) / elapsed
+        return f"R { _format_io_rate(read_rate) } | W { _format_io_rate(write_rate) }"
+    except Exception:
+        return "Unavailable"
+
+
 def _workspace_size_mb(scan_id: str) -> float:
     if not scan_id:
         return 0.0
@@ -920,6 +1046,7 @@ def _hardware_snapshot(session: ScanSession | None) -> dict:
         gpu_text = _gpu_snapshot()
     except (OSError, subprocess.SubprocessError, ValueError):
         gpu_text = "Unavailable"
+    disk_io_text = _process_disk_io_text()
     ram_text = "Unavailable"
     if ram_used_mb is not None and ram_total_mb:
         ram_text = f"{_format_mb(ram_used_mb)} / {_format_mb(ram_total_mb)}"
@@ -927,6 +1054,7 @@ def _hardware_snapshot(session: ScanSession | None) -> dict:
         "cpu_percent": _format_percent(cpu) if cpu is not None else "Sampling...",
         "ram_text": ram_text,
         "gpu_text": gpu_text,
+        "disk_io_text": disk_io_text,
     }
 
 
@@ -1200,6 +1328,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             status["phase_timeline"] = _phase_timeline(log_lines, state)
             status["log_url"] = f"/api/history/log/{scan_id}" if scan_id else ""
             status["hardware"] = _hardware_snapshot(session)
+            status["llm_stats"] = _llm_stats(
+                log_lines,
+                state=state,
+                llm_model=str(status.get("llm_model", "") or ""),
+                llm_model_info=status.get("llm_model_info") or {},
+            )
             self._json(status)
         elif p == "/api/history":
             if _require_role(self, ROLE_VIEWER):
@@ -1337,6 +1471,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             session_state = _session.state
             status = _session.to_status() if _is_connected() else {}
             status["hardware"] = _hardware_snapshot(_session) if _is_connected() else {}
+            status["llm_stats"] = _llm_stats(
+                session_log_lines,
+                state=session_state,
+                llm_model=str(status.get("llm_model", "") or ""),
+                llm_model_info=status.get("llm_model_info") or {},
+            ) if _is_connected() else {}
         project_key = (qs.get("project", [""])[0] or session_project_key or "").strip()
         fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
         if project_key and _require_project_access(self, project_key):
@@ -1389,6 +1529,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 session_log_lines = list(_session.log_lines[-500:])
                 status = _session.to_status() if _is_connected() else {}
                 status["hardware"] = _hardware_snapshot(_session) if _is_connected() else {}
+                status["llm_stats"] = _llm_stats(
+                    session_log_lines,
+                    state=_session.state,
+                    llm_model=str(status.get("llm_model", "") or ""),
+                    llm_model_info=status.get("llm_model_info") or {},
+                ) if _is_connected() else {}
                 session_state = _session.state
             else:
                 session_log_lines = []
@@ -1409,9 +1555,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "delta": record.get("delta") or {},
                 "inventory": record.get("inventory") or {},
                 "hardware": {},
+                "llm_model": str(record.get("llm_model", "") or ""),
                 "total": int(record.get("total", record.get("finding_total", 0)) or 0),
                 "suppressed_total": int(record.get("suppressed_total", 0) or 0),
             }
+            status["llm_stats"] = _llm_stats(
+                parsed_entries,
+                state=session_state,
+                llm_model=str(record.get("llm_model", "") or ""),
+            )
         scan_complete = str(session_state or record.get("state", "")).lower() in {"done", "stopped", "error"}
 
         if tab == "results":

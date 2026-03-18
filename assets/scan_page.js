@@ -11,6 +11,7 @@
   const timelineEl = document.getElementById("phase-timeline");
   const baselineSummary = document.getElementById("baseline-summary");
   const hardwareSummary = document.getElementById("hardware-summary");
+  const llmSummary = document.getElementById("llm-summary");
   const stopBtn = document.getElementById("stop-scan-btn");
 
   if (
@@ -21,7 +22,8 @@
     !logEl &&
     !timelineEl &&
     !baselineSummary &&
-    !hardwareSummary
+    !hardwareSummary &&
+    !llmSummary
   ) {
     return;
   }
@@ -210,6 +212,7 @@
     const cpuEl = document.getElementById("hardware-cpu");
     const ramEl = document.getElementById("hardware-ram");
     const gpuEl = document.getElementById("hardware-gpu");
+    const diskIoEl = document.getElementById("hardware-disk-io");
     if (cpuEl) {
       cpuEl.textContent = String(hardware.cpu_percent || "Sampling...");
     }
@@ -218,6 +221,40 @@
     }
     if (gpuEl) {
       gpuEl.textContent = String(hardware.gpu_text || "Unavailable");
+    }
+    if (diskIoEl) {
+      diskIoEl.textContent = String(hardware.disk_io_text || "Sampling...");
+    }
+  }
+
+  function renderLlmStats(data) {
+    if (!llmSummary) {
+      return;
+    }
+    const llm = data.llm_stats || {};
+    const modelEl = document.getElementById("llm-model");
+    const batchEl = document.getElementById("llm-batch-progress");
+    const elapsedEl = document.getElementById("llm-elapsed");
+    const reviewedEl = document.getElementById("llm-reviewed-skipped");
+    const dismissedEl = document.getElementById("llm-dismissed-downgraded");
+    const failedEl = document.getElementById("llm-failed-batches");
+    if (modelEl) {
+      modelEl.textContent = String(llm.model || "Unavailable");
+    }
+    if (batchEl) {
+      batchEl.textContent = String(llm.batch_progress || "—");
+    }
+    if (elapsedEl) {
+      elapsedEl.textContent = String(llm.elapsed || "—");
+    }
+    if (reviewedEl) {
+      reviewedEl.textContent = String(llm.reviewed_skipped || "—");
+    }
+    if (dismissedEl) {
+      dismissedEl.textContent = String(llm.dismissed_downgraded || "—");
+    }
+    if (failedEl) {
+      failedEl.textContent = String(llm.failed_batches || "0");
     }
   }
 
@@ -253,6 +290,7 @@
     }
     renderBaseline(data);
     renderHardware(data);
+    renderLlmStats(data);
     if (stopBtn) {
       stopBtn.disabled = state !== "running";
     }

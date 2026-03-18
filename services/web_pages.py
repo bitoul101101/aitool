@@ -110,7 +110,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .selection-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
 .project-panel,.repo-panel,.activity-panel{min-height:calc(100vh - 132px)}
 .project-list{display:grid;gap:2px;max-height:calc(100vh - 200px);overflow:auto;padding-right:4px}
-.project-link{display:block;padding:4px 7px;border-radius:8px;text-decoration:none;background:#f6ebdc;color:#5e3b16;font-size:12px}
+.project-link{display:block;padding:5px 8px;border-radius:8px;text-decoration:none;background:#f6ebdc;color:#5e3b16;font-size:14px}
 .project-link.active{background:#6d3514;color:#fff;font-weight:700}
 .repo-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) 240px auto;gap:8px;align-items:end;margin-bottom:8px}
 .repo-actions{display:flex;align-items:center;gap:8px;margin:8px 0 10px}
@@ -135,7 +135,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
 .timeline-row.total-row,.timeline .timeline-row:last-child{margin-top:8px;padding-top:12px;border-top:2px solid #cfae8a;border-radius:0 0 10px 10px}
 .timeline-name{text-transform:capitalize}
-.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:calc(100vh - 210px);max-height:560px;min-height:320px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:calc(100vh - 250px);max-height:500px;min-height:280px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
 .timeline-card{padding:10px 12px}
@@ -144,6 +144,9 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .hardware-grid{display:grid;grid-template-columns:1fr;gap:8px}
 .hardware-stat{padding:10px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
 .hardware-stat strong{display:block;font-size:16px;line-height:1.15;overflow-wrap:anywhere}
+.llm-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.llm-stat{padding:8px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
+.llm-stat strong{display:block;font-size:14px;line-height:1.2;overflow-wrap:anywhere}
 .findings-panel,.mitigate-section,.suppressed-section{margin-top:12px;padding:12px;border:2px solid #cda274;border-radius:14px;background:#fffdf8}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .finding-table-wrap table,.mitigate-wrap table,.suppressed-wrap table{font-size:12px}
@@ -544,6 +547,7 @@ def render_scan_page(
     delta = status.get("delta") or {}
     inventory = status.get("inventory") or {}
     hardware = status.get("hardware") or {}
+    llm_stats = status.get("llm_stats") or {}
     fixed_findings = list(delta.get("fixed_findings") or [])[:8]
     baseline_html = ""
     if scan_complete and delta.get("has_baseline"):
@@ -613,6 +617,21 @@ def render_scan_page(
           <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong></div>
+        </div>
+      </div>
+    </section>"""
+    llm_html = f"""
+    <section class="card" id="llm-card">
+      <h2 style="margin:0 0 8px;font-size:16px">LLM Stats</h2>
+      <div class="baseline-summary" id="llm-summary">
+        <div class="llm-grid">
+          <div class="llm-stat"><span class="baseline-label">Model</span><strong id="llm-model">{_esc(llm_stats.get("model", "Unavailable"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Batch Progress</span><strong id="llm-batch-progress">{_esc(llm_stats.get("batch_progress", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Elapsed</span><strong id="llm-elapsed">{_esc(llm_stats.get("elapsed", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Reviewed / Skipped</span><strong id="llm-reviewed-skipped">{_esc(llm_stats.get("reviewed_skipped", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Dismissed / Downgraded</span><strong id="llm-dismissed-downgraded">{_esc(llm_stats.get("dismissed_downgraded", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Failed Batches</span><strong id="llm-failed-batches">{_esc(llm_stats.get("failed_batches", "0"))}</strong></div>
         </div>
       </div>
     </section>"""
@@ -677,6 +696,7 @@ def render_scan_page(
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
     {hardware_html}
+    {llm_html}
     {baseline_html}
     {inventory_html}
   </aside>
@@ -748,7 +768,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
       <select id="filter-status">{_opts(statuses, 'All Statuses')}</select>
       <select id="filter-model">{_opts(models, 'All Models')}</select>
       <button type="button" class="ghost" id="reset-history-filters">Reset</button>
-      <button type="submit" class="warn hidden" id="delete-selected-btn">Delete Selected Repos</button>
+      <button type="submit" class="warn hidden" id="delete-selected-btn">Delete Selected Scans</button>
     </div>
     <div class="table-shell">
       <table id="history-table">

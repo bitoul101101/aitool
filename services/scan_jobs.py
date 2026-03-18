@@ -166,6 +166,8 @@ class ScanSession:
                 },
                 "report": report_paths.get("__all__", {}),
                 "duration_s": self.scan_duration_s,
+                "llm_model": (self.llm_model_info or {}).get("name", self.llm_model),
+                "llm_model_info": dict(self.llm_model_info),
                 "finding_details": [
                     self._finding_detail(f)
                     for f in sorted(
