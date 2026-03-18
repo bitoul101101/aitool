@@ -478,7 +478,19 @@ class ScanJobService:
         project_key = str(normalized.get("project_key", "") or normalized.get("project", "") or "")
         normalized["project_key"] = project_key
         normalized.pop("project", None)
+        repo_slugs = normalized.get("repo_slugs", normalized.get("repos", []))
+        if not isinstance(repo_slugs, list):
+            repo_slugs = []
+        normalized["repo_slugs"] = [str(slug).strip() for slug in repo_slugs if str(slug).strip()]
+        normalized["repos"] = list(normalized["repo_slugs"])
         return normalized
+
+    @staticmethod
+    def _is_meaningful_history_record(record: dict) -> bool:
+        repo_slugs = record.get("repo_slugs", record.get("repos", []))
+        if not isinstance(repo_slugs, list):
+            return False
+        return any(str(slug).strip() for slug in repo_slugs)
 
     def _read_legacy_history(self) -> list:
         try:
@@ -554,6 +566,7 @@ class ScanJobService:
             records = self._load_db_history_records()
         except sqlite3.Error:
             records = []
+        records = [record for record in records if self._is_meaningful_history_record(record)]
         return sorted(records, key=self._history_sort_key)
 
     def get_log_text(self, scan_id: str) -> str:
@@ -626,6 +639,8 @@ class ScanJobService:
                 pass
 
     def save_history_record(self, session: ScanSession, findings: list) -> None:
+        if not any(str(slug).strip() for slug in list(session.repo_slugs or [])):
+            return
         self._migrate_legacy_history_if_needed()
         Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.paths.log_dir).mkdir(parents=True, exist_ok=True)

@@ -760,6 +760,38 @@ def test_history_cache_invalidated_after_write():
         srv._invalidate_history_cache()
 
 
+def test_save_history_record_skips_empty_repo_scans():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(d / "logs")
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv._invalidate_history_cache()
+
+    try:
+        session = srv.ScanSession()
+        session.scan_id = "20250315_130100"
+        session.project_key = "EMPTY"
+        session.repo_slugs = []
+        session.state = "done"
+        srv._save_history_record(session, [])
+
+        assert srv._load_history() == []
+        assert not (Path(srv.LOG_DIR) / "20250315_130100.txt").exists()
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv._invalidate_history_cache()
+
+
 def test_atomic_history_write():
     """History write must be atomic — no .tmp file left behind."""
     import app_server as srv
@@ -774,7 +806,7 @@ def test_atomic_history_write():
     try:
         session = srv.ScanSession()
         session.scan_id = "20250315_140000"
-        session.project_key = "P"
+        session.project_key = "EMPTY"
         session.repo_slugs = []
         session.state = "done"
         session.scan_duration_s = 1
@@ -784,10 +816,10 @@ def test_atomic_history_write():
         srv.LOG_DIR    = str(d / "logs")
         srv._save_history_record(session, [])
 
-        # No .tmp file should remain after write
+        # Empty scans should not persist any history artifacts.
         tmp = Path(srv.HISTORY_FILE + ".tmp")
         assert not tmp.exists(), ".tmp file left behind after atomic write"
-        assert Path(srv.HISTORY_FILE).exists(), "scan_history.json not created"
+        assert not Path(srv.HISTORY_FILE).exists(), "scan_history.json should not be created"
     finally:
         srv.HISTORY_FILE = orig_hist
         srv.DB_FILE      = orig_db
@@ -810,6 +842,33 @@ def test_history_normalizes_stale_running_records():
         with patch.object(srv, "_load_history", return_value=[stale_record]):
             history = srv._history_records_for_user()
         assert history[0]["state"] == "stopped"
+    finally:
+        srv._session = original_session
+
+
+def test_history_excludes_empty_repo_records():
+    import app_server as srv
+
+    valid_record = {
+        "scan_id": "20260317_020202",
+        "project_key": "COGI",
+        "repo_slugs": ["repo1"],
+        "state": "done",
+        "started_at_utc": "2026-03-17T02:02:02Z",
+    }
+    empty_record = {
+        "scan_id": "20260317_010101",
+        "project_key": "EMPTY",
+        "repo_slugs": [],
+        "state": "done",
+        "started_at_utc": "2026-03-17T01:01:01Z",
+    }
+    original_session = srv._session
+    try:
+        srv._session = srv.ScanSession()
+        with patch.object(srv, "_load_history", return_value=[empty_record, valid_record]):
+            history = srv._history_records_for_user()
+        assert [record["scan_id"] for record in history] == ["20260317_020202"]
     finally:
         srv._session = original_session
 
@@ -1256,7 +1315,7 @@ def test_history_records_are_normalized_to_project_key():
         ollama_ping=lambda _: False,
     )
 
-    legacy_record = {"scan_id": "20260318_100000", "project": "COGI", "state": "done"}
+    legacy_record = {"scan_id": "20260318_100000", "project": "COGI", "state": "done", "repos": ["repo1"]}
 
     with service._connect() as conn:
         conn.execute(
@@ -1269,6 +1328,50 @@ def test_history_records_are_normalized_to_project_key():
 
     assert records[0]["project_key"] == "COGI"
     assert "project" not in records[0]
+
+
+def test_history_records_without_repos_are_filtered_out():
+    from services.scan_jobs import ScanJobPaths, ScanJobService
+
+    temp_root = Path(tempfile.mkdtemp())
+    service = ScanJobService(
+        app_version="test",
+        paths=ScanJobPaths(
+            output_dir=str(temp_root / "output"),
+            temp_dir=str(temp_root / "tmp"),
+            policy_file=str(temp_root / "policy.json"),
+            owner_map_file=str(temp_root / "owner_map.json"),
+            suppressions_file=str(temp_root / "suppressions.json"),
+            history_file=str(temp_root / "scan_history.json"),
+            log_dir=str(temp_root / "logs"),
+            db_file=str(temp_root / "scan_jobs.db"),
+        ),
+        load_policy=lambda _: {},
+        load_owner_map=lambda _: {},
+        policy_version=lambda _: "test",
+        utc_now_iso=lambda: "2026-03-18T10:00:00Z",
+        git_head_commit=lambda _: "",
+        ollama_ping=lambda _: False,
+    )
+
+    bad_record = {"scan_id": "20260318_100000", "project_key": "EMPTY", "state": "done", "repos": []}
+    good_record = {"scan_id": "20260318_100100", "project_key": "COGI", "state": "done", "repos": ["repo1"]}
+
+    with service._connect() as conn:
+        conn.execute(
+            "INSERT INTO scan_jobs(scan_id, state, updated_at, record_json) VALUES (?, ?, ?, ?)",
+            ("20260318_100000", "done", 1.0, json.dumps(bad_record)),
+        )
+        conn.execute(
+            "INSERT INTO scan_jobs(scan_id, state, updated_at, record_json) VALUES (?, ?, ?, ?)",
+            ("20260318_100100", "done", 2.0, json.dumps(good_record)),
+        )
+        conn.commit()
+
+    records = service.load_history()
+
+    assert len(records) == 1
+    assert records[0]["scan_id"] == "20260318_100100"
 
 
 def test_history_access_uses_project_key_only():
@@ -2499,6 +2602,7 @@ def test_load_history_merges_sqlite_and_legacy_records():
             "scan_id": "20250315_000001",
             "project": "LEGACY",
             "state": "done",
+            "repos": ["legacy-repo"],
             "reports": {},
         }
         Path(srv.HISTORY_FILE).write_text(json.dumps([legacy_record]), encoding="utf-8")
@@ -2555,6 +2659,8 @@ def test_api_history_delete_refuses_unmanaged_paths():
         handler = DummyHandler()
         record = {
             "scan_id": "20250317_000003",
+            "project_key": "COGI",
+            "repo_slugs": ["repo1"],
             "reports": {"__all__": {"html": str(outside)}},
             "log_file": "",
         }

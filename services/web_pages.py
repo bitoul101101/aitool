@@ -267,8 +267,8 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
         nav = (
             '<div class="header-nav">'
             + f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
-            + f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
             + f'<a class="nav{" active" if active == "history" else ""}" href="/history">Past Scans</a>'
+            + f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
             + f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
             + f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
             + '</div>'

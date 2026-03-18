@@ -499,6 +499,9 @@ def _history_records_for_user() -> list[dict]:
     records = []
     for record in history_records_for_context(_load_history(), _operator_state.ctx):
         normalized = dict(record)
+        repo_slugs = normalized.get("repo_slugs", normalized.get("repos", []))
+        if not isinstance(repo_slugs, list) or not any(str(slug).strip() for slug in repo_slugs):
+            continue
         if str(normalized.get("state", "")).lower() == "running":
             normalized["state"] = "stopped"
         records.append(normalized)
@@ -641,6 +644,8 @@ def _has_scan_results() -> bool:
 def _current_session_history_record() -> dict | None:
     with _state_lock:
         if not _session.scan_id or _session.state not in {"running", "stopped"}:
+            return None
+        if not any(str(slug).strip() for slug in list(_session.repo_slugs or [])):
             return None
         findings = list(_session.findings)
         suppressed = list(_session.suppressed_findings)
