@@ -77,7 +77,14 @@ from services.report_access import (
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
-from services.web_pages import render_help_page, render_history_page, render_login_page, render_scan_page, render_settings_page
+from services.web_pages import (
+    render_help_page,
+    render_history_page,
+    render_inventory_page,
+    render_login_page,
+    render_scan_page,
+    render_settings_page,
+)
 from services.runtime_support import (
     ensure_ollama_running,
     load_llm_config as load_llm_config_file,
@@ -361,6 +368,60 @@ def _history_records_for_user() -> list[dict]:
     return records
 
 
+def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
+    latest_by_repo: dict[str, dict] = {}
+    for record in _history_records_for_user():
+        inventory = record.get("inventory") or {}
+        profiles = inventory.get("repo_profiles") or []
+        for profile in profiles:
+            repo = str(profile.get("repo", "") or "").strip()
+            if not repo:
+                continue
+            candidate = {
+                "repo": repo,
+                "project_key": str(record.get("project_key", "") or ""),
+                "scan_id": str(record.get("scan_id", "") or ""),
+                "last_scan_at_utc": str(record.get("completed_at_utc") or record.get("started_at_utc") or ""),
+                "finding_count": int(profile.get("finding_count", 0) or 0),
+                "providers": list(profile.get("providers", []) or []),
+                "provider_labels": list(profile.get("provider_labels", []) or []),
+                "models": list(profile.get("models", []) or []),
+                "embeddings_vector_db": bool(profile.get("embeddings_vector_db")),
+                "prompt_handling": bool(profile.get("prompt_handling")),
+                "model_serving": bool(profile.get("model_serving")),
+                "agent_tool_use": bool(profile.get("agent_tool_use")),
+                "usage_tags": [
+                    tag
+                    for tag, enabled in (
+                        ("embeddings", profile.get("embeddings_vector_db")),
+                        ("prompt", profile.get("prompt_handling")),
+                        ("serving", profile.get("model_serving")),
+                        ("agent", profile.get("agent_tool_use")),
+                    )
+                    if enabled
+                ],
+                "reports": (record.get("reports") or {}).get("__all__", {}),
+            }
+            previous = latest_by_repo.get(repo)
+            if not previous or candidate["last_scan_at_utc"] >= previous["last_scan_at_utc"]:
+                latest_by_repo[repo] = candidate
+    repo_inventory = sorted(
+        latest_by_repo.values(),
+        key=lambda item: (item.get("last_scan_at_utc", ""), item.get("repo", "")),
+        reverse=True,
+    )
+    provider_labels = {label for item in repo_inventory for label in item.get("provider_labels", [])}
+    models = {model for item in repo_inventory for model in item.get("models", [])}
+    summary = {
+        "repos_using_ai_count": sum(1 for item in repo_inventory if item.get("finding_count", 0) > 0),
+        "repos_total": len(repo_inventory),
+        "provider_count": len(provider_labels),
+        "model_count": len(models),
+        "agent_tool_use_repos": sum(1 for item in repo_inventory if item.get("agent_tool_use")),
+    }
+    return repo_inventory, summary
+
+
 def _find_history_record_by_scan_id(scan_id: str) -> dict | None:
     return find_history_record_by_scan_id(_history_records_for_user(), scan_id)
 
@@ -414,6 +475,7 @@ def _current_session_history_record() -> dict | None:
         "critical_prod": critical_prod,
         "high_prod": high_prod,
         "reports": _session.report_paths,
+        "inventory": _session.inventory,
         "log_file": "",
     }
 
@@ -641,6 +703,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not _is_connected():
                 return self._redirect("/login")
             self._render_history_page()
+        elif p == "/inventory":
+            if not _is_connected():
+                return self._redirect("/login")
+            self._render_inventory_page()
         elif p == "/settings":
             if not _is_connected():
                 return self._redirect("/login")
@@ -812,6 +878,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         html = render_history_page(
             history=list(reversed(_history_records_for_user())),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
+    def _render_inventory_page(self, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        repo_inventory, summary = _inventory_snapshot_for_user()
+        html = render_inventory_page(
+            repo_inventory=repo_inventory,
+            summary=summary,
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )

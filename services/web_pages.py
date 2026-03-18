@@ -186,6 +186,15 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
   .inventory-meta{font-size:11px;color:#705333}
   button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
+.inventory-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,180px) auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
+.inventory-page-grid{display:grid;gap:14px}
+.inventory-summary-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.inventory-card-stat{padding:10px 12px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8}
+.inventory-card-stat strong{display:block;font-size:20px;line-height:1.1}
+.inventory-bool{display:inline-flex;min-width:34px;justify-content:center;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700}
+.inventory-bool.yes{background:#e3f3e3;color:#225522}
+.inventory-bool.no{background:#efe1cf;color:#6f5234}
+.inventory-sub{font-size:11px;color:#705333}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
 .table-shell tbody tr:hover{background:#f4eadb}
@@ -195,7 +204,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .icon-link img{display:block;width:34px;height:34px}
 .filters-row{margin-bottom:12px}
 @media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}}
-@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar{grid-template-columns:1fr 1fr}.table-shell{max-height:none}}
+@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}}
 @keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(42,124,255,.35)}50%{opacity:.35;box-shadow:0 0 0 5px rgba(42,124,255,0)}}
 """
@@ -218,6 +227,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True) -
             '<div class="header-nav">'
             f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
             f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan Results</a>'
+            f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
             f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
             f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
             f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
@@ -651,7 +661,7 @@ def render_scan_page(
     </section>
     {baseline_html}
     {inventory_html}
-    {"<section class=\"card\"><h2 style=\"margin:0 0 8px;font-size:16px\">Reports</h2>" + report_actions + "</section>" if report_actions else ""}
+    {f'<section class="card" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Reports</h2>{report_actions}</section>' if report_actions else '<section class="card hidden" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Reports</h2><div class="report-actions" id="report-actions"></div></section>'}
   </aside>
 </section>
 <form method="post" action="/scan/stop" id="stop-form"></form>"""
@@ -939,6 +949,56 @@ filterRepos();
     }} catch (_err) {{}}
   }}, 3000);
 }})();
+</script>
+<script>
+(function() {{
+  const logEl=document.getElementById('scan-log');
+  const reportsCard=document.getElementById('reports-card');
+  const reportsShell=document.getElementById('report-actions');
+  if(!logEl) return;
+
+  function normalizeLog() {{
+    const seen=new Set();
+    const lines=logEl.textContent
+      .split('\n')
+      .map(line => line.trimEnd())
+      .filter(Boolean)
+      .filter(line => {{
+        if (seen.has(line)) return false;
+        seen.add(line);
+        return true;
+      }});
+    logEl.textContent=lines.join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+  }}
+
+  function renderReports(data) {{
+    if(!reportsCard || !reportsShell) return;
+    const report=data.report || {{}};
+    const findings=data.finding_details || [];
+    const state=String(data.state || '').toLowerCase();
+    const actions=[];
+    if((state === 'done' || state === 'stopped') && findings.length) {{
+      if(report.html_name) actions.push(`<a class="btn" id="open-html-report" href="/reports/${{report.html_name}}" target="_blank">Open HTML Report</a>`);
+      if(report.csv_name) actions.push(`<a class="btn alt" id="download-csv-report" href="/reports/${{report.csv_name}}" download>Download CSV File</a>`);
+      if(data.scan_id) actions.push(`<a class="btn ghost" id="download-log-report" href="/api/history/log/${{data.scan_id}}" download>Download Logs</a>`);
+    }}
+    reportsShell.innerHTML=actions.join('');
+    reportsCard.classList.toggle('hidden', actions.length === 0);
+  }}
+
+  normalizeLog();
+  const repairTimer=setInterval(async () => {{
+    normalizeLog();
+    try {{
+      const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
+      const data=await res.json();
+      renderReports(data);
+      const state=String(data.state || '').toLowerCase();
+      if(state && state !== 'running') clearInterval(repairTimer);
+    }} catch (_err) {{}}
+  }}, 3000);
+}})();
 </script>"""
     return _layout(title="Scan", body=body, active="new_scan" if force_selection else "scan")
 
@@ -1063,6 +1123,151 @@ sortHistory(1,'datetime');
     return _layout(title="History", body=body, active="history")
 
 
+def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "") -> bytes:
+    projects = sorted({str(item.get("project_key", "")) for item in repo_inventory if item.get("project_key")})
+    providers = sorted({label for item in repo_inventory for label in item.get("provider_labels", []) if label})
+    models = sorted({model for item in repo_inventory for model in item.get("models", []) if model})
+
+    def _opts(values: list[str], label: str) -> str:
+        return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
+
+    rows = []
+    for item in repo_inventory:
+        provider_text = ", ".join(item.get("provider_labels", []))
+        model_text = ", ".join(item.get("models", []))
+        date_text, time_text, ts = _fmt_dt(item.get("last_scan_at_utc", ""))
+        reports = item.get("reports") or {}
+        html_link = (
+            f'<a class="icon-link" href="/reports/{_esc(reports.get("html_name",""))}" target="_blank" title="Open HTML Report"><img src="{HTML_ICON}" alt="HTML"></a>'
+            if reports.get("html_name")
+            else ""
+        )
+        rows.append(
+            f'<tr data-project="{_esc(item.get("project_key", ""))}" '
+            f'data-provider="{_esc(provider_text.lower())}" '
+            f'data-model="{_esc(model_text.lower())}" '
+            f'data-flags="{_esc(" ".join(item.get("usage_tags", [])))}" '
+            f'data-ts="{ts}">'
+            f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
+            f'<td>{_esc(item.get("project_key", ""))}</td>'
+            f'<td><strong>{_esc(item.get("repo", ""))}</strong><div class="inventory-sub">{_esc(item.get("scan_id", ""))}</div></td>'
+            f'<td>{_esc(item.get("finding_count", 0))}</td>'
+            f'<td>{_esc(provider_text or "-")}</td>'
+            f'<td>{_esc(model_text or "-")}</td>'
+            f'<td><span class="inventory-bool {"yes" if item.get("embeddings_vector_db") else "no"}">{"Yes" if item.get("embeddings_vector_db") else "No"}</span></td>'
+            f'<td><span class="inventory-bool {"yes" if item.get("prompt_handling") else "no"}">{"Yes" if item.get("prompt_handling") else "No"}</span></td>'
+            f'<td><span class="inventory-bool {"yes" if item.get("model_serving") else "no"}">{"Yes" if item.get("model_serving") else "No"}</span></td>'
+            f'<td><span class="inventory-bool {"yes" if item.get("agent_tool_use") else "no"}">{"Yes" if item.get("agent_tool_use") else "No"}</span></td>'
+            f'<td>{html_link}</td>'
+            "</tr>"
+        )
+
+    body = f"""
+{_flash(notice, error)}
+<section class="inventory-page-grid">
+  <section class="card">
+    <h2 style="margin:0 0 8px">AI Inventory</h2>
+    <p class="muted" style="margin:0 0 12px">Latest known AI usage profile per repository from scan history.</p>
+    <div class="inventory-summary-cards">
+      <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Total Repos</span><strong>{_esc(summary.get("repos_total", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Providers</span><strong>{_esc(summary.get("provider_count", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Models</span><strong>{_esc(summary.get("model_count", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Agent / Tool Use</span><strong>{_esc(summary.get("agent_tool_use_repos", 0))}</strong></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="inventory-toolbar filters-row">
+      <input type="search" id="inventory-search" placeholder="Search repo, provider, model, or scan">
+      <select id="inventory-project">{_opts(projects, 'All Projects')}</select>
+      <select id="inventory-provider">{_opts(providers, 'All Providers')}</select>
+      <select id="inventory-model">{_opts(models, 'All Models')}</select>
+      <select id="inventory-usage">
+        <option value="">All Usage Types</option>
+        <option value="embeddings">Embeddings / Vector DB</option>
+        <option value="prompt">Prompt Handling</option>
+        <option value="serving">Model Serving</option>
+        <option value="agent">Agent / Tool Use</option>
+      </select>
+      <button type="button" class="ghost" id="inventory-reset">Reset</button>
+    </div>
+    <div class="table-shell">
+      <table id="inventory-table">
+        <thead>
+          <tr>
+            <th data-sort="datetime">Last Scan</th>
+            <th data-sort="text">Project</th>
+            <th data-sort="text">Repo</th>
+            <th data-sort="number">Findings</th>
+            <th data-sort="text">Providers</th>
+            <th data-sort="text">Models</th>
+            <th data-sort="text">Embeddings /<br>Vector DB</th>
+            <th data-sort="text">Prompt<br>Handling</th>
+            <th data-sort="text">Model<br>Serving</th>
+            <th data-sort="text">Agent /<br>Tool Use</th>
+            <th>HTML</th>
+          </tr>
+        </thead>
+        <tbody>{''.join(rows) or '<tr><td colspan="11">No AI inventory available yet.</td></tr>'}</tbody>
+      </table>
+    </div>
+  </section>
+</section>
+<script>
+const iBody=document.querySelector('#inventory-table tbody');
+const iSearch=document.getElementById('inventory-search');
+const iProject=document.getElementById('inventory-project');
+const iProvider=document.getElementById('inventory-provider');
+const iModel=document.getElementById('inventory-model');
+const iUsage=document.getElementById('inventory-usage');
+function iRows(){{return Array.from(iBody.querySelectorAll('tr')).filter(r=>r.querySelectorAll('td').length>1);}}
+function inventoryMatchesUsage(row){{
+  if(!iUsage.value) return true;
+  return (row.dataset.flags||'').split(' ').includes(iUsage.value);
+}}
+function applyInventoryFilters(){{
+  const q=(iSearch.value||'').toLowerCase().trim();
+  iRows().forEach(row=>{{
+    const text=row.textContent.toLowerCase();
+    const okQ=!q || text.includes(q);
+    const okP=!iProject.value || row.dataset.project===iProject.value;
+    const okProvider=!iProvider.value || (row.dataset.provider||'').includes(iProvider.value.toLowerCase());
+    const okModel=!iModel.value || (row.dataset.model||'').includes(iModel.value.toLowerCase());
+    row.style.display=(okQ && okP && okProvider && okModel && inventoryMatchesUsage(row)) ? '' : 'none';
+  }});
+}}
+let inventorySort={{index:null,dir:-1,kind:'datetime'}};
+function inventoryCellValue(row,index,kind){{
+  if(kind==='datetime') return Number(row.dataset.ts)||0;
+  const text=(row.children[index]?.innerText||'').trim();
+  if(kind==='number') return Number(text)||0;
+  return text.toLowerCase();
+}}
+function sortInventory(index,kind){{
+  const rows=iRows();
+  if(inventorySort.index===index) inventorySort.dir*=-1; else inventorySort={{index,dir:kind==='datetime'?-1:1,kind}};
+  rows.sort((a,b)=>{{
+    const av=inventoryCellValue(a,inventorySort.index,inventorySort.kind);
+    const bv=inventoryCellValue(b,inventorySort.index,inventorySort.kind);
+    if(av<bv) return -1*inventorySort.dir;
+    if(av>bv) return 1*inventorySort.dir;
+    return 0;
+  }});
+  rows.forEach(r=>iBody.appendChild(r));
+  applyInventoryFilters();
+}}
+document.querySelectorAll('#inventory-table thead th[data-sort]').forEach((th,index)=>th.addEventListener('click',()=>sortInventory(index,th.dataset.sort)));
+[iSearch,iProject,iProvider,iModel].forEach(el=>el?.addEventListener('input',applyInventoryFilters));
+[iProject,iProvider,iModel,iUsage].forEach(el=>el?.addEventListener('change',applyInventoryFilters));
+document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
+  iSearch.value=''; iProject.value=''; iProvider.value=''; iModel.value=''; iUsage.value=''; applyInventoryFilters();
+}});
+sortInventory(0,'datetime');
+</script>"""
+    return _layout(title="AI Inventory", body=body, active="inventory")
+
+
 def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, notice: str = "", error: str = "") -> bytes:
     body = f"""
 {_flash(notice, error)}
@@ -1148,6 +1353,7 @@ def render_help_page(*, notice: str = "", error: str = "") -> bytes:
       <tbody>
         <tr><td>New Scan</td><td>Select project, repositories, and LLM model for a new run.</td></tr>
         <tr><td>Scan Results</td><td>Monitor the live activity log, phase timeline, findings sections, and report download buttons for the active or last run.</td></tr>
+        <tr><td>AI Inventory</td><td>Review the latest known AI usage profile per repository, including providers, models, and usage patterns.</td></tr>
         <tr><td>History</td><td>Search, filter, sort, and open results from previous scans.</td></tr>
         <tr><td>Settings</td><td>Configure output directory and LLM connection settings.</td></tr>
         <tr><td>Help</td><td>Understand the tool architecture, workflow, and limitations.</td></tr>

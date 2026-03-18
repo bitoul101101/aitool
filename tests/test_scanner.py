@@ -1314,10 +1314,52 @@ def test_help_page_is_server_rendered():
     html = srv.render_help_page().decode("utf-8")
 
     assert 'href="/help"' in html
+    assert 'href="/inventory"' in html
     assert '<a class="nav active" href="/help">Help</a>' in html
     assert "Reference documentation for the AI Security &amp; Compliance Scanner." in html
     assert "Main Components" in html
     assert "Known Limitations" in html
+    assert "AI Inventory" in html
+
+
+def test_inventory_page_is_server_rendered():
+    import app_server as srv
+
+    html = srv.render_inventory_page(
+        repo_inventory=[
+            {
+                "repo": "repo1",
+                "project_key": "COGI",
+                "scan_id": "20260318_101500",
+                "last_scan_at_utc": "2026-03-18T10:15:00Z",
+                "finding_count": 4,
+                "provider_labels": ["Openai", "Langchain"],
+                "models": ["gpt-4o"],
+                "embeddings_vector_db": True,
+                "prompt_handling": True,
+                "model_serving": False,
+                "agent_tool_use": True,
+                "usage_tags": ["embeddings", "prompt", "agent"],
+                "reports": {"html_name": "demo.html"},
+            }
+        ],
+        summary={
+            "repos_using_ai_count": 1,
+            "repos_total": 1,
+            "provider_count": 2,
+            "model_count": 1,
+            "agent_tool_use_repos": 1,
+        },
+    ).decode("utf-8")
+
+    assert '<a class="nav active" href="/inventory">AI Inventory</a>' in html
+    assert "Latest known AI usage profile per repository from scan history." in html
+    assert "repo1" in html
+    assert "Openai, Langchain" in html
+    assert "gpt-4o" in html
+    assert 'id="inventory-search"' in html
+    assert 'id="inventory-reset"' in html
+    assert 'href="/reports/demo.html"' in html
 
 
 def test_login_page_centers_login_action():
