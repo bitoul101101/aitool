@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -61,7 +62,21 @@ class SettingsService:
                 raise ValueError("Bitbucket CA bundle file not found")
             if not path.is_file():
                 raise ValueError("Bitbucket CA bundle must be a file")
-            ca_bundle = str(path.resolve())
+            resolved = str(path.resolve())
+            try:
+                ctx = ssl.create_default_context()
+                ctx.load_verify_locations(cafile=resolved)
+            except ssl.SSLError as exc:
+                msg = str(exc)
+                if "NO_CERTIFICATE_OR_CRL_FOUND" in msg:
+                    raise ValueError(
+                        "Bitbucket CA bundle is not a valid PEM certificate bundle. "
+                        "Convert DER/.cer certificates to PEM or provide a PEM bundle with the required CA chain."
+                    ) from exc
+                raise ValueError(f"Bitbucket CA bundle could not be parsed: {msg}") from exc
+            except OSError as exc:
+                raise ValueError(f"Bitbucket CA bundle could not be read: {exc}") from exc
+            ca_bundle = resolved
         self._save_tls_config({"verify_ssl": bool(verify_ssl), "ca_bundle": ca_bundle})
         self._audit_event(
             "settings_tls_update",

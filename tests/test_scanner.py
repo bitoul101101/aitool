@@ -2732,6 +2732,60 @@ def test_html_report_llm_enrichment_applies_budget_placeholder():
     assert "skipped for this finding" in details[skipped_key]
 
 
+def test_save_tls_settings_validates_pem_bundle_content():
+    import ssl
+    from services.settings_service import SettingsService
+
+    temp_root = Path(tempfile.mkdtemp())
+    pem_path = temp_root / "corp-root.pem"
+    pem_path.write_text("-----BEGIN CERTIFICATE-----\nplaceholder\n-----END CERTIFICATE-----\n", encoding="utf-8")
+
+    captured = {}
+    service = SettingsService(
+        load_llm_config=lambda: {},
+        save_llm_config=lambda cfg: None,
+        load_tls_config=lambda: {},
+        save_tls_config=lambda cfg: captured.update(cfg),
+        ensure_ollama_running=lambda url: {"ok": True},
+        list_ollama_models=lambda url: [],
+        audit_event=lambda action, **details: None,
+        sync_paths=lambda: None,
+    )
+
+    fake_ctx = MagicMock()
+    with patch.object(ssl, "create_default_context", return_value=fake_ctx):
+        result = service.save_tls_settings(verify_ssl=True, ca_bundle=str(pem_path))
+
+    assert result["ok"] is True
+    assert captured["ca_bundle"] == str(pem_path.resolve())
+    fake_ctx.load_verify_locations.assert_called_once_with(cafile=str(pem_path.resolve()))
+
+
+def test_save_tls_settings_rejects_non_pem_bundle_with_clear_error():
+    from services.settings_service import SettingsService
+
+    temp_root = Path(tempfile.mkdtemp())
+    der_like = temp_root / "corp_rootCA.cer"
+    der_like.write_bytes(b"\x30\x82\x01\x0a\x02\x82\x01\x01\x00\xff\x00\x01")
+
+    service = SettingsService(
+        load_llm_config=lambda: {},
+        save_llm_config=lambda cfg: None,
+        load_tls_config=lambda: {},
+        save_tls_config=lambda cfg: None,
+        ensure_ollama_running=lambda url: {"ok": True},
+        list_ollama_models=lambda url: [],
+        audit_event=lambda action, **details: None,
+        sync_paths=lambda: None,
+    )
+
+    try:
+        service.save_tls_settings(verify_ssl=True, ca_bundle=str(der_like))
+        raise AssertionError("Expected PEM validation failure")
+    except ValueError as exc:
+        assert "valid PEM certificate bundle" in str(exc)
+
+
 def test_report_server_allows_only_its_local_origin():
     from reports.report_server import _allowed_origin
 
