@@ -12,6 +12,9 @@ EXPORT_COLUMNS = [
     "finding_id", "delta_status",
     "repo", "ai_category", "provider_or_lib",
     "capability", "policy_status", "risk", "severity",
+    "detector_confidence_score", "production_relevance_score",
+    "evidence_quality_score", "llm_review_confidence_score",
+    "overall_signal_score",
     "file", "line", "snippet", "owner", "last_seen", "remediation",
 ]
 

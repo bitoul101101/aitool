@@ -913,13 +913,19 @@ def _apply_verdict(finding: Dict[str, Any], verdict_obj: Any) -> str:
 
     verdict = str(verdict_obj.get("verdict", "keep")).lower().strip()
     reason  = str(verdict_obj.get("reason", "")).strip()
+    raw_conf = verdict_obj.get("confidence", 0)
+    try:
+        llm_conf = max(0, min(100, int(raw_conf)))
+    except (TypeError, ValueError):
+        llm_conf = 0
 
     if verdict not in {"keep", "downgrade", "dismiss"}:
         verdict = "keep"
 
-    finding["llm_verdict"]  = verdict
-    finding["llm_reason"]   = reason
+    finding["llm_verdict"] = verdict
+    finding["llm_reason"] = reason
     finding["llm_reviewed"] = True
+    finding["llm_review_confidence_score"] = llm_conf
 
     if verdict == "downgrade":
         finding["severity"] = min(4, finding.get("severity", 3) + 1)
@@ -1080,9 +1086,10 @@ class LLMReviewer:
                 if i < len(verdicts):
                     verdict = _apply_verdict(finding, verdicts[i])
                 else:
-                    finding["llm_verdict"]  = "keep"
-                    finding["llm_reason"]   = "no verdict returned"
+                    finding["llm_verdict"] = "keep"
+                    finding["llm_reason"] = "no verdict returned"
                     finding["llm_reviewed"] = True
+                    finding["llm_review_confidence_score"] = 0
                     verdict = "keep"
 
                 fname  = Path(finding.get("file", "")).name
@@ -1126,9 +1133,10 @@ class LLMReviewer:
                 )
                 if result_obj is None:
                     # Call failed — safe default: reinstate the finding
-                    finding["llm_verdict"]  = "keep"
-                    finding["llm_reason"]   = "challenge call failed — reinstated"
+                    finding["llm_verdict"] = "keep"
+                    finding["llm_reason"] = "challenge call failed — reinstated"
                     finding["llm_reviewed"] = True
+                    finding["llm_review_confidence_score"] = 0
                     kept.append(finding)
                     reinstated_count += 1
                     self.log_fn(f"  [LLM] ⟳ REINSTATE {lib} in {fname} — challenge failed")
@@ -1136,17 +1144,23 @@ class LLMReviewer:
 
                 challenge_verdict = str(result_obj.get("verdict", "dismiss")).lower().strip()
                 challenge_reason  = str(result_obj.get("reason", "")).strip()
+                try:
+                    challenge_conf = max(0, min(100, int(result_obj.get("confidence", 0))))
+                except (TypeError, ValueError):
+                    challenge_conf = 0
 
                 if challenge_verdict == "keep":
-                    finding["llm_verdict"]  = "keep"
-                    finding["llm_reason"]   = f"reinstated: {challenge_reason}"
+                    finding["llm_verdict"] = "keep"
+                    finding["llm_reason"] = f"reinstated: {challenge_reason}"
                     finding["llm_reviewed"] = True
+                    finding["llm_review_confidence_score"] = challenge_conf
                     kept.append(finding)
                     reinstated_count += 1
                     self.log_fn(
                         f"  [LLM] ⟳ REINSTATE {lib} in {fname} — {challenge_reason}"
                     )
                 else:
+                    finding["llm_review_confidence_score"] = challenge_conf
                     # Dismissal confirmed — stays dismissed (not added to kept)
                     self.log_fn(
                         f"  [LLM] ✓ CONFIRM   {lib} in {fname} — {challenge_reason}"

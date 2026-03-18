@@ -3,6 +3,7 @@ Security Analyzer: evaluates raw findings against policy,
 assigns final severity, risk labels, and remediation tips.
 """
 
+from pathlib import Path
 from typing import List, Dict, Any
 
 
@@ -232,12 +233,35 @@ class SecurityAnalyzer:
         enriched = []
         for f in findings:
             e = dict(f)
+            e = self._initialize_scores(e)
             e = self._apply_policy(e)
             e = self._assign_risk_label(e)
             e = self._assign_remediation(e)
+            e = self._assign_scoring(e)
             e["severity_label"] = f"Sev-{e['severity']} ({RISK_LABELS[e['severity']]})"
             enriched.append(e)
         return enriched
+
+    def refresh_scores(self, findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Recompute score-derived fields after LLM review or later mutations."""
+        refreshed = []
+        for finding in findings:
+            f = dict(finding)
+            f = self._initialize_scores(f)
+            f = self._assign_risk_label(f)
+            f = self._assign_scoring(f)
+            f["severity_label"] = f"Sev-{f['severity']} ({RISK_LABELS[f['severity']]})"
+            refreshed.append(f)
+        return refreshed
+
+    def _initialize_scores(self, f: Dict) -> Dict:
+        detector_conf = int(f.get("detector_confidence_score", f.get("confidence", 0)) or 0)
+        detector_conf = max(0, min(100, detector_conf))
+        f["detector_confidence_score"] = detector_conf
+        f["confidence"] = detector_conf
+        if "llm_review_confidence_score" not in f:
+            f["llm_review_confidence_score"] = None
+        return f
 
     def _apply_policy(self, f: Dict) -> Dict:
         lib = f.get("provider_or_lib", "")
@@ -293,3 +317,66 @@ class SecurityAnalyzer:
         )
         f["remediation"] = rem
         return f
+
+    def _assign_scoring(self, f: Dict) -> Dict:
+        prod = self._production_relevance_score(f)
+        evidence = self._evidence_quality_score(f)
+        detector = int(f.get("detector_confidence_score", f.get("confidence", 0)) or 0)
+        llm_conf = f.get("llm_review_confidence_score")
+        llm_val = int(llm_conf) if isinstance(llm_conf, (int, float)) else None
+        weighted = detector * 0.4 + prod * 0.35 + evidence * 0.25
+        if llm_val is not None:
+            weighted = weighted * 0.8 + llm_val * 0.2
+        f["production_relevance_score"] = prod
+        f["evidence_quality_score"] = evidence
+        f["overall_signal_score"] = max(0, min(100, int(round(weighted))))
+        return f
+
+    def _production_relevance_score(self, f: Dict) -> int:
+        context = str(f.get("context", "production") or "production").lower()
+        base = {
+            "production": 85,
+            "test": 30,
+            "docs": 15,
+            "deleted_file": 10,
+        }.get(context, 50)
+        sev = int(f.get("severity", 4) or 4)
+        if sev == 1:
+            base += 12
+        elif sev == 2:
+            base += 8
+        elif sev == 3:
+            base += 3
+        if str(f.get("policy_status", "")).upper() in {"CRITICAL", "BANNED", "RESTRICTED"}:
+            base += 6
+        suffix = Path(str(f.get("file", ""))).suffix.lower()
+        if suffix in {".md", ".rst", ".txt", ".adoc", ".mdx"}:
+            base -= 15
+        return max(0, min(100, base))
+
+    def _evidence_quality_score(self, f: Dict) -> int:
+        score = 35
+        snippet = str(f.get("snippet", "") or "").strip()
+        match = str(f.get("match", "") or "").strip()
+        capability = str(f.get("capability", "") or "").strip()
+        if snippet and snippet != "(source not available)":
+            score += 18
+            if len(snippet) >= 80:
+                score += 8
+        elif snippet == "(source not available)":
+            score -= 10
+        else:
+            score -= 6
+        if match:
+            score += 12
+            if len(match) >= 16:
+                score += 5
+        if capability:
+            score += 4
+        if int(f.get("corroboration_count", 1) or 1) >= 3:
+            score += 10
+        if str(f.get("provider_or_lib", "")) in _ALWAYS_CRITICAL_SECURITY_PATTERNS:
+            score += 14
+        if str(f.get("context", "")).lower() in _NON_PROD_CONTEXTS:
+            score -= 10
+        return max(0, min(100, score))

@@ -862,6 +862,11 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "description": "Unsuppressed finding",
             "snippet": "client = OpenAI(api_key=token)",
             "delta_status": "new",
+            "detector_confidence_score": 88,
+            "production_relevance_score": 97,
+            "evidence_quality_score": 82,
+            "llm_review_confidence_score": 79,
+            "overall_signal_score": 88,
         },
         {
             "_hash": "hash-1",
@@ -879,6 +884,11 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "triage_at": "2026-03-17T15:40:00Z",
             "triage_note": "",
             "delta_status": "existing",
+            "detector_confidence_score": 63,
+            "production_relevance_score": 31,
+            "evidence_quality_score": 58,
+            "llm_review_confidence_score": 66,
+            "overall_signal_score": 53,
         }
     ]
     session.suppressed_findings = [
@@ -932,6 +942,11 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "old.py:12" in html
     assert "New" in html
     assert "Existing" in html
+    assert "Det 88" in html
+    assert "Prod 97" in html
+    assert "Evd 82" in html
+    assert "LLM 79" in html
+    assert "Sig 88" in html
 
 
 def test_scan_session_log_normalizes_blank_lines():
@@ -1004,6 +1019,43 @@ def test_llm_review_logs_explicit_warning_when_batches_fail():
 
     assert result == findings
     assert any("Review failed for 1 finding(s); results kept without LLM refinement" in line for line in logs)
+
+
+def test_security_analyzer_adds_explicit_scoring_fields():
+    from analyzer.security import SecurityAnalyzer
+
+    analyzer = SecurityAnalyzer(policy={})
+    result = analyzer.analyze([{
+        "_hash": "h1",
+        "provider_or_lib": "openai",
+        "category": "AI SDK",
+        "severity": 2,
+        "context": "production",
+        "file": "src/app.py",
+        "line": 8,
+        "match": "OpenAI(api_key=token)",
+        "snippet": "client = OpenAI(api_key=token)",
+        "capability": "Chat Completion",
+        "confidence": 77,
+        "corroboration_count": 3,
+    }])[0]
+
+    assert result["detector_confidence_score"] == 77
+    assert 0 <= result["production_relevance_score"] <= 100
+    assert 0 <= result["evidence_quality_score"] <= 100
+    assert 0 <= result["overall_signal_score"] <= 100
+    assert result["llm_review_confidence_score"] is None
+
+
+def test_apply_verdict_records_llm_review_confidence_score():
+    from scanner.llm_reviewer import _apply_verdict
+
+    finding = {"severity": 2}
+    verdict = _apply_verdict(finding, {"verdict": "downgrade", "reason": "docs", "confidence": 83})
+
+    assert verdict == "downgrade"
+    assert finding["llm_review_confidence_score"] == 83
+    assert finding["severity"] == 3
 
 
 def test_scan_page_can_force_new_scan_selection_after_completion():

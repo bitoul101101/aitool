@@ -147,6 +147,8 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .finding-main{display:flex;align-items:center;gap:6px;font-weight:600;flex-wrap:wrap}
 .finding-loc{font-size:11px;color:#7a5d3e;font-family:Cascadia Code,Consolas,monospace}
 .finding-sub{font-size:11px;color:#705333}
+.score-strip{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.score-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid #d8bf9f;border-radius:999px;background:#f6eee4;color:#5b3a16;font-size:10px;font-weight:600}
 .sev-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;color:#fff}
 .sev-1{background:#b42318}
 .sev-2{background:#e05c00}
@@ -365,6 +367,19 @@ def render_scan_page(
         snippet = snippet[:220]
         return f'<div class="finding-snippet">{_esc(snippet)}</div>'
 
+    def score_strip(detail: dict) -> str:
+        values = [
+            ("Det", detail.get("detector_confidence_score", 0)),
+            ("Prod", detail.get("production_relevance_score", 0)),
+            ("Evd", detail.get("evidence_quality_score", 0)),
+            ("LLM", detail.get("llm_review_confidence_score") if detail.get("llm_review_confidence_score") is not None else "—"),
+            ("Sig", detail.get("overall_signal_score", 0)),
+        ]
+        return '<div class="score-strip">' + "".join(
+            f'<span class="score-pill">{_esc(label)} {_esc(value)}</span>'
+            for label, value in values
+        ) + '</div>'
+
     def finding_summary(detail: dict) -> str:
         location = f'{detail.get("file", "")}:{detail.get("line", "")}'
         return (
@@ -372,6 +387,7 @@ def render_scan_page(
             f'<div class="finding-main">{severity_chip(detail)}<span>{_esc(detail.get("repo", ""))}</span>'
             f'<span class="finding-loc">{_esc(location)}</span></div>'
             f'<div class="finding-sub">{_esc(detail.get("description", ""))}</div>'
+            f'{score_strip(detail)}'
             f'{snippet_block(detail)}'
             '</div>'
         )
@@ -690,11 +706,22 @@ filterRepos();
     if(!snippet) return '';
     return `<div class="finding-snippet">${{esc(snippet.slice(0, 220))}}</div>`;
   }}
+  function scoreStrip(item){{
+    const values=[
+      ['Det', item.detector_confidence_score ?? 0],
+      ['Prod', item.production_relevance_score ?? 0],
+      ['Evd', item.evidence_quality_score ?? 0],
+      ['LLM', item.llm_review_confidence_score ?? '—'],
+      ['Sig', item.overall_signal_score ?? 0],
+    ];
+    return `<div class="score-strip">` + values.map(([label, value]) => `<span class="score-pill">${{esc(label)}} ${{esc(value)}}</span>`).join('') + `</div>`;
+  }}
   function findingSummary(item){{
     const location=`${{esc(item.file||'')}}:${{esc(item.line||'')}}`;
     return `<div class="finding-meta">`
       + `<div class="finding-main">${{severityChip(item)}}<span>${{esc(item.repo||'')}}</span><span class="finding-loc">${{location}}</span></div>`
       + `<div class="finding-sub">${{esc(item.description||'')}}</div>`
+      + scoreStrip(item)
       + snippetBlock(item)
       + `</div>`;
   }}

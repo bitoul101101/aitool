@@ -91,6 +91,11 @@ class ScanSession:
             "marked_at": finding.get("triage_at", finding.get("suppressed_at", "")),
             "delta_status": delta_status,
             "delta_label": delta_status.replace("_", " ").title() if delta_status else "",
+            "detector_confidence_score": finding.get("detector_confidence_score", finding.get("confidence", 0)),
+            "production_relevance_score": finding.get("production_relevance_score", 0),
+            "evidence_quality_score": finding.get("evidence_quality_score", 0),
+            "llm_review_confidence_score": finding.get("llm_review_confidence_score"),
+            "overall_signal_score": finding.get("overall_signal_score", 0),
         }
 
     def log(self, msg: str, level: str = "info") -> None:
@@ -732,6 +737,7 @@ class ScanJobService:
                         )
                         log(f"  [LLM] Evaluating {len(analyzed)} finding(s) for review...", "dim")
                         analyzed = reviewer.review(analyzed, file_contents)
+                        analyzed = analyzer.refresh_scores(analyzed)
                         log(f"  [LLM] Review stage complete -> {len(analyzed)} finding(s)", "dim")
                     except Exception as exc:
                         log(f"  [LLM] Review skipped: {exc}", "dim")

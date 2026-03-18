@@ -668,6 +668,8 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
 .detail-panel h4:first-child{margin-top:0;}
 .detail-panel ul{list-style:disc;margin:4px 0 8px 18px;padding:0;}
 .detail-panel li{margin-bottom:3px;}
+.scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
 .detail-panel pre{
   display:inline-block;min-width:200px;max-width:100%;
   background:#18120d;color:#f5debe;
@@ -1575,6 +1577,11 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
             line_val    = html_mod.escape(str(f.get("line", "")))
             sev_label   = SEV_LABEL.get(sev, str(sev))
             snippet_val = html_mod.escape(str(f.get("snippet", ""))[:300]) if f.get("snippet") else ""
+            detector_conf = html_mod.escape(str(f.get("detector_confidence_score", f.get("confidence", 0))))
+            prod_rel = html_mod.escape(str(f.get("production_relevance_score", 0)))
+            evidence_q = html_mod.escape(str(f.get("evidence_quality_score", 0)))
+            llm_conf = html_mod.escape(str(f.get("llm_review_confidence_score", "—") if f.get("llm_review_confidence_score") is not None else "—"))
+            overall_sig = html_mod.escape(str(f.get("overall_signal_score", 0)))
             # Key must match _key() in _fetch_llm_details
             llm_key_val = html_mod.escape(
                 f"{f.get('file','')}:{f.get('line','')}:{f.get('provider_or_lib','')}")
@@ -1588,6 +1595,9 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
                 f' data-desc="{desc_val}" data-file="{file_val}"'
                 f' data-line="{line_val}" data-sevlabel="{sev_label}"'
                 f' data-snippet="{snippet_val}" data-llm-key="{llm_key_val}"'
+                f' data-detconf="{detector_conf}" data-prodrel="{prod_rel}"'
+                f' data-evidence="{evidence_q}" data-llmconf="{llm_conf}"'
+                f' data-signal="{overall_sig}"'
                 f' onclick="toggleDetail(event,this)"'
                 f' style="{row_style}">'
                 f"<td style='white-space:nowrap'>"
@@ -1992,9 +2002,16 @@ function toggleDetail(evt, row) {
   const llmKey = row.getAttribute('data-llm-key') || '';
   const details = (window._LLM_DETAILS || {});
   const prebaked = details[llmKey];
+  const scorecard = `<div class="scorecard">`
+    + `<span class="scorechip">Detector ${_esc(row.getAttribute('data-detconf') || '0')}</span>`
+    + `<span class="scorechip">Production ${_esc(row.getAttribute('data-prodrel') || '0')}</span>`
+    + `<span class="scorechip">Evidence ${_esc(row.getAttribute('data-evidence') || '0')}</span>`
+    + `<span class="scorechip">LLM ${_esc(row.getAttribute('data-llmconf') || '—')}</span>`
+    + `<span class="scorechip">Signal ${_esc(row.getAttribute('data-signal') || '0')}</span>`
+    + `</div>`;
 
   if (prebaked) {
-    detTd.innerHTML = prebaked;
+    detTd.innerHTML = prebaked.replace('<div class="detail-panel">', `<div class="detail-panel">${scorecard}`);
   } else {
     // No pre-baked answer — show informational message (no live fetch)
     const model = (window.OLLAMA_MODEL || '').trim();
@@ -2002,7 +2019,7 @@ function toggleDetail(evt, row) {
       ? `<p style="color:#f97316;font-size:12px">⚠ LLM analysis was not generated for this finding. ` +
         `Re-run the scan with LLM enabled to embed answers in the report.</p>`
       : `<p style="color:var(--dim);font-size:12px">ℹ LLM analysis not available — no model was configured when this report was generated.</p>`;
-    detTd.innerHTML = `<div class="detail-panel">${msg}</div>`;
+    detTd.innerHTML = `<div class="detail-panel">${scorecard}${msg}</div>`;
   }
 
   detRow.appendChild(detTd);
