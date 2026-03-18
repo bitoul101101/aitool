@@ -33,7 +33,6 @@ import json
 import os
 import queue
 import re
-import secrets
 import shutil
 import subprocess
 import threading
@@ -74,6 +73,7 @@ from services.api_actions import (
     stop_scan,
     triage_finding,
 )
+from services.browser_sessions import BrowserSessionStore, parse_cookie_header
 from services.report_access import (
     find_history_record_by_report_name,
     find_history_record_by_scan_id,
@@ -290,7 +290,8 @@ _state_lock = threading.RLock()
 _session.state_lock = _state_lock
 _app_exit_event = threading.Event()
 _server_instance: Optional[http.server.ThreadingHTTPServer] = None
-_browser_sessions: dict[str, dict[str, Any]] = {}
+_browser_session_store = BrowserSessionStore()
+_browser_sessions = _browser_session_store.sessions
 
 
 def _current_session() -> ScanSession:
@@ -411,78 +412,32 @@ def _require_project_access(handler, project_key: str):
     return False
 
 
-def _parse_cookie_header(cookie_header: str) -> dict[str, str]:
-    cookies: dict[str, str] = {}
-    for chunk in (cookie_header or "").split(";"):
-        if "=" not in chunk:
-            continue
-        name, value = chunk.split("=", 1)
-        name = name.strip()
-        value = value.strip()
-        if name:
-            cookies[name] = value
-    return cookies
-
-
 def _issue_browser_session() -> tuple[str, str]:
-    session_id = secrets.token_urlsafe(24)
-    csrf_token = secrets.token_urlsafe(24)
-    with _state_lock:
-        _browser_sessions[session_id] = {
-            "csrf_token": csrf_token,
-            "issued_at": time.time(),
-        }
-    return session_id, csrf_token
+    return _browser_session_store.issue()
 
 
 def _browser_cookie_value(handler) -> str:
-    headers = getattr(handler, "headers", {}) or {}
-    if hasattr(headers, "get"):
-        raw = headers.get("Cookie", "") or ""
-    else:
-        raw = ""
-    return _parse_cookie_header(raw).get("ai_scanner_session", "")
+    return _browser_session_store.extract_session_id(handler)
 
 
 def _browser_session(handler) -> dict[str, Any] | None:
-    session_id = _browser_cookie_value(handler)
-    if not session_id:
-        return None
-    with _state_lock:
-        session = _browser_sessions.get(session_id)
-        if not session:
-            return None
-        return dict(session)
+    return _browser_session_store.snapshot_for_handler(handler)
 
 
 def _has_valid_browser_session(handler) -> bool:
-    return _browser_session(handler) is not None
+    return _browser_session_store.has_valid_session(handler)
 
 
 def _current_csrf_token(handler=None) -> str:
-    if handler is None:
-        return ""
-    session = _browser_session(handler)
-    if not session:
-        return ""
-    return str(session.get("csrf_token", "") or "")
+    return _browser_session_store.csrf_token_for_handler(handler)
 
 
 def _csrf_matches(handler, body: dict) -> bool:
-    session = _browser_session(handler)
-    if not session:
-        return False
-    token = ""
-    if isinstance(body, dict):
-        token = str(body.get("csrf_token", "") or "")
-    expected = str(session.get("csrf_token", "") or "")
-    return bool(expected) and token == expected
+    return _browser_session_store.csrf_matches(handler, body)
 
 
 def _queue_session_cookie(handler, session_id: str) -> None:
-    handler._response_cookies = [
-        f"ai_scanner_session={session_id}; Path=/; HttpOnly; SameSite=Strict"
-    ]
+    _browser_session_store.queue_session_cookie(handler, session_id)
 
 
 def _save_history_record(session, findings):
