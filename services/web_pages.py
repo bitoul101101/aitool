@@ -140,6 +140,12 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:560px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
+.timeline-card{padding:10px 12px}
+.timeline-card .timeline{gap:6px}
+.timeline-card .timeline-row{padding:6px 8px;font-size:12px}
+.hardware-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.hardware-stat{padding:10px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
+.hardware-stat strong{display:block;font-size:16px;line-height:1.15;overflow-wrap:anywhere}
 .findings-panel,.mitigate-section,.suppressed-section{margin-top:12px;padding:12px;border:2px solid #cda274;border-radius:14px;background:#fffdf8}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .finding-table-wrap table,.mitigate-wrap table,.suppressed-wrap table{font-size:12px}
@@ -212,9 +218,10 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .subnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .subnav a{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#efe1cf;color:#5d3b15;text-decoration:none;font-size:12px;font-weight:700}
 .subnav a.active{background:#6d3514;color:#fff}
+.subnav a.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
 .results-frame{width:100%;min-height:calc(100vh - 220px);border:1px solid #d8b995;border-radius:14px;background:#fff}
 @media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}.inventory-grid-wide{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}}
 @keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(42,124,255,.35)}50%{opacity:.35;box-shadow:0 0 0 5px rgba(42,124,255,0)}}
 """
@@ -233,12 +240,17 @@ def _csrf_field(csrf_token: str = "") -> str:
     return f'<input type="hidden" name="csrf_token" value="{_esc(csrf_token)}">' if csrf_token else ""
 
 
-def _scan_workspace_tabs(scan_id: str, active_tab: str = "activity") -> str:
+def _scan_workspace_tabs(scan_id: str, active_tab: str = "activity", *, results_enabled: bool = True) -> str:
     safe_scan_id = _esc(scan_id)
+    results_link = (
+        f'<a class="{"active" if active_tab == "results" else ""}" href="/scan/{safe_scan_id}?tab=results">Results</a>'
+        if results_enabled
+        else '<a class="disabled" aria-disabled="true">Results</a>'
+    )
     return (
         '<nav class="subnav" aria-label="Scan workspace">'
         + f'<a class="{"active" if active_tab == "activity" else ""}" href="/scan/{safe_scan_id}?tab=activity">Activity</a>'
-        + f'<a class="{"active" if active_tab == "results" else ""}" href="/scan/{safe_scan_id}?tab=results">Results</a>'
+        + results_link
         + "</nav>"
     )
 
@@ -596,30 +608,13 @@ def render_scan_page(
     <section class="card" id="hardware-card">
       <h2 style="margin:0 0 8px;font-size:16px">Hardware Usage</h2>
       <div class="baseline-summary" id="hardware-summary">
-        <div class="baseline-grid">
-          <div class="baseline-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong></div>
-          <div class="baseline-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong></div>
-          <div class="baseline-stat"><span class="baseline-label">Process</span><strong id="hardware-process">{_esc(hardware.get("process_memory_text", "Unavailable"))}</strong></div>
-          <div class="baseline-stat"><span class="baseline-label">Workspace</span><strong id="hardware-workspace">{_esc(hardware.get("workspace_text", "0 MB"))}</strong></div>
+        <div class="hardware-grid">
+          <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong></div>
         </div>
-        <div class="muted" id="hardware-disk">Free disk in output location: {_esc(hardware.get("disk_free_text", "Unavailable"))}</div>
       </div>
     </section>"""
-    report_actions = ""
-    if scan_complete and all_findings:
-        html_name = report.get("html_name", "")
-        csv_name = report.get("csv_name", "")
-        log_url = f"/api/history/log/{_esc(scan_id)}" if scan_id else ""
-        buttons = []
-        if html_name and scan_id:
-            buttons.append(f'<a class="btn" id="open-results-page" href="/scan/{_esc(scan_id)}?tab=results">Open Results</a>')
-        if html_name:
-            buttons.append(f'<a class="btn alt" id="open-html-report" href="/reports/{_esc(html_name)}" target="_blank">Open HTML Report</a>')
-        if csv_name:
-            buttons.append(f'<a class="btn alt" id="download-csv-report" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
-        if log_url:
-            buttons.append(f'<a class="btn ghost" id="download-log-report" href="{log_url}" download>Download Logs</a>')
-        report_actions = f'<div class="report-actions" id="report-actions">{"".join(buttons)}</div>'
     new_scan_button = ""
     if scan_complete:
         project_q = f"?project={quote(selected_project)}&new=1" if selected_project else "?new=1"
@@ -661,7 +656,7 @@ def render_scan_page(
   </section>
 </section>
 <form method="post" action="/scan/stop" id="stop-form">{_csrf_field(csrf_token)}</form>"""
-    workspace_tabs = _scan_workspace_tabs(scan_id, workspace_tab) if scan_id else ""
+    workspace_tabs = _scan_workspace_tabs(scan_id, workspace_tab, results_enabled=scan_complete) if scan_id else ""
     running_view = f"""
 <section class="running-shell">
   <section class="card activity-panel">
@@ -679,8 +674,7 @@ def render_scan_page(
       </div>
       <div class="scan-actions">{stop_button if running else ""}{new_scan_button}</div>
     </section>
-    {f'<section class="card" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Results Actions</h2>{report_actions}</section>' if report_actions else '<section class="card hidden" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Results Actions</h2><div class="report-actions" id="report-actions"></div></section>'}
-    <section class="card">
+    <section class="card timeline-card">
       <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>

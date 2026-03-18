@@ -1093,13 +1093,16 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="mitigate-section">' not in html
     assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
-    assert "Results Actions" in html
     assert "Hardware Usage" in html
     assert html.index("Phase Timeline") < html.index("Hardware Usage")
-    assert "Download CSV File" in html
-    assert "Download Logs" in html
     assert 'href="/scan/20260317_154037?tab=results"' in html
     assert 'href="/scan/20260317_154037?tab=activity"' in html
+    assert 'id="hardware-gpu"' in html
+    assert "Results Actions" not in html
+    assert 'id="reports-card"' not in html
+    assert 'id="hardware-process"' not in html
+    assert 'id="hardware-workspace"' not in html
+    assert 'id="hardware-disk"' not in html
     assert "Baseline" in html
     assert 'id="inventory-summary"' not in html
     assert "Compared to AI_Scan_Report_COGI_repo1_20260317_140000.csv" in html
@@ -1117,6 +1120,16 @@ def test_scan_page_asset_redirects_only_after_running_to_done_transition():
     assert "let previousScanState = null;" in script
     assert 'const justFinished = previousScanState === "running" && state === "done";' in script
     assert "!redirectedToResults && justFinished" in script
+
+
+def test_scan_workspace_tabs_disable_results_until_scan_completes():
+    from services.web_pages import _scan_workspace_tabs
+
+    html = _scan_workspace_tabs("20260318_150000", "activity", results_enabled=False)
+
+    assert 'href="/scan/20260318_150000?tab=activity"' in html
+    assert 'aria-disabled="true"' in html
+    assert '>Results</a>' in html
 
 
 def test_scan_session_log_normalizes_blank_lines():

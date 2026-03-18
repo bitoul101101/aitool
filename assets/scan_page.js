@@ -11,8 +11,6 @@
   const timelineEl = document.getElementById("phase-timeline");
   const baselineSummary = document.getElementById("baseline-summary");
   const hardwareSummary = document.getElementById("hardware-summary");
-  const reportsCard = document.getElementById("reports-card");
-  const reportsShell = document.getElementById("report-actions");
   const stopBtn = document.getElementById("stop-scan-btn");
 
   if (
@@ -23,8 +21,7 @@
     !logEl &&
     !timelineEl &&
     !baselineSummary &&
-    !hardwareSummary &&
-    !reportsShell
+    !hardwareSummary
   ) {
     return;
   }
@@ -205,31 +202,6 @@
     }
   }
 
-  function renderReports(data) {
-    if (!reportsCard || !reportsShell) {
-      return;
-    }
-    const report = data.report || {};
-    const state = String(data.state || "").toLowerCase();
-    const actions = [];
-      if (state === "done" || state === "stopped") {
-      if (report.html_name && data.scan_id) {
-        actions.push('<a class="btn" id="open-results-page" href="/scan/' + encodeURIComponent(data.scan_id) + '?tab=results">Open Results</a>');
-      }
-      if (report.html_name) {
-        actions.push('<a class="btn alt" id="open-html-report" href="/reports/' + encodeURIComponent(report.html_name) + '" target="_blank">Open HTML Report</a>');
-      }
-      if (report.csv_name) {
-        actions.push('<a class="btn alt" id="download-csv-report" href="/reports/' + encodeURIComponent(report.csv_name) + '" download>Download CSV File</a>');
-      }
-      if (data.scan_id) {
-        actions.push('<a class="btn ghost" id="download-log-report" href="/api/history/log/' + encodeURIComponent(data.scan_id) + '" download>Download Logs</a>');
-      }
-    }
-    reportsShell.innerHTML = actions.join("");
-    reportsCard.classList.toggle("hidden", actions.length === 0);
-  }
-
   function renderHardware(data) {
     if (!hardwareSummary) {
       return;
@@ -237,23 +209,15 @@
     const hardware = data.hardware || {};
     const cpuEl = document.getElementById("hardware-cpu");
     const ramEl = document.getElementById("hardware-ram");
-    const processEl = document.getElementById("hardware-process");
-    const workspaceEl = document.getElementById("hardware-workspace");
-    const diskEl = document.getElementById("hardware-disk");
+    const gpuEl = document.getElementById("hardware-gpu");
     if (cpuEl) {
       cpuEl.textContent = String(hardware.cpu_percent || "Sampling...");
     }
     if (ramEl) {
       ramEl.textContent = String(hardware.ram_text || "Unavailable");
     }
-    if (processEl) {
-      processEl.textContent = String(hardware.process_memory_text || "Unavailable");
-    }
-    if (workspaceEl) {
-      workspaceEl.textContent = String(hardware.workspace_text || "0 MB");
-    }
-    if (diskEl) {
-      diskEl.textContent = "Free disk in output location: " + String(hardware.disk_free_text || "Unavailable");
+    if (gpuEl) {
+      gpuEl.textContent = String(hardware.gpu_text || "Unavailable");
     }
   }
 
@@ -289,7 +253,6 @@
     }
     renderBaseline(data);
     renderHardware(data);
-    renderReports(data);
     if (stopBtn) {
       stopBtn.disabled = state !== "running";
     }

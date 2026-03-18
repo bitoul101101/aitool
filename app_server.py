@@ -35,6 +35,7 @@ import queue
 import re
 import secrets
 import shutil
+import subprocess
 import threading
 import tempfile
 import time
@@ -913,26 +914,48 @@ def _workspace_size_mb(scan_id: str) -> float:
 
 
 def _hardware_snapshot(session: ScanSession | None) -> dict:
-    scan_id = session.scan_id if session else ""
     cpu = _system_cpu_percent()
     ram_used_mb, ram_total_mb = _memory_snapshot()
-    proc_mb = _process_memory_mb()
-    workspace_mb = _workspace_size_mb(scan_id)
-    disk_free_gb = 0.0
     try:
-        disk_free_gb = shutil.disk_usage(OUTPUT_DIR).free / (1024 ** 3)
-    except OSError:
-        disk_free_gb = 0.0
+        gpu_text = _gpu_snapshot()
+    except (OSError, subprocess.SubprocessError, ValueError):
+        gpu_text = "Unavailable"
     ram_text = "Unavailable"
     if ram_used_mb is not None and ram_total_mb:
         ram_text = f"{_format_mb(ram_used_mb)} / {_format_mb(ram_total_mb)}"
     return {
         "cpu_percent": _format_percent(cpu) if cpu is not None else "Sampling...",
         "ram_text": ram_text,
-        "process_memory_text": _format_mb(proc_mb or 0.0) if proc_mb is not None else "Unavailable",
-        "workspace_text": _format_mb(workspace_mb),
-        "disk_free_text": f"{disk_free_gb:.1f} GB" if disk_free_gb else "Unavailable",
+        "gpu_text": gpu_text,
     }
+
+
+def _gpu_snapshot() -> str:
+    if os.name != "nt":
+        return "Unavailable"
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=utilization.gpu,memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "Unavailable"
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if not lines:
+        return "Unavailable"
+    first = lines[0]
+    parts = [part.strip() for part in first.split(",")]
+    if len(parts) < 3:
+        return "Unavailable"
+    gpu_util, mem_used, mem_total = parts[:3]
+    return f"{gpu_util}% | {mem_used} / {mem_total} MB"
 
 
 _settings_service = SettingsService(
@@ -1389,8 +1412,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "total": int(record.get("total", record.get("finding_total", 0)) or 0),
                 "suppressed_total": int(record.get("suppressed_total", 0) or 0),
             }
+        scan_complete = str(session_state or record.get("state", "")).lower() in {"done", "stopped", "error"}
 
         if tab == "results":
+            if not scan_complete:
+                return self._redirect(f"/scan/{quote(safe_scan_id)}?tab=activity")
             html_name = report.get("html_name", "")
             if not html_name:
                 return self._err(404, "HTML report not found for this scan")
