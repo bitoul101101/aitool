@@ -60,6 +60,7 @@ def _icon_uri(label: str, color: str) -> str:
 HTML_ICON = _icon_uri("HTML", "#21b35b")
 CSV_ICON = _icon_uri("CSV", "#21b35b")
 LOG_ICON = _icon_uri("LOG", "#1f4f98")
+DETAILS_ICON = _icon_uri("SCAN", "#6d3514")
 
 
 def _base_style() -> str:
@@ -137,13 +138,13 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
 .timeline-row.total-row,.timeline .timeline-row:last-child{margin-top:8px;padding-top:12px;border-top:2px solid #cfae8a;border-radius:0 0 10px 10px}
 .timeline-name{text-transform:capitalize}
-.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:560px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:calc(100vh - 210px);max-height:560px;min-height:320px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
 .timeline-card{padding:10px 12px}
 .timeline-card .timeline{gap:6px}
 .timeline-card .timeline-row{padding:6px 8px;font-size:12px}
-.hardware-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.hardware-grid{display:grid;grid-template-columns:1fr;gap:8px}
 .hardware-stat{padding:10px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
 .hardware-stat strong{display:block;font-size:16px;line-height:1.15;overflow-wrap:anywhere}
 .findings-panel,.mitigate-section,.suppressed-section{margin-top:12px;padding:12px;border:2px solid #cda274;border-radius:14px;background:#fffdf8}
@@ -209,6 +210,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .history-pagination{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:10px}
 .history-pagination .page-info{font-size:12px;color:#705333}
 .icon-link img{display:block;width:34px;height:34px}
+.empty-state{padding:18px;border:1px dashed #d8b995;border-radius:12px;background:#fcf6ee;color:#5d3b15}
 .filters-row{margin-bottom:12px}
 .results-shell{display:grid;gap:14px}
 .results-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
@@ -708,9 +710,11 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         project = rec.get("project_key", "")
         repo_label = ", ".join(rec.get("repo_slugs", rec.get("repos", [])))
         scan_id = str(rec.get("scan_id", "") or "")
-        repo_cell = _esc(repo_label)
-        if scan_id:
-            repo_cell = f'<a href="/scan/{_esc(scan_id)}?tab=activity">{_esc(repo_label)}</a>'
+        details_link = (
+            f'<a class="icon-link" href="/scan/{_esc(scan_id)}?tab=activity" title="Open scan details"><img src="{DETAILS_ICON}" alt="Details"></a>'
+            if scan_id
+            else ""
+        )
         date_text, time_text, ts = _fmt_dt(rec.get("started_at_utc", ""))
         state = str(rec.get("state", ""))
         status_class = {"running": "status-running", "done": "status-done", "stopped": "status-stopped"}.get(state.lower(), "")
@@ -719,16 +723,12 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         delta_new = delta.get("new_count", 0)
         delta_existing = delta.get("existing_count", delta.get("unchanged_count", 0))
         delta_fixed = delta.get("fixed_count", 0)
-        reports = (rec.get("reports") or {}).get("__all__", {})
-        html_link = f'<a class="icon-link" href="/reports/{_esc(reports.get("html_name",""))}" target="_blank" title="Open HTML Report"><img src="{HTML_ICON}" alt="HTML"></a>' if reports.get("html_name") else ""
-        csv_link = f'<a class="icon-link" href="/reports/{_esc(reports.get("csv_name",""))}" download title="Download CVS Report"><img src="{CSV_ICON}" alt="CSV"></a>' if reports.get("csv_name") else ""
-        log_link = f'<a class="icon-link" href="/api/history/log/{_esc(rec.get("scan_id",""))}" target="_blank" title="Open Log"><img src="{LOG_ICON}" alt="LOG"></a>' if rec.get("log_file") or state.lower() == "running" else ""
         rows.append(
             f'<tr data-project="{_esc(project)}" data-repo="{_esc(repo_label)}" data-status="{_esc(state)}" data-model="{_esc(rec.get("llm_model",""))}" data-ts="{ts}">'
             f'<td><input type="checkbox" class="history-check" name="scan_ids" value="{_esc(rec.get("scan_id",""))}"></td>'
             f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
             f'<td>{_esc(project)}</td>'
-            f'<td>{repo_cell}</td>'
+            f'<td>{_esc(repo_label)}</td>'
             f'<td>{_esc(total_findings)}</td>'
             f'<td>{_esc(delta_new)}</td>'
             f'<td>{_esc(delta_existing)}</td>'
@@ -738,7 +738,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             f'<td>{_esc(rec.get("llm_model", ""))}</td>'
             f'<td>{_esc(_fmt_duration(rec.get("duration_s", 0)))}</td>'
             f'<td><span class="pill {status_class}">{_esc(state.title())}</span></td>'
-            f'<td>{html_link}</td><td>{csv_link}</td><td>{log_link}</td></tr>'
+            f'<td>{details_link}</td></tr>'
         )
     body = f"""
 {_flash(notice, error)}
@@ -771,12 +771,10 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             <th data-sort="text">LLM<br>Model</th>
             <th data-sort="number">Duration</th>
             <th data-sort="text">Status</th>
-            <th>HTML</th>
-            <th>CSV</th>
-            <th>LOG</th>
+            <th>Details</th>
           </tr>
         </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="16">No scan history available.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="14">No scan history available.</td></tr>'}</tbody>
       </table>
     </div>
     <div class="history-pagination">
@@ -857,7 +855,7 @@ def render_results_page(
       </div>
     </div>
   </section>
-  <iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Detailed Report"></iframe>
+  {f'<iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Detailed Report"></iframe>' if html_name else '<section class="card empty-state"><strong>No report was generated for this scan.</strong><div class="muted" style="margin-top:6px">This usually means the scan completed without findings or stopped before report generation.</div></section>'}
 </section>"""
     return _layout(title="Results", body=body, active="", show_scan_results=show_scan_results, csrf_token=csrf_token)
 

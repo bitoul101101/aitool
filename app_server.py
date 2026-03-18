@@ -1418,8 +1418,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not scan_complete:
                 return self._redirect(f"/scan/{quote(safe_scan_id)}?tab=activity")
             html_name = report.get("html_name", "")
-            if not html_name:
-                return self._err(404, "HTML report not found for this scan")
             repo_label = ", ".join(repo_slugs)
             html = render_results_page(
                 scan_id=safe_scan_id,

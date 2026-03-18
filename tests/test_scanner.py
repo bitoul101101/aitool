@@ -1470,7 +1470,13 @@ def test_history_page_is_server_rendered():
     assert ">1</td>" in html
     assert ">2</td>" in html
     assert ">4</td>" in html
-    assert "/reports/r.html" in html
+    assert ">repo1</td>" in html
+    assert 'href="/scan/20260317_120000?tab=activity"' in html
+    assert 'title="Open scan details"' in html
+    assert ">Details</th>" in html
+    assert ">HTML</th>" not in html
+    assert ">CSV</th>" not in html
+    assert ">LOG</th>" not in html
     assert ".table-shell tbody tr:hover" in html
 
 
@@ -1496,6 +1502,23 @@ def test_results_page_is_server_rendered():
     assert '<h2>Results</h2>' in html
     assert "Review the completed scan and download the generated artifacts." in html
     assert 'repo1' not in html
+
+
+def test_results_page_handles_missing_html_report():
+    import app_server as srv
+
+    html = srv.render_results_page(
+        scan_id="20260318_140208",
+        project_key="COGI",
+        repo_label="repo1",
+        state="done",
+        html_name="",
+        csv_name="",
+        log_url="/api/history/log/20260318_140208",
+    ).decode("utf-8")
+
+    assert "No report was generated for this scan." in html
+    assert '<iframe class="results-frame"' not in html
 
 
 def test_render_results_page_resolves_current_session_report():
@@ -1538,6 +1561,48 @@ def test_render_results_page_resolves_current_session_report():
         assert handler.redirected == "/scan/20260318_150000?tab=results"
     finally:
         srv._session = orig_session
+
+
+def test_scan_workspace_results_page_handles_missing_report():
+    import app_server as srv
+
+    orig_find = srv._find_history_record_by_scan_id
+    try:
+        record = {
+            "scan_id": "20260318_150000",
+            "project_key": "COGI",
+            "repo_slugs": ["repo1"],
+            "state": "done",
+            "started_at_utc": "2026-03-18T15:00:00Z",
+            "reports": {"__all__": {}},
+            "delta": {},
+            "inventory": {},
+            "log_file": "",
+        }
+        srv._find_history_record_by_scan_id = lambda _scan_id: record
+
+        class DummyHandler:
+            def __init__(self):
+                self.path = "/scan/20260318_150000?tab=results"
+                self.sent = None
+
+            def _send(self, status, ct, body):
+                self.sent = (status, ct, body)
+
+            def _err(self, status, msg):
+                raise AssertionError(f"{status}: {msg}")
+
+        handler = DummyHandler()
+        with patch.object(srv, "_require_role", return_value=False), \
+             patch.object(srv, "_require_project_access", return_value=False), \
+             patch.object(srv, "_has_scan_results", return_value=False), \
+             patch.object(srv, "_current_csrf_token", return_value="csrf-demo"):
+            srv._Handler._render_scan_workspace_page(handler, "20260318_150000")
+
+        html = handler.sent[2].decode("utf-8")
+        assert "No report was generated for this scan." in html
+    finally:
+        srv._find_history_record_by_scan_id = orig_find
 
 
 def test_settings_page_is_server_rendered():
