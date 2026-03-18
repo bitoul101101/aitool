@@ -1,0 +1,162 @@
+import json
+import tempfile
+from io import BytesIO
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from reports.html_report import HTMLReporter
+
+
+def test_html_report_header_excludes_triage_summary_stats():
+    reporter = HTMLReporter(
+        output_dir=tempfile.mkdtemp(),
+        scan_id="20260317_024619",
+        meta={"suppressed_count": 2},
+    )
+    findings = [
+        {
+            "severity": 1,
+            "ai_category": "Secrets",
+            "repo": "cogi-rag",
+            "project_key": "COGI",
+            "file": "app.py",
+            "line": 12,
+            "policy_status": "BANNED",
+            "provider_or_lib": "hardcoded_key",
+            "capability": "api key",
+            "description": "Hardcoded credential",
+            "context": "production",
+        }
+    ]
+
+    html = reporter._render(findings, policy={})
+
+    assert "Reviewed" not in html
+    assert "Accepted Risk" not in html
+    assert "Suppressed" not in html
+
+
+def test_html_report_llm_enrichment_deduplicates_repeated_findings():
+    import urllib.request
+
+    reporter = HTMLReporter(output_dir=tempfile.mkdtemp(), scan_id="20260318_180000")
+    findings = [
+        {"file": "app.py", "line": 10, "provider_or_lib": "openai", "capability": "chat", "severity": 2},
+        {"file": "app.py", "line": 10, "provider_or_lib": "openai", "capability": "chat", "severity": 2},
+    ]
+
+    class FakeResponse(BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    calls = []
+
+    def fake_urlopen(req, timeout=0):
+        calls.append((req.full_url, timeout))
+        payload = json.dumps({"message": {"content": "## Why It's Problematic\nIssue.\n## How to Fix It\n- Fix\n- Test\n- Review\n## References\nhttps://owasp.org"}}).encode("utf-8")
+        return FakeResponse(payload)
+
+    with patch.object(urllib.request, "urlopen", side_effect=fake_urlopen):
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen")
+
+    assert len(calls) == 1
+    assert len(details) == 1
+
+
+def test_html_report_llm_enrichment_applies_budget_placeholder():
+    import urllib.request
+    from reports import html_report as report_mod
+
+    reporter = HTMLReporter(output_dir=tempfile.mkdtemp(), scan_id="20260318_180100")
+    findings = [
+        {"file": f"app{i}.py", "line": i, "provider_or_lib": "openai", "capability": "chat", "severity": 2}
+        for i in range(report_mod.REPORT_LLM_MAX_FINDINGS + 2)
+    ]
+
+    class FakeResponse(BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    calls = []
+
+    def fake_urlopen(req, timeout=0):
+        calls.append(req.full_url)
+        payload = json.dumps({"message": {"content": "## Why It's Problematic\nIssue.\n## How to Fix It\n- Fix\n- Test\n- Review\n## References\nhttps://owasp.org"}}).encode("utf-8")
+        return FakeResponse(payload)
+
+    with patch.object(urllib.request, "urlopen", side_effect=fake_urlopen):
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen")
+
+    assert len(calls) == report_mod.REPORT_LLM_MAX_FINDINGS
+    skipped_key = f"app{report_mod.REPORT_LLM_MAX_FINDINGS}.py:{report_mod.REPORT_LLM_MAX_FINDINGS}:openai"
+    assert "skipped for this finding" in details[skipped_key]
+
+
+def test_save_tls_settings_validates_pem_bundle_content():
+    import ssl
+    from services.settings_service import SettingsService
+
+    temp_root = Path(tempfile.mkdtemp())
+    pem_path = temp_root / "corp-root.pem"
+    pem_path.write_text("-----BEGIN CERTIFICATE-----\nplaceholder\n-----END CERTIFICATE-----\n", encoding="utf-8")
+
+    captured = {}
+    service = SettingsService(
+        load_llm_config=lambda: {},
+        save_llm_config=lambda cfg: None,
+        load_tls_config=lambda: {},
+        save_tls_config=lambda cfg: captured.update(cfg),
+        ensure_ollama_running=lambda url: {"ok": True},
+        list_ollama_models=lambda url: [],
+        audit_event=lambda action, **details: None,
+        sync_paths=lambda: None,
+    )
+
+    fake_ctx = MagicMock()
+    with patch.object(ssl, "create_default_context", return_value=fake_ctx):
+        result = service.save_tls_settings(verify_ssl=True, ca_bundle=str(pem_path))
+
+    assert result["ok"] is True
+    assert captured["ca_bundle"] == str(pem_path.resolve())
+    fake_ctx.load_verify_locations.assert_called_once_with(cafile=str(pem_path.resolve()))
+
+
+def test_save_tls_settings_rejects_non_pem_bundle_with_clear_error():
+    from services.settings_service import SettingsService
+
+    temp_root = Path(tempfile.mkdtemp())
+    der_like = temp_root / "corp_rootCA.cer"
+    der_like.write_bytes(b"\x30\x82\x01\x0a\x02\x82\x01\x01\x00\xff\x00\x01")
+
+    service = SettingsService(
+        load_llm_config=lambda: {},
+        save_llm_config=lambda cfg: None,
+        load_tls_config=lambda: {},
+        save_tls_config=lambda cfg: None,
+        ensure_ollama_running=lambda url: {"ok": True},
+        list_ollama_models=lambda url: [],
+        audit_event=lambda action, **details: None,
+        sync_paths=lambda: None,
+    )
+
+    try:
+        service.save_tls_settings(verify_ssl=True, ca_bundle=str(der_like))
+        raise AssertionError("Expected PEM validation failure")
+    except ValueError as exc:
+        assert "valid PEM certificate bundle" in str(exc)
+
+
+def test_report_server_allows_only_its_local_origin():
+    from reports.report_server import _allowed_origin
+
+    assert _allowed_origin("http://127.0.0.1:8123", 8123) == "http://127.0.0.1:8123"
+    assert _allowed_origin("http://localhost:8123", 8123) == "http://localhost:8123"
+    assert _allowed_origin("http://127.0.0.1:5757", 8123) is None
+    assert _allowed_origin("https://evil.example", 8123) is None
+    assert _allowed_origin("", 8123) is None
