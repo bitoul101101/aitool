@@ -500,16 +500,20 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 .hdr.risk-high .hdr-accent{background:linear-gradient(90deg,#d86a00,#f0b24a);}
 .hdr.risk-med  .hdr-accent{background:linear-gradient(90deg,#c08a00,#e2c16d);}
 
-/* title band — compact single row */
+/* title band */
 .hdr-band{
-  display:flex;align-items:center;justify-content:center;gap:10px;
-  padding:11px 22px 10px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 22px 12px;
   border-bottom:1px solid rgba(255,255,255,.1);
 }
-.hdr-band-icon{font-size:20px;line-height:1;flex-shrink:0;}
+.hdr-band-copy{display:flex;flex-direction:column;gap:4px}
 .hdr-band-title{
-  font-size:19px;font-weight:800;color:#fff;
-  letter-spacing:-.3px;line-height:1;text-align:center;
+  font-size:20px;font-weight:800;color:#fff;
+  letter-spacing:-.3px;line-height:1.1;
+}
+.hdr-band-subtitle{
+  font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:rgba(255,255,255,.68);
 }
 
 /* body: meta + stats side by side */
@@ -672,7 +676,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
 .detail-panel li{margin-bottom:3px;}
 .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
-.inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.inventory-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .inventory-card{padding:12px 14px;border:1px solid var(--bdr);border-radius:12px;background:var(--card)}
 .inventory-card strong{display:block;font-size:22px;line-height:1.1}
 .inventory-list{display:flex;gap:6px;flex-wrap:wrap}
@@ -714,7 +718,8 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
       border-top:1px solid var(--bdr);margin-top:12px;}
 
 .divider{border:0;border-top:1px solid var(--bdr);margin:14px 0;}
-@media(max-width:700px){.kpis{flex-direction:column;}}
+@media(max-width:1100px){.inventory-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:700px){.kpis{flex-direction:column;}.inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 
 /* ── Tool description popover ── */
 .tip-wrap{position:relative;display:inline-block;cursor:default;}
@@ -965,8 +970,10 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
         return f"""<div class="hdr {risk_cls}">
   <div class="hdr-accent"></div>
   <div class="hdr-band">
-    <div class="hdr-band-icon">🔍</div>
-    <div class="hdr-band-title">AI Security &amp; Compliance Scan Report</div>
+    <div class="hdr-band-copy">
+      <div class="hdr-band-title">AI Security &amp; Compliance Scan Report</div>
+      <div class="hdr-band-subtitle">Findings summary and detailed evidence</div>
+    </div>
   </div>
   <div class="hdr-body">
     <div class="hdr-meta">{meta_rows}</div>

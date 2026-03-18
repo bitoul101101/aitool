@@ -704,7 +704,7 @@ def test_save_history_record_creates_file():
         assert r["inventory"]["repos_using_ai_count"] == 1
 
         # Log file should exist
-        log_path = Path(srv.LOG_DIR) / "20250315_120000.log"
+        log_path = Path(srv.LOG_DIR) / "20250315_120000.txt"
         assert log_path.exists(), "Log file not created"
         log_text = log_path.read_text()
         assert "Test log entry" in log_text
@@ -1033,6 +1033,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "old.py:12" in html
     assert "New" in html
     assert "Existing" in html
+    assert "submitInFlight=true" in html
 
 
 def test_scan_session_log_normalizes_blank_lines():
@@ -1342,6 +1343,9 @@ def test_results_page_is_server_rendered():
     assert 'Download CSV File' in html
     assert 'Download Logs' in html
     assert 'Back to Scan' in html
+    assert '<h2>Scan Results</h2>' in html
+    assert "Review the completed scan and download the generated artifacts." in html
+    assert 'repo1' not in html
 
 
 def test_render_results_page_resolves_current_session_report():
@@ -1379,7 +1383,7 @@ def test_render_results_page_resolves_current_session_report():
 
         html = handler.sent[2].decode("utf-8")
         assert 'src="/reports/current.html"' in html
-        assert "repo1" in html
+        assert "<h2>Scan Results</h2>" in html
     finally:
         srv._session = orig_session
 
@@ -1609,7 +1613,7 @@ def test_get_log_text_reads_from_sqlite_when_file_missing():
         session.log("SQLite-backed log entry", "info")
         srv._save_history_record(session, [])
 
-        log_path = Path(srv.LOG_DIR) / "20250316_020202.log"
+        log_path = Path(srv.LOG_DIR) / "20250316_020202.txt"
         if log_path.exists():
             log_path.unlink()
 

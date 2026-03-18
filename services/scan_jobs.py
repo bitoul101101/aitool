@@ -501,9 +501,10 @@ class ScanJobService:
                 return "\n".join(lines) + "\n"
         except Exception:
             pass
-        path = Path(self.paths.log_dir) / f"{scan_id}.log"
-        if path.exists():
-            return path.read_text("utf-8")
+        for suffix in (".txt", ".log"):
+            path = Path(self.paths.log_dir) / f"{scan_id}{suffix}"
+            if path.exists():
+                return path.read_text("utf-8")
         return ""
 
     def delete_history(self, scan_ids: list[str]) -> None:
@@ -548,7 +549,7 @@ class ScanJobService:
         try:
             Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
             Path(self.paths.log_dir).mkdir(parents=True, exist_ok=True)
-            log_path = Path(self.paths.log_dir) / f"{session.scan_id}.log"
+            log_path = Path(self.paths.log_dir) / f"{session.scan_id}.txt"
             try:
                 with open(log_path, "w", encoding="utf-8") as fh:
                     for entry in session.log_lines:

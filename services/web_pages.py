@@ -176,6 +176,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
   .baseline-fixed-list li{margin:0 0 6px}
   .inventory-summary{display:grid;gap:8px}
   .inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .inventory-grid-wide{grid-template-columns:repeat(6,minmax(0,1fr))}
   .inventory-stat{padding:10px 12px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8}
   .inventory-stat strong{display:block;font-size:18px;line-height:1.1}
   .inventory-list{display:flex;flex-wrap:wrap;gap:6px}
@@ -204,12 +205,13 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .icon-link img{display:block;width:34px;height:34px}
 .filters-row{margin-bottom:12px}
 .results-shell{display:grid;gap:14px}
-.results-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.results-actions{display:flex;gap:8px;flex-wrap:wrap}
-.results-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.results-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.results-title h2{margin:0 0 4px;font-size:22px}
+.results-title p{margin:0;color:#705333}
+.results-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .results-frame{width:100%;min-height:calc(100vh - 220px);border:1px solid #d8b995;border-radius:14px;background:#fff}
-@media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}}
-@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}}
+@media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}.inventory-grid-wide{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(42,124,255,.35)}50%{opacity:.35;box-shadow:0 0 0 5px rgba(42,124,255,0)}}
 """
@@ -550,12 +552,10 @@ def render_scan_page(
     <section class="card">
       <h2 style="margin:0 0 8px;font-size:16px">AI Inventory</h2>
       <div class="inventory-summary" id="inventory-summary">
-        <div class="inventory-grid">
+        <div class="inventory-grid inventory-grid-wide">
           <div class="inventory-stat"><span class="baseline-label">Repos Using AI</span><strong id="inventory-repos-ai">{_esc(inventory.get("repos_using_ai_count", 0))}/{_esc(inventory.get("repos_total", 0))}</strong></div>
           <div class="inventory-stat"><span class="baseline-label">Providers</span><strong id="inventory-provider-count">{_esc(inventory.get("provider_count", 0))}</strong></div>
           <div class="inventory-stat"><span class="baseline-label">Models</span><strong id="inventory-model-count">{_esc(inventory.get("model_count", 0))}</strong></div>
-        </div>
-        <div class="inventory-grid">
           <div class="inventory-stat"><span class="baseline-label">Embeddings / Vector DB</span><strong id="inventory-embed-count">{_esc(inventory.get("embeddings_vector_db_repos", 0))}</strong></div>
           <div class="inventory-stat"><span class="baseline-label">Prompt Handling</span><strong id="inventory-prompt-count">{_esc(inventory.get("prompt_handling_repos", 0))}</strong></div>
           <div class="inventory-stat"><span class="baseline-label">Model Serving / Agent Use</span><strong id="inventory-serving-agent">{_esc(inventory.get("model_serving_repos", 0))}/{_esc(inventory.get("agent_tool_use_repos", 0))}</strong></div>
@@ -600,7 +600,7 @@ def render_scan_page(
     <div class="project-list">{project_links}</div>
   </aside>
   <section class="card repo-panel">
-    <form method="post" action="/scan/start" class="stack">
+    <form method="post" action="/scan/start" class="stack" id="new-scan-form">
       <input type="hidden" name="project_key" value="{_esc(selected_project)}">
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
@@ -668,6 +668,7 @@ function triagePromptSubmit(form, actionLabel){{
 const repoSearch=document.getElementById('repo-search');
 const repoCount=document.getElementById('repo-selection-count');
 const startScanBtn=document.getElementById('start-scan-btn');
+const newScanForm=document.getElementById('new-scan-form');
 function repoCheckboxes(){{return Array.from(document.querySelectorAll('.repo-checkbox'));}}
 function updateRepoCount(){{const selectedCount=repoCheckboxes().filter(cb=>cb.checked).length;if(repoCount) repoCount.textContent=`${{selectedCount}} selected`; if(startScanBtn && !startScanBtn.dataset.blockedByRun) startScanBtn.disabled=selectedCount===0;}}
 function filterRepos(){{if(!repoSearch) return; const q=(repoSearch.value||'').toLowerCase().trim();document.querySelectorAll('.repo-row').forEach(row=>{{row.style.display=!q || (row.dataset.repoName||'').includes(q)?'flex':'none';}});updateRepoCount();}}
@@ -681,6 +682,7 @@ filterRepos();
   const runningNotice=document.getElementById('running-scan-notice');
   const modelSelect=document.getElementById('llm-model-select');
   const modelWarning=document.getElementById('model-size-warning');
+  let submitInFlight=false;
   function parseModelSize(model){{
     const m=(model||'').toLowerCase().match(/(^|[^0-9])(\\d+(?:\\.\\d+)?)\\s*([bm])(?!\\w)/);
     if(!m) return 0;
@@ -695,6 +697,7 @@ filterRepos();
   }}
   async function updateStartAvailability(){{
     if(!startBtn && !runningNotice) return;
+    if(submitInFlight) return;
     try {{
       const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
       const data=await res.json();
@@ -710,6 +713,14 @@ filterRepos();
     }} catch (_err) {{}}
   }}
   modelSelect?.addEventListener('change', updateModelWarning);
+  newScanForm?.addEventListener('submit', () => {{
+    submitInFlight=true;
+    if(startBtn) {{
+      startBtn.dataset.blockedByRun='';
+      startBtn.disabled=true;
+    }}
+    runningNotice?.classList.add('hidden');
+  }});
   updateModelWarning();
   updateStartAvailability();
   if(startBtn || runningNotice) setInterval(updateStartAvailability, 3000);
@@ -1135,9 +1146,6 @@ def render_results_page(
     notice: str = "",
     error: str = "",
 ) -> bytes:
-    date_text, time_text, _ = _fmt_dt(started_at_utc)
-    state_name = (state or "done").title()
-    status_class = "status-done" if state.lower() == "done" else "status-stopped" if state.lower() == "stopped" else "status-running"
     toolbar_actions = []
     if html_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
@@ -1150,12 +1158,9 @@ def render_results_page(
 <section class="results-shell">
   <section class="card">
     <div class="results-toolbar">
-      <div class="results-meta">
-        <span class="pill">{_esc(project_key or "-")}</span>
-        <span class="pill">{_esc(repo_label or "-")}</span>
-        <span class="pill">{_esc(scan_id)}</span>
-        <span class="pill {status_class}">{_esc(state_name)}</span>
-        <span class="muted">{_esc(date_text)} {_esc(time_text)}</span>
+      <div class="results-title">
+        <h2>Scan Results</h2>
+        <p>Review the completed scan and download the generated artifacts.</p>
       </div>
       <div class="results-actions">
         <a class="btn ghost" href="/scan">Back to Scan</a>

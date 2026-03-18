@@ -337,7 +337,7 @@ def _is_tool_generated_legacy_file(path: Path, *, scan_id: str, artifact: str) -
     if "output" not in lowered:
         return False
     if artifact == "log":
-        return path.name == f"{scan_id}.log" and path.parent.name.lower() == "logs"
+        return path.name in {f"{scan_id}.txt", f"{scan_id}.log"} and path.parent.name.lower() == "logs"
     if artifact == "html":
         return path.suffix.lower() == ".html" and path.name.lower().startswith("ai_scan_")
     if artifact == "csv":
@@ -447,7 +447,7 @@ def _report_record_for_scan(scan_id: str) -> dict | None:
             "state": _session.state,
             "started_at_utc": _session.started_at_utc,
             "reports": {"__all__": current_report},
-            "log_file": f"{scan_id}.log" if scan_id else "",
+            "log_file": f"{scan_id}.txt" if scan_id else "",
         }
     return _find_history_record_by_scan_id(scan_id)
 
@@ -1258,7 +1258,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         log_text = _get_log_text(safe)
         if not log_text:
             return self._err(404, "Log not found")
-        self._send(200, "text/plain; charset=utf-8", log_text.encode("utf-8"))
+        body = log_text.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="{safe}.txt"')
+        self._cors()
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+            return
 
     def _api_settings_save(self, body: dict):
         global OUTPUT_DIR, HISTORY_FILE, LOG_DIR, DB_FILE, AUDIT_FILE
