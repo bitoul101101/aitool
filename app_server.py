@@ -92,6 +92,7 @@ from services.runtime_support import (
     load_llm_config as load_llm_config_file,
     ollama_list_models,
     ollama_ping,
+    ollama_snapshot,
     save_llm_config as save_llm_config_file,
 )
 
@@ -189,6 +190,10 @@ def _ollama_ping(base_url: str) -> bool:
 
 def _ollama_list_models(base_url: str) -> list:
     return ollama_list_models(base_url, timeout=5)
+
+
+def _ollama_snapshot(base_url: str, *, refresh: bool = False) -> dict:
+    return ollama_snapshot(base_url, timeout=5, refresh=refresh)
 
 
 OLLAMA_START_TIMEOUT = 15   # seconds to wait for ollama serve to become ready
@@ -763,10 +768,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return self._redirect("/login")
             self._render_help_page()
         elif p == "/api/status":
+            llm_cfg = load_llm_config()
+            llm_info = _ollama_snapshot(llm_cfg.get("base_url", "http://localhost:11434"), refresh=False)
             self._json({
                 "ok": True,
                 "version": APP_VERSION,
-                "llm": load_llm_config(),
+                "llm": llm_cfg,
+                "ollama": {
+                    "base_url": llm_info.get("base_url", ""),
+                    "reachable": bool(llm_info.get("reachable", False)),
+                    "models": list(llm_info.get("models", [])),
+                    "stale": bool(llm_info.get("stale", False)),
+                    "fetched_at": llm_info.get("fetched_at", 0),
+                },
                 "has_saved_pat": bool(load_pat()),
                 "auth": _operator_state.public_auth(),
                 "connected": _is_connected(),
@@ -812,14 +826,21 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return
             self._sse_stream()
         elif p == "/api/ollama/models":
-            if _require_role(self, ROLE_ADMIN):
+            if _require_role(self, ROLE_VIEWER):
                 return
             qs  = parse_qs(parsed.query)
             url = (qs.get("url", [None])[0] or
                    load_llm_config().get("base_url", "http://localhost:11434"))
             url = url.strip()
-            self._json({"models": _ollama_list_models(url),
-                        "base_url": url})
+            refresh = (qs.get("refresh", [""])[0] or "").lower() in {"1", "true", "yes"}
+            snapshot = _ollama_snapshot(url, refresh=refresh)
+            self._json({
+                "models": list(snapshot.get("models", [])),
+                "base_url": snapshot.get("base_url", url),
+                "reachable": bool(snapshot.get("reachable", False)),
+                "stale": bool(snapshot.get("stale", False)),
+                "fetched_at": snapshot.get("fetched_at", 0),
+            })
         elif p.startswith("/reports/"):
             if _require_role(self, ROLE_VIEWER):
                 return
@@ -920,7 +941,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             selected_repos=effective_selected_repos,
             status=status,
             llm_cfg=load_llm_config(),
-            llm_models=_ollama_list_models(load_llm_config().get("base_url", "http://localhost:11434")),
+            llm_models=_ollama_snapshot(load_llm_config().get("base_url", "http://localhost:11434"), refresh=False).get("models", []),
             log_text=_format_log_text(session_log_lines),
             phase_timeline=_phase_timeline(session_log_lines, session_state),
             force_selection=fresh_scan,

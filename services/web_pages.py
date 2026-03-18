@@ -677,11 +677,11 @@ document.getElementById('select-all-repos-btn')?.addEventListener('click',()=>{{
 document.getElementById('select-none-repos-btn')?.addEventListener('click',()=>{{repoCheckboxes().forEach(cb=>cb.checked=false);updateRepoCount();}});
 repoCheckboxes().forEach(cb=>cb.addEventListener('change',updateRepoCount));
 filterRepos();
-(function() {{
-  const startBtn=document.getElementById('start-scan-btn');
-  const runningNotice=document.getElementById('running-scan-notice');
-  const modelSelect=document.getElementById('llm-model-select');
-  const modelWarning=document.getElementById('model-size-warning');
+  (function() {{
+    const startBtn=document.getElementById('start-scan-btn');
+    const runningNotice=document.getElementById('running-scan-notice');
+    const modelSelect=document.getElementById('llm-model-select');
+    const modelWarning=document.getElementById('model-size-warning');
   let submitInFlight=false;
   function parseModelSize(model){{
     const m=(model||'').toLowerCase().match(/(^|[^0-9])(\\d+(?:\\.\\d+)?)\\s*([bm])(?!\\w)/);
@@ -694,6 +694,29 @@ filterRepos();
     const under4b=parseModelSize(modelSelect.value) > 0 && parseModelSize(modelSelect.value) < 4;
     modelWarning.textContent='Selected model is below 4B and may be unreliable for LLM review.';
     modelWarning.classList.toggle('hidden', !under4b);
+  }}
+  function escHtml(value){{
+    return String(value ?? '').replace(/[&<>\"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[ch]));
+  }}
+  function setModelOptions(models){{
+    if(!modelSelect || !Array.isArray(models) || !models.length) return;
+    const currentValue=modelSelect.value || '';
+    const uniqueModels=[...new Set(models.filter(Boolean))];
+    if(currentValue && !uniqueModels.includes(currentValue)) uniqueModels.unshift(currentValue);
+    modelSelect.innerHTML=uniqueModels.map(name => '<option value="' + escHtml(name) + '">' + escHtml(name) + '</option>').join('');
+    if(uniqueModels.includes(currentValue)) modelSelect.value=currentValue;
+    updateModelWarning();
+  }}
+  async function refreshModels(){{
+    if(!modelSelect) return;
+    try {{
+      const url=new URL('/api/ollama/models', window.location.origin);
+      url.searchParams.set('refresh','1');
+      const res=await fetch(url.toString(), {{headers:{{'Accept':'application/json'}}}});
+      if(!res.ok) return;
+      const data=await res.json();
+      setModelOptions(data.models || []);
+    }} catch (_err) {{}}
   }}
   async function updateStartAvailability(){{
     if(!startBtn && !runningNotice) return;
@@ -723,8 +746,9 @@ filterRepos();
   }});
   updateModelWarning();
   updateStartAvailability();
+  refreshModels();
   if(startBtn || runningNotice) setInterval(updateStartAvailability, 3000);
-}})();
+ }})();
 (function() {{
   const logEl=document.getElementById('scan-log');
   const textEl=document.getElementById('scan-state-text');

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -13,6 +14,10 @@ DEFAULT_LLM_CONFIG = {
     "base_url": "http://localhost:11434",
     "model": "qwen2.5-coder:7b-instruct",
 }
+
+_OLLAMA_CACHE_TTL_S = 30
+_OLLAMA_CACHE_LOCK = threading.RLock()
+_OLLAMA_CACHE: dict[str, dict] = {}
 
 
 def load_llm_config(path: str) -> dict:
@@ -44,15 +49,53 @@ def ollama_ping(base_url: str, *, timeout: int = 4) -> bool:
         return False
 
 
-def ollama_list_models(base_url: str, *, timeout: int = 6) -> list[str]:
-    """Return model names exposed by Ollama /api/tags."""
+def ollama_snapshot(
+    base_url: str,
+    *,
+    timeout: int = 6,
+    refresh: bool = False,
+    max_age_s: int = _OLLAMA_CACHE_TTL_S,
+) -> dict:
+    """Return cached Ollama reachability and models from /api/tags."""
+    normalized = (base_url or DEFAULT_LLM_CONFIG["base_url"]).rstrip("/")
+    now = time.time()
+    with _OLLAMA_CACHE_LOCK:
+        cached = dict(_OLLAMA_CACHE.get(normalized, {}))
+    if (
+        cached
+        and not refresh
+        and (now - float(cached.get("fetched_at", 0.0))) <= max_age_s
+    ):
+        return cached
+
+    snapshot = {
+        "base_url": normalized,
+        "reachable": False,
+        "models": [],
+        "fetched_at": now,
+        "stale": False,
+    }
     try:
-        req = urllib.request.Request(base_url.rstrip("/") + "/api/tags")
+        req = urllib.request.Request(normalized + "/api/tags")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read())
-            return sorted(m.get("name", "") for m in data.get("models", []) if m.get("name"))
+        models = sorted(m.get("name", "") for m in data.get("models", []) if m.get("name"))
+        snapshot.update({"reachable": True, "models": models})
     except Exception:
-        return []
+        if cached:
+            snapshot.update({
+                "reachable": bool(cached.get("reachable", False)),
+                "models": list(cached.get("models", [])),
+                "stale": True,
+            })
+    with _OLLAMA_CACHE_LOCK:
+        _OLLAMA_CACHE[normalized] = dict(snapshot)
+    return snapshot
+
+
+def ollama_list_models(base_url: str, *, timeout: int = 6) -> list[str]:
+    """Return model names exposed by Ollama /api/tags."""
+    return list(ollama_snapshot(base_url, timeout=timeout, refresh=True).get("models", []))
 
 
 def ensure_ollama_running(
