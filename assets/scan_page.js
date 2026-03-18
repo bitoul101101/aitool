@@ -233,25 +233,29 @@
     }
     const llm = data.llm_stats || {};
     const modelEl = document.getElementById("llm-model");
-    const batchEl = document.getElementById("llm-batch-progress");
-    const elapsedEl = document.getElementById("llm-elapsed");
-    const reviewedEl = document.getElementById("llm-reviewed-skipped");
-    const dismissedEl = document.getElementById("llm-dismissed-downgraded");
+    const elapsedEl = document.getElementById("llm-phase-elapsed");
+    const lastBatchEl = document.getElementById("llm-last-batch");
+    const avgBatchEl = document.getElementById("llm-avg-batch");
+    const avgPerFindingEl = document.getElementById("llm-avg-per-finding");
+    const throughputEl = document.getElementById("llm-throughput");
     const failedEl = document.getElementById("llm-failed-batches");
     if (modelEl) {
       modelEl.textContent = String(llm.model || "Unavailable");
     }
-    if (batchEl) {
-      batchEl.textContent = String(llm.batch_progress || "—");
-    }
     if (elapsedEl) {
-      elapsedEl.textContent = String(llm.elapsed || "—");
+      elapsedEl.textContent = String(llm.phase_elapsed || "—");
     }
-    if (reviewedEl) {
-      reviewedEl.textContent = String(llm.reviewed_skipped || "—");
+    if (lastBatchEl) {
+      lastBatchEl.textContent = String(llm.last_batch || "—");
     }
-    if (dismissedEl) {
-      dismissedEl.textContent = String(llm.dismissed_downgraded || "—");
+    if (avgBatchEl) {
+      avgBatchEl.textContent = String(llm.avg_batch || "—");
+    }
+    if (avgPerFindingEl) {
+      avgPerFindingEl.textContent = String(llm.avg_per_finding || "—");
+    }
+    if (throughputEl) {
+      throughputEl.textContent = String(llm.throughput || "—");
     }
     if (failedEl) {
       failedEl.textContent = String(llm.failed_batches || "0");

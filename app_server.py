@@ -781,6 +781,17 @@ def _format_mmss(seconds: int) -> str:
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
+def _format_seconds_compact(seconds: float | int | None) -> str:
+    if seconds is None:
+        return "—"
+    value = max(float(seconds or 0), 0.0)
+    if value >= 60:
+        return _format_mmss(int(round(value)))
+    if value >= 10:
+        return f"{value:.1f}s"
+    return f"{value:.2f}s"
+
+
 def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm_model_info: dict | None = None) -> dict:
     model_info = dict(llm_model_info or {})
     model_text = ""
@@ -794,18 +805,13 @@ def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm
         model_text = " | ".join(model_parts)
 
     reviewed = 0
-    skipped = 0
-    dismissed = 0
-    downgraded = 0
     failed_batches = 0
-    batch_current = 0
-    batch_total = 0
+    batch_markers: list[tuple[int, int, float]] = []
     llm_start: float | None = None
     llm_end: float | None = None
 
     reviewing_re = re.compile(r"\[LLM\]\s+Reviewing\s+(\d+)\s+finding\(s\).*?(?:\((\d+)\s+skipped)", re.IGNORECASE)
     batch_re = re.compile(r"\[LLM\]\s+Batch\s+(\d+)/(\d+)", re.IGNORECASE)
-    done_re = re.compile(r"dismissed:(\d+).*?downgraded:(\d+)", re.IGNORECASE)
 
     for entry in entries:
         msg = str(entry.get("msg", "") or "").strip()
@@ -821,37 +827,36 @@ def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm
         match = reviewing_re.search(msg)
         if match:
             reviewed += int(match.group(1) or 0)
-            skipped += int(match.group(2) or 0)
         match = batch_re.search(msg)
         if match:
-            batch_current = int(match.group(1) or 0)
-            batch_total = int(match.group(2) or 0)
+            batch_markers.append((int(match.group(1) or 0), int(match.group(2) or 0), ts))
         if "[LLM] Batch" in msg and "failed" in msg.lower():
             failed_batches += 1
-        if "[LLM] ↓ DOWNGRADE" in msg:
-            downgraded += 1
-        if "[LLM] Done" in msg:
-            match = done_re.search(msg)
-            if match:
-                dismissed += int(match.group(1) or 0)
-                downgraded = max(downgraded, int(match.group(2) or 0))
 
+    elapsed_seconds = None
     if llm_start is not None:
         end_ts = llm_end if llm_end is not None else (float(entries[-1].get("ts") or llm_start) if entries else llm_start)
-        elapsed_text = _format_mmss(max(int(end_ts - llm_start), 0))
-    else:
-        elapsed_text = "—"
+        elapsed_seconds = max(end_ts - llm_start, 0.0)
 
-    batch_progress = f"{batch_current}/{batch_total}" if batch_total else "—"
-    if str(state or "").lower() in {"done", "stopped", "error"} and batch_total and batch_current < batch_total:
-        batch_progress = f"{batch_total}/{batch_total}"
+    batch_durations: list[float] = []
+    for index, (_current, _total, ts) in enumerate(batch_markers):
+        next_ts = batch_markers[index + 1][2] if index + 1 < len(batch_markers) else llm_end
+        if next_ts is None:
+            continue
+        batch_durations.append(max(float(next_ts) - ts, 0.0))
+
+    avg_batch = (sum(batch_durations) / len(batch_durations)) if batch_durations else None
+    last_batch = batch_durations[-1] if batch_durations else None
+    avg_per_finding = (elapsed_seconds / reviewed) if elapsed_seconds is not None and reviewed > 0 else None
+    throughput = ((reviewed / elapsed_seconds) * 60.0) if elapsed_seconds and reviewed > 0 else None
 
     return {
         "model": model_text or model_name or "Unavailable",
-        "batch_progress": batch_progress,
-        "elapsed": elapsed_text,
-        "reviewed_skipped": f"{reviewed} / {skipped}" if llm_start is not None or reviewed or skipped else "—",
-        "dismissed_downgraded": f"{dismissed} / {downgraded}" if llm_start is not None or dismissed or downgraded else "—",
+        "phase_elapsed": _format_mmss(int(round(elapsed_seconds))) if elapsed_seconds is not None else "—",
+        "last_batch": _format_seconds_compact(last_batch),
+        "avg_batch": _format_seconds_compact(avg_batch),
+        "avg_per_finding": _format_seconds_compact(avg_per_finding),
+        "throughput": f"{throughput:.1f} findings/min" if throughput is not None else "—",
         "failed_batches": str(failed_batches),
     }
 

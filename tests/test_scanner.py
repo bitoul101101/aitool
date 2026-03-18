@@ -1116,9 +1116,11 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'id="hardware-gpu"' in html
     assert 'id="hardware-disk-io"' in html
     assert 'id="llm-model"' in html
-    assert 'id="llm-batch-progress"' in html
-    assert 'id="llm-reviewed-skipped"' in html
-    assert 'id="llm-dismissed-downgraded"' in html
+    assert 'id="llm-phase-elapsed"' in html
+    assert 'id="llm-last-batch"' in html
+    assert 'id="llm-avg-batch"' in html
+    assert 'id="llm-avg-per-finding"' in html
+    assert 'id="llm-throughput"' in html
     assert 'id="llm-failed-batches"' in html
     assert '<div class="workspace-header">' in html
     assert html.index("Activity Log") < html.index('id="new-scan-btn"')
@@ -1163,10 +1165,11 @@ def test_llm_stats_are_derived_from_log_entries():
     stats = srv._llm_stats(entries, state="done")
 
     assert stats["model"] == "qwen2.5-coder:7b-instruct | 7.6B | Q4_K_M"
-    assert stats["batch_progress"] == "2/2"
-    assert stats["elapsed"] == "00:10"
-    assert stats["reviewed_skipped"] == "4 / 3"
-    assert stats["dismissed_downgraded"] == "1 / 1"
+    assert stats["phase_elapsed"] == "00:10"
+    assert stats["last_batch"] == "4.00s"
+    assert stats["avg_batch"] == "4.00s"
+    assert stats["avg_per_finding"] == "2.50s"
+    assert stats["throughput"] == "24.0 findings/min"
     assert stats["failed_batches"] == "0"
 
 

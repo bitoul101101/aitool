@@ -628,10 +628,11 @@ def render_scan_page(
       <div class="baseline-summary" id="llm-summary">
         <div class="llm-grid">
           <div class="llm-stat"><span class="baseline-label">Model</span><strong id="llm-model">{_esc(llm_stats.get("model", "Unavailable"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Batch Progress</span><strong id="llm-batch-progress">{_esc(llm_stats.get("batch_progress", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Elapsed</span><strong id="llm-elapsed">{_esc(llm_stats.get("elapsed", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Reviewed / Skipped</span><strong id="llm-reviewed-skipped">{_esc(llm_stats.get("reviewed_skipped", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Dismissed / Downgraded</span><strong id="llm-dismissed-downgraded">{_esc(llm_stats.get("dismissed_downgraded", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">LLM Phase Elapsed</span><strong id="llm-phase-elapsed">{_esc(llm_stats.get("phase_elapsed", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Last Batch</span><strong id="llm-last-batch">{_esc(llm_stats.get("last_batch", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Average Batch</span><strong id="llm-avg-batch">{_esc(llm_stats.get("avg_batch", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Average / Finding</span><strong id="llm-avg-per-finding">{_esc(llm_stats.get("avg_per_finding", "—"))}</strong></div>
+          <div class="llm-stat"><span class="baseline-label">Throughput</span><strong id="llm-throughput">{_esc(llm_stats.get("throughput", "—"))}</strong></div>
           <div class="llm-stat"><span class="baseline-label">Failed Batches</span><strong id="llm-failed-batches">{_esc(llm_stats.get("failed_batches", "0"))}</strong></div>
         </div>
       </div>
