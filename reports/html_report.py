@@ -552,6 +552,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.62);
   margin-top:2px;white-space:normal;
 }
+.hdr-stats .hdr-meta-sub{
+  display:inline;margin-left:8px;margin-top:0;white-space:nowrap;
+}
 .hdr-meta-val.s-warn { color:#ffcc80; }
 .hdr-meta-val.s-crit { color:#ef9a9a; }
 .hdr-meta-val.s-ok   { color:#81c995; }
