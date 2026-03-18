@@ -33,6 +33,7 @@ class ScanSession:
     """Holds mutable state for a single scan job."""
 
     def __init__(self):
+        self.state_lock: threading.RLock = threading.RLock()
         self.scan_id: str = ""
         self.project_key: str = ""
         self.repo_slugs: List[str] = []
@@ -109,68 +110,76 @@ class ScanSession:
                 parts.append(cleaned)
         if not parts:
             return
-        for part in parts:
-            entry = {"msg": part, "level": level, "ts": time.time()}
-            self.log_lines.append(entry)
-            self.log_queue.put(entry)
+        with self.state_lock:
+            for part in parts:
+                entry = {"msg": part, "level": level, "ts": time.time()}
+                self.log_lines.append(entry)
+                self.log_queue.put(entry)
 
     def to_status(self) -> dict:
-        sev = Counter(f.get("severity", 4) for f in self.findings)
-        triage_counts = Counter(f.get("triage_status", "") or "new" for f in self.findings)
-        return {
-            "state": self.state,
-            "scan_id": self.scan_id,
-            "project_key": self.project_key,
-            "operator": self.operator,
-            "started_at_utc": self.started_at_utc,
-            "completed_at_utc": self.completed_at_utc,
-            "policy_version": self.policy_version,
-            "tool_version": self.tool_version,
-            "progress": self.progress,
-            "total": self.total,
-            "current_repo": self.current_repo,
-            "current_file": self.current_file,
-            "file_index": self.file_index,
-            "total_files": self.total_files,
-            "findings": len(self.findings),
-            "active_count": len(self.findings),
-            "suppressed_count": len(self.suppressed_findings),
-            "reviewed_count": triage_counts.get(TRIAGE_REVIEWED, 0),
-            "accepted_risk_count": triage_counts.get(TRIAGE_ACCEPTED_RISK, 0),
-            "sev": {
-                "critical": sev.get(1, 0),
-                "high": sev.get(2, 0),
-                "medium": sev.get(3, 0),
-                "low": sev.get(4, 0),
-            },
-            "delta": self.delta,
-            "inventory": self.inventory,
-            "per_repo": {
-                slug: {
-                    "skipped": data is None,
-                    "count": len(data) if data else 0,
-                    "sev": dict(Counter(f.get("severity", 4) for f in (data or []))),
-                    "reports": {},
-                }
-                for slug, data in self.per_repo.items()
-            },
-            "report": self.report_paths.get("__all__", {}),
-            "duration_s": self.scan_duration_s,
-            "finding_details": [
-                self._finding_detail(f)
-                for f in sorted(
-                    self.findings,
-                    key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")),
-                )[:60]
-            ],
-            "suppressed_details": [
-                self._finding_detail(f)
-                for f in sorted(
-                    self.suppressed_findings,
-                    key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")),
-                )[:30]
-            ],
-        }
+        with self.state_lock:
+            findings = list(self.findings)
+            suppressed_findings = list(self.suppressed_findings)
+            per_repo = dict(self.per_repo)
+            report_paths = dict(self.report_paths)
+            delta = dict(self.delta)
+            inventory = dict(self.inventory)
+            sev = Counter(f.get("severity", 4) for f in findings)
+            triage_counts = Counter(f.get("triage_status", "") or "new" for f in findings)
+            return {
+                "state": self.state,
+                "scan_id": self.scan_id,
+                "project_key": self.project_key,
+                "operator": self.operator,
+                "started_at_utc": self.started_at_utc,
+                "completed_at_utc": self.completed_at_utc,
+                "policy_version": self.policy_version,
+                "tool_version": self.tool_version,
+                "progress": self.progress,
+                "total": self.total,
+                "current_repo": self.current_repo,
+                "current_file": self.current_file,
+                "file_index": self.file_index,
+                "total_files": self.total_files,
+                "findings": len(findings),
+                "active_count": len(findings),
+                "suppressed_count": len(suppressed_findings),
+                "reviewed_count": triage_counts.get(TRIAGE_REVIEWED, 0),
+                "accepted_risk_count": triage_counts.get(TRIAGE_ACCEPTED_RISK, 0),
+                "sev": {
+                    "critical": sev.get(1, 0),
+                    "high": sev.get(2, 0),
+                    "medium": sev.get(3, 0),
+                    "low": sev.get(4, 0),
+                },
+                "delta": delta,
+                "inventory": inventory,
+                "per_repo": {
+                    slug: {
+                        "skipped": data is None,
+                        "count": len(data) if data else 0,
+                        "sev": dict(Counter(f.get("severity", 4) for f in (data or []))),
+                        "reports": {},
+                    }
+                    for slug, data in per_repo.items()
+                },
+                "report": report_paths.get("__all__", {}),
+                "duration_s": self.scan_duration_s,
+                "finding_details": [
+                    self._finding_detail(f)
+                    for f in sorted(
+                        findings,
+                        key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")),
+                    )[:60]
+                ],
+                "suppressed_details": [
+                    self._finding_detail(f)
+                    for f in sorted(
+                        suppressed_findings,
+                        key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")),
+                    )[:30]
+                ],
+            }
 
 
 @dataclass
@@ -454,7 +463,8 @@ class ScanJobService:
         os.replace(tmp_path, self.paths.history_file)
 
     def record_job_snapshot(self, session: ScanSession, findings: Optional[list] = None) -> None:
-        snapshot = self._build_record(session, findings if findings is not None else session.findings)
+        with session.state_lock:
+            snapshot = self._build_record(session, findings if findings is not None else list(session.findings))
         self._upsert_job_record(snapshot)
 
     @staticmethod
@@ -551,16 +561,19 @@ class ScanJobService:
             Path(self.paths.log_dir).mkdir(parents=True, exist_ok=True)
             log_path = Path(self.paths.log_dir) / f"{session.scan_id}.txt"
             try:
+                with session.state_lock:
+                    log_lines = list(session.log_lines)
                 with open(log_path, "w", encoding="utf-8") as fh:
-                    for entry in session.log_lines:
+                    for entry in log_lines:
                         ts = datetime.fromtimestamp(entry["ts"]).strftime("%H:%M:%S")
                         fh.write(f"[{ts}] {entry.get('msg', '')}\n")
             except Exception:
                 log_path = None
 
-            record = self._build_record(session, findings, log_file=str(log_path) if log_path else "")
+            with session.state_lock:
+                record = self._build_record(session, findings, log_file=str(log_path) if log_path else "")
             self._upsert_job_record(record)
-            self._replace_scan_logs(session.scan_id, session.log_lines)
+            self._replace_scan_logs(session.scan_id, log_lines if 'log_lines' in locals() else [])
             self._write_legacy_history(record)
         except Exception as exc:
             print(f"[WARN] Could not save history: {exc}")
@@ -590,13 +603,14 @@ class ScanJobService:
         self.cleanup_stale_temp_clones()
 
         t_start = time.time()
-        session.started_at_utc = session.started_at_utc or self._utc_now_iso()
-        session.completed_at_utc = ""
-        session.policy_version = self._policy_version(self.paths.policy_file)
-        session.tool_version = self.app_version
-        session.suppressed_findings = []
-        session.delta = {}
-        session.inventory = {}
+        with session.state_lock:
+            session.started_at_utc = session.started_at_utc or self._utc_now_iso()
+            session.completed_at_utc = ""
+            session.policy_version = self._policy_version(self.paths.policy_file)
+            session.tool_version = self.app_version
+            session.suppressed_findings = []
+            session.delta = {}
+            session.inventory = {}
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
@@ -616,7 +630,8 @@ class ScanJobService:
         log(f"Project  : {session.project_key}", "dim")
         log(f"Repos    : {session.total}", "dim")
 
-        session.llm_model_info = {}
+        with session.state_lock:
+            session.llm_model_info = {}
         llm_enabled = True
 
         if not self._ollama_ping(session.llm_url):
@@ -624,10 +639,11 @@ class ScanJobService:
             llm_enabled = False
         else:
             try:
-                session.llm_model_info = LLMReviewer(
+                info = LLMReviewer(
                     base_url=session.llm_url, model=session.llm_model
                 ).model_info()
-                info = session.llm_model_info
+                with session.state_lock:
+                    session.llm_model_info = dict(info)
                 parts = [info["name"]]
                 if info.get("parameter_size"):
                     parts.append(info["parameter_size"])
@@ -635,7 +651,8 @@ class ScanJobService:
                     parts.append(info["quantization"])
                 log(f"LLM      : {' | '.join(parts)}", "dim")
             except Exception:
-                session.llm_model_info = {"name": session.llm_model}
+                with session.state_lock:
+                    session.llm_model_info = {"name": session.llm_model}
                 log(f"LLM      : {session.llm_model}", "dim")
 
         log("=" * 58, "dim")
@@ -708,9 +725,10 @@ class ScanJobService:
                 last_pct = [-1]
 
                 def _on_file(rel, idx, total):
-                    session.current_file = f"{slug}/{rel}"
-                    session.file_index = idx + 1
-                    session.total_files = max(session.total_files, total)
+                    with session.state_lock:
+                        session.current_file = f"{slug}/{rel}"
+                        session.file_index = idx + 1
+                        session.total_files = max(session.total_files, total)
                     pct = int((idx + 1) / max(total, 1) * 100)
                     if pct % 5 == 0 and pct != last_pct[0]:
                         last_pct[0] = pct
@@ -758,9 +776,11 @@ class ScanJobService:
         total_post_llm = 0
         completed = 0
 
-        session._active_pool = None
+        with session.state_lock:
+            session._active_pool = None
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            session._active_pool = pool
+            with session.state_lock:
+                session._active_pool = pool
             futures = {pool.submit(_scan_one, slug): slug for slug in session.repo_slugs}
             for fut in as_completed(futures):
                 if stop.is_set():
@@ -770,8 +790,9 @@ class ScanJobService:
 
                 slug, analyzed, bb_owner, pre_llm, skip_reason = fut.result()
                 completed += 1
-                session.progress = completed
-                session.current_repo = slug
+                with session.state_lock:
+                    session.progress = completed
+                    session.current_repo = slug
 
                 if analyzed is None:
                     reason_str = f": {skip_reason}" if skip_reason else ""
@@ -812,7 +833,8 @@ class ScanJobService:
                         finding["triage_by"] = meta.get("marked_by", "")
                         finding["triage_at"] = meta.get("marked_at", "")
                 if suppressed_findings:
-                    session.suppressed_findings.extend(suppressed_findings)
+                    with session.state_lock:
+                        session.suppressed_findings.extend(suppressed_findings)
                     log(f"  [FP] Suppressed {len(suppressed_findings)} finding(s)", "dim")
                 total_post_llm += len(active_findings)
 
@@ -822,37 +844,42 @@ class ScanJobService:
                     finding["last_seen"] = session.scan_id
                 all_findings.extend(active_findings)
                 per_repo[slug] = active_findings
-                session.per_repo = dict(per_repo)
-                session.findings = list(all_findings)
+                with session.state_lock:
+                    session.per_repo = dict(per_repo)
+                    session.findings = list(all_findings)
                 self.record_job_snapshot(session, session.findings)
 
         log("\n" + "=" * 58, "dim")
         final = aggregator.process(all_findings)
-        session.findings = final
+        with session.state_lock:
+            session.findings = final
         scanned_slugs = [slug for slug in session.repo_slugs if per_repo.get(slug) is not None]
-        session.delta = self._build_scan_delta(
+        delta_meta = self._build_scan_delta(
             final,
             project_key=session.project_key,
             repo_slugs=scanned_slugs,
         )
-        session.inventory = build_inventory(final, repo_slugs=scanned_slugs)
-        new_hashes = session.delta.get("new_hashes", set())
+        inventory_meta = build_inventory(final, repo_slugs=scanned_slugs)
+        with session.state_lock:
+            session.delta = delta_meta
+            session.inventory = inventory_meta
+        new_hashes = delta_meta.get("new_hashes", set())
         for finding in final:
             finding["delta_status"] = "new" if finding.get("_hash", "") in new_hashes else "existing"
-        if session.delta.get("has_baseline"):
+        if delta_meta.get("has_baseline"):
             log(
                 "Baseline compare: "
-                f"{session.delta.get('new_count', 0)} new, "
-                f"{session.delta.get('existing_count', session.delta.get('unchanged_count', 0))} existing, "
-                f"{session.delta.get('fixed_count', 0)} fixed since last scan",
+                f"{delta_meta.get('new_count', 0)} new, "
+                f"{delta_meta.get('existing_count', delta_meta.get('unchanged_count', 0))} existing, "
+                f"{delta_meta.get('fixed_count', 0)} fixed since last scan",
                 "dim",
             )
-        if session.inventory.get("repos_using_ai_count", 0):
+        if inventory_meta.get("repos_using_ai_count", 0):
             log(
                 "Inventory: "
-                f"{session.inventory.get('repos_using_ai_count', 0)}/{session.inventory.get('repos_total', 0)} repos with AI, "
-                f"{session.inventory.get('provider_count', 0)} providers, "
-                f"{session.inventory.get('model_count', 0)} models",
+                f"{inventory_meta.get('repos_using_ai_count', 0)}/{inventory_meta.get('repos_total', 0)} repos with AI, "
+                f"{inventory_meta.get('provider_count', 0)} providers, "
+                f"{inventory_meta.get('model_count', 0)} models",
                 "dim",
             )
         log(f"Total findings (deduped): {len(final)}", "hd")
@@ -974,29 +1001,34 @@ class ScanJobService:
                     "csv_name": Path(csv_path).name,
                     "html_name": Path(html_path).name,
                 }
-                session.report_paths = dict(report_paths)
+                with session.state_lock:
+                    session.report_paths = dict(report_paths)
                 log(f"  OK Report: {Path(html_path).name}", "ok")
             except Exception as exc:
                 log(f"  Report error: {exc}", "err")
 
-        session.scan_duration_s = int(time.time() - t_start)
-        session.completed_at_utc = self._utc_now_iso()
-        session.repo_details = {
-            slug: {
-                "owner": repo_meta.get(slug, {}).get("owner", "User"),
-                "branch": repo_meta.get(slug, {}).get("branch") or "default",
-                "commit": repo_meta.get(slug, {}).get("commit", ""),
+        with session.state_lock:
+            session.scan_duration_s = int(time.time() - t_start)
+            session.completed_at_utc = self._utc_now_iso()
+            session.repo_details = {
+                slug: {
+                    "owner": repo_meta.get(slug, {}).get("owner", "User"),
+                    "branch": repo_meta.get(slug, {}).get("branch") or "default",
+                    "commit": repo_meta.get(slug, {}).get("commit", ""),
+                }
+                for slug in session.repo_slugs
             }
-            for slug in session.repo_slugs
-        }
 
         skipped_all = all(value is None for value in per_repo.values()) and len(per_repo) > 0
         if stop.is_set():
-            session.state = "stopped"
+            with session.state_lock:
+                session.state = "stopped"
         elif skipped_all:
-            session.state = "skipped"
+            with session.state_lock:
+                session.state = "skipped"
         else:
-            session.state = "done"
+            with session.state_lock:
+                session.state = "done"
         self.record_job_snapshot(session, final)
 
         if stop.is_set():
@@ -1007,5 +1039,6 @@ class ScanJobService:
             log("\nScan complete.", "hd")
         log(f"Duration: {session.scan_duration_s}s  |  Findings: {len(final)}", "info")
 
-        session.completed_at_utc = self._utc_now_iso()
+        with session.state_lock:
+            session.completed_at_utc = self._utc_now_iso()
         persist_record(session, final)

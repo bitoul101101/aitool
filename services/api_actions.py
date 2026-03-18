@@ -158,11 +158,12 @@ def triage_finding(
     if status in {TRIAGE_ACCEPTED_RISK, TRIAGE_FALSE_POSITIVE} and not note:
         raise ValueError("note required")
 
-    target = next((f for f in session.findings if f.get("_hash") == hash_), None)
-    if target is None:
-        target = next((f for f in session.suppressed_findings if f.get("_hash") == hash_), None)
-    if not target:
-        raise LookupError("Finding not found in current session")
+    with session.state_lock:
+        target = next((f for f in session.findings if f.get("_hash") == hash_), None)
+        if target is None:
+            target = next((f for f in session.suppressed_findings if f.get("_hash") == hash_), None)
+        if not target:
+            raise LookupError("Finding not found in current session")
 
     upsert_triage(
         suppressions_file,
@@ -180,13 +181,14 @@ def triage_finding(
     )
     triage_meta = triage_lookup().get(hash_, {})
     updated = apply_triage_metadata(target, triage_meta)
-    session.findings = [f for f in session.findings if f.get("_hash") != hash_]
-    session.suppressed_findings = [f for f in session.suppressed_findings if f.get("_hash") != hash_]
-    if status == TRIAGE_FALSE_POSITIVE:
-        session.suppressed_findings.append(updated)
-    else:
-        session.findings.append(updated)
-        session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
+    with session.state_lock:
+        session.findings = [f for f in session.findings if f.get("_hash") != hash_]
+        session.suppressed_findings = [f for f in session.suppressed_findings if f.get("_hash") != hash_]
+        if status == TRIAGE_FALSE_POSITIVE:
+            session.suppressed_findings.append(updated)
+        else:
+            session.findings.append(updated)
+            session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
     persist_session_state()
     return {"ok": True, "status": session.to_status()}
 
@@ -205,19 +207,20 @@ def reset_finding(
         raise ValueError("hash required")
     removed = remove_triage(suppressions_file, hash_)
     audit_event("finding_reset", scan_id=session.scan_id, finding_hash=hash_, removed=bool(removed))
-    finding = next((f for f in session.findings if f.get("_hash") == hash_), None)
-    if finding is not None:
-        updated = clear_finding_triage(finding)
-        session.findings = [f for f in session.findings if f.get("_hash") != hash_]
-        session.findings.append(updated)
-        session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
-        persist_session_state()
-        return {"ok": True, "removed": removed, "status": session.to_status()}
+    with session.state_lock:
+        finding = next((f for f in session.findings if f.get("_hash") == hash_), None)
+        if finding is not None:
+            updated = clear_finding_triage(finding)
+            session.findings = [f for f in session.findings if f.get("_hash") != hash_]
+            session.findings.append(updated)
+            session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
+            persist_session_state()
+            return {"ok": True, "removed": removed, "status": session.to_status()}
 
-    finding = next((f for f in session.suppressed_findings if f.get("_hash") == hash_), None)
-    session.suppressed_findings = [f for f in session.suppressed_findings if f.get("_hash") != hash_]
-    if finding:
-        session.findings.append(clear_finding_triage(finding))
-        session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
-        persist_session_state()
+        finding = next((f for f in session.suppressed_findings if f.get("_hash") == hash_), None)
+        session.suppressed_findings = [f for f in session.suppressed_findings if f.get("_hash") != hash_]
+        if finding:
+            session.findings.append(clear_finding_triage(finding))
+            session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
+            persist_session_state()
     return {"ok": True, "removed": removed, "status": session.to_status()}

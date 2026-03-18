@@ -205,7 +205,8 @@ def _ollama_ensure_running(base_url: str) -> dict:
 
 _session: ScanSession = ScanSession()
 _operator_state = SingleUserState(load_single_user_config(ACCESS_FILE))
-_state_lock = threading.Lock()
+_state_lock = threading.RLock()
+_session.state_lock = _state_lock
 _app_exit_event = threading.Event()
 _server_instance: Optional[http.server.ThreadingHTTPServer] = None
 
@@ -438,17 +439,18 @@ def _find_history_record_by_report_name(filename: str) -> dict | None:
 
 
 def _report_record_for_scan(scan_id: str) -> dict | None:
-    current_report = (_session.report_paths or {}).get("__all__", {})
-    if _session.scan_id == scan_id and current_report.get("html_name"):
-        return {
-            "scan_id": _session.scan_id,
-            "project_key": _session.project_key,
-            "repo_slugs": list(_session.repo_slugs),
-            "state": _session.state,
-            "started_at_utc": _session.started_at_utc,
-            "reports": {"__all__": current_report},
-            "log_file": f"{scan_id}.txt" if scan_id else "",
-        }
+    with _state_lock:
+        current_report = (_session.report_paths or {}).get("__all__", {})
+        if _session.scan_id == scan_id and current_report.get("html_name"):
+            return {
+                "scan_id": _session.scan_id,
+                "project_key": _session.project_key,
+                "repo_slugs": list(_session.repo_slugs),
+                "state": _session.state,
+                "started_at_utc": _session.started_at_utc,
+                "reports": {"__all__": dict(current_report)},
+                "log_file": f"{scan_id}.txt" if scan_id else "",
+            }
     return _find_history_record_by_scan_id(scan_id)
 
 
@@ -471,39 +473,44 @@ def _is_connected() -> bool:
 
 
 def _has_scan_results() -> bool:
-    return bool(_session.scan_id)
+    with _state_lock:
+        return bool(_session.scan_id)
 
 
 def _current_session_history_record() -> dict | None:
-    if not _session.scan_id or _session.state not in {"running", "stopped"}:
-        return None
-    findings = list(_session.findings)
-    critical_prod = sum(
-        1 for f in findings
-        if f.get("severity") == 1 and str(f.get("context", "production")).lower() == "production"
-    )
-    high_prod = sum(
-        1 for f in findings
-        if f.get("severity") == 2 and str(f.get("context", "production")).lower() == "production"
-    )
-    return {
-        "scan_id": _session.scan_id,
-        "project_key": _session.project_key,
-        "repo_slugs": list(_session.repo_slugs),
-        "state": _session.state,
-        "started_at_utc": _session.started_at_utc,
-        "completed_at_utc": _session.completed_at_utc,
-        "total": len(findings),
-        "active_total": len(findings),
-        "suppressed_total": len(_session.suppressed_findings),
-        "llm_model": _session.llm_model,
-        "duration_s": _session.scan_duration_s,
-        "critical_prod": critical_prod,
-        "high_prod": high_prod,
-        "reports": _session.report_paths,
-        "inventory": _session.inventory,
-        "log_file": "",
-    }
+    with _state_lock:
+        if not _session.scan_id or _session.state not in {"running", "stopped"}:
+            return None
+        findings = list(_session.findings)
+        suppressed = list(_session.suppressed_findings)
+        report_paths = dict(_session.report_paths)
+        inventory = dict(_session.inventory)
+        critical_prod = sum(
+            1 for f in findings
+            if f.get("severity") == 1 and str(f.get("context", "production")).lower() == "production"
+        )
+        high_prod = sum(
+            1 for f in findings
+            if f.get("severity") == 2 and str(f.get("context", "production")).lower() == "production"
+        )
+        return {
+            "scan_id": _session.scan_id,
+            "project_key": _session.project_key,
+            "repo_slugs": list(_session.repo_slugs),
+            "state": _session.state,
+            "started_at_utc": _session.started_at_utc,
+            "completed_at_utc": _session.completed_at_utc,
+            "total": len(findings),
+            "active_total": len(findings),
+            "suppressed_total": len(suppressed),
+            "llm_model": _session.llm_model,
+            "duration_s": _session.scan_duration_s,
+            "critical_prod": critical_prod,
+            "high_prod": high_prod,
+            "reports": report_paths,
+            "inventory": inventory,
+            "log_file": "",
+        }
 
 
 def _format_log_text(entries: list[dict]) -> str:
@@ -624,20 +631,24 @@ def _apply_triage_metadata(finding: dict, meta: dict) -> dict:
 
 
 def _rebuild_session_per_repo() -> None:
-    rebuilt: Dict[str, Any] = {}
-    for slug, data in _session.per_repo.items():
-        rebuilt[slug] = None if data is None else []
-    for slug in _session.repo_slugs:
-        rebuilt.setdefault(slug, [])
-    for finding in _session.findings:
-        slug = finding.get("repo", "")
-        if rebuilt.get(slug) is not None:
-            rebuilt.setdefault(slug, []).append(finding)
-    _session.per_repo = rebuilt
+    with _state_lock:
+        rebuilt: Dict[str, Any] = {}
+        for slug, data in _session.per_repo.items():
+            rebuilt[slug] = None if data is None else []
+        for slug in _session.repo_slugs:
+            rebuilt.setdefault(slug, [])
+        for finding in _session.findings:
+            slug = finding.get("repo", "")
+            if rebuilt.get(slug) is not None:
+                rebuilt.setdefault(slug, []).append(finding)
+        _session.per_repo = rebuilt
 
 
 def _invalidate_session_reports() -> None:
-    for report in (_session.report_paths or {}).values():
+    with _state_lock:
+        reports = list((_session.report_paths or {}).values())
+        _session.report_paths = {}
+    for report in reports:
         if not isinstance(report, dict):
             continue
         for key in ("html", "csv"):
@@ -650,13 +661,16 @@ def _invalidate_session_reports() -> None:
                     path.unlink()
             except Exception:
                 pass
-    _session.report_paths = {}
 
 
 def _persist_session_state() -> None:
     _rebuild_session_per_repo()
-    if _session.scan_id:
-        _save_history_record(_session, _session.findings)
+    with _state_lock:
+        session = _session
+        findings = list(_session.findings)
+        scan_id = _session.scan_id
+    if scan_id:
+        _save_history_record(session, findings)
 
 
 def _cleanup_stale_temp_clones() -> None:
@@ -665,17 +679,19 @@ def _cleanup_stale_temp_clones() -> None:
 
 
 def _stop_active_scan() -> bool:
-    if _session.state != "running":
-        return False
-    _session.stop_event.set()
-    with _session.proc_lock:
-        for proc in list(_session.proc_holder):
+    with _state_lock:
+        session = _session
+        if session.state != "running":
+            return False
+        session.stop_event.set()
+    with session.proc_lock:
+        for proc in list(session.proc_holder):
             try:
                 proc.kill()
             except Exception:
                 pass
-        _session.proc_holder.clear()
-    pool = getattr(_session, "_active_pool", None)
+        session.proc_holder.clear()
+    pool = getattr(session, "_active_pool", None)
     if pool:
         try:
             pool.shutdown(wait=False, cancel_futures=True)
@@ -684,7 +700,8 @@ def _stop_active_scan() -> bool:
                 pool.shutdown(wait=False)
             except Exception:
                 pass
-    _session.state = "stopped"
+    with _state_lock:
+        session.state = "stopped"
     return True
 
 
@@ -757,9 +774,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif p == "/api/scan/status":
             if _require_role(self, ROLE_VIEWER):
                 return
-            status = _session.to_status()
-            status["phase_timeline"] = _phase_timeline(_session.log_lines, _session.state)
-            status["log_url"] = f"/api/history/log/{_session.scan_id}" if _session.scan_id else ""
+            with _state_lock:
+                session = _session
+                log_lines = list(_session.log_lines)
+                state = _session.state
+                scan_id = _session.scan_id
+            status = session.to_status()
+            status["phase_timeline"] = _phase_timeline(log_lines, state)
+            status["log_url"] = f"/api/history/log/{scan_id}" if scan_id else ""
             self._json(status)
         elif p == "/api/history":
             if _require_role(self, ROLE_VIEWER):
@@ -874,18 +896,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_VIEWER):
             return
         qs = parse_qs(urlparse(self.path).query)
-        project_key = (qs.get("project", [""])[0] or _session.project_key or "").strip()
+        with _state_lock:
+            session_project_key = _session.project_key
+            session_repo_slugs = list(_session.repo_slugs)
+            session_log_lines = list(_session.log_lines[-500:])
+            session_state = _session.state
+            status = _session.to_status() if _is_connected() else {}
+        project_key = (qs.get("project", [""])[0] or session_project_key or "").strip()
         fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
         if project_key and _require_project_access(self, project_key):
             return
         repos = _repos_for_project(project_key) if project_key else []
-        status = _session.to_status() if _is_connected() else {}
         if selected_repos is not None:
             effective_selected_repos = selected_repos
         elif fresh_scan:
             effective_selected_repos = []
         else:
-            effective_selected_repos = list(_session.repo_slugs) if project_key and project_key == _session.project_key else []
+            effective_selected_repos = list(session_repo_slugs) if project_key and project_key == session_project_key else []
         html = render_scan_page(
             projects=filter_projects(_operator_state.projects_cache, _operator_state.ctx),
             selected_project=project_key,
@@ -894,8 +921,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             status=status,
             llm_cfg=load_llm_config(),
             llm_models=_ollama_list_models(load_llm_config().get("base_url", "http://localhost:11434")),
-            log_text=_format_log_text(_session.log_lines[-500:]),
-            phase_timeline=_phase_timeline(_session.log_lines, _session.state),
+            log_text=_format_log_text(session_log_lines),
+            phase_timeline=_phase_timeline(session_log_lines, session_state),
             force_selection=fresh_scan,
             show_scan_results=_has_scan_results(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
@@ -1015,24 +1042,31 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         page_body = dict(body)
         page_body["repo_slugs"] = repo_slugs
+        with _state_lock:
+            current_session = _session
         try:
-            _session = start_scan(
+            new_session = start_scan(
                 body=page_body,
                 session_factory=ScanSession,
-                current_session=_session,
+                current_session=current_session,
                 operator_state=_operator_state,
                 save_llm_config=save_llm_config,
                 audit_event=_audit_event,
             )
+            new_session.state_lock = _state_lock
+            with _state_lock:
+                _session = new_session
         except (ValueError, PermissionError, RuntimeError) as e:
             return self._render_scan_page(error=str(e), selected_repos=repo_slugs)
-        threading.Thread(target=_run_scan, args=(_session,), daemon=True).start()
+        threading.Thread(target=_run_scan, args=(new_session,), daemon=True).start()
         self._redirect(_with_query("/scan", project=project_key, notice="Scan started"))
 
     def _page_scan_stop(self):
         if _require_role(self, ROLE_SCANNER):
             return
-        stop_scan(current_session=_session, stop_scan_fn=_stop_active_scan, audit_event=_audit_event)
+        with _state_lock:
+            current_session = _session
+        stop_scan(current_session=current_session, stop_scan_fn=_stop_active_scan, audit_event=_audit_event)
         self._redirect(_with_query("/scan", notice="Stop requested"))
 
     def _page_history_delete(self, body: dict):
@@ -1066,9 +1100,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if llm_url or llm_model:
                 _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
             if output_dir:
+                with _state_lock:
+                    is_scan_running = _session.state == "running"
                 _settings_service.save_output_dir(
                     output_dir=output_dir,
-                    is_scan_running=_session.state == "running",
+                    is_scan_running=is_scan_running,
                     set_paths=_set_output_paths,
                 )
         except Exception as e:
@@ -1132,30 +1168,37 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         project_key = body.get("project_key", "").strip()
         if _require_project_access(self, project_key):
             return
+        with _state_lock:
+            current_session = _session
         try:
-            _session = start_scan(
+            new_session = start_scan(
                 body=body,
                 session_factory=ScanSession,
-                current_session=_session,
+                current_session=current_session,
                 operator_state=_operator_state,
                 save_llm_config=save_llm_config,
                 audit_event=_audit_event,
             )
+            new_session.state_lock = _state_lock
+            with _state_lock:
+                _session = new_session
         except ValueError as e:
             return self._err(400, str(e))
         except PermissionError as e:
             return self._err(401, str(e))
         except RuntimeError as e:
             return self._err(409, str(e))
-        threading.Thread(target=_run_scan, args=(_session,),
+        threading.Thread(target=_run_scan, args=(new_session,),
                          daemon=True).start()
-        self._json({"ok": True, "scan_id": _session.scan_id})
+        self._json({"ok": True, "scan_id": new_session.scan_id})
 
     def _api_scan_stop(self):
         if _require_role(self, ROLE_SCANNER):
             return
+        with _state_lock:
+            current_session = _session
         self._json(stop_scan(
-            current_session=_session,
+            current_session=current_session,
             stop_scan_fn=_stop_active_scan,
             audit_event=_audit_event,
         ))
@@ -1189,7 +1232,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         # Snapshot the backlog and remember its length.
         # The queue may already contain some of these same entries —
         # we skip the first backlog_len items from the queue to avoid duplicates.
-        backlog      = list(_session.log_lines)
+        with _state_lock:
+            session = _session
+            backlog = list(session.log_lines)
         backlog_len  = len(backlog)
         queue_skip   = backlog_len   # items to skip from queue (already sent)
 
@@ -1200,16 +1245,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         # Stream new entries, skipping any that overlap with the backlog
         while True:
             try:
-                entry = _session.log_queue.get(timeout=1.0)
+                entry = session.log_queue.get(timeout=1.0)
                 if queue_skip > 0:
                     queue_skip -= 1   # this entry was already in the backlog
                 else:
                     if not self._sse_write(entry):
                         break
-                if _session.state in ("done", "stopped", "error"):
-                    while not _session.log_queue.empty():
+                if session.state in ("done", "stopped", "error"):
+                    while not session.log_queue.empty():
                         try:
-                            e2 = _session.log_queue.get_nowait()
+                            e2 = session.log_queue.get_nowait()
                             if queue_skip > 0:
                                 queue_skip -= 1
                             else:
@@ -1224,7 +1269,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     self.wfile.flush()
                 except Exception:
                     break
-                if _session.state in ("done", "stopped", "error"):
+                if session.state in ("done", "stopped", "error"):
                     break
 
     def _sse_write(self, entry: dict):
@@ -1280,9 +1325,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
         if output_dir:
             try:
+                with _state_lock:
+                    is_scan_running = _session.state == "running"
                 result = _settings_service.save_output_dir(
                     output_dir=output_dir,
-                    is_scan_running=_session.state == "running",
+                    is_scan_running=is_scan_running,
                     set_paths=lambda p: _set_output_paths(p),
                 )
             except Exception as e:
