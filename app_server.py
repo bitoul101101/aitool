@@ -154,6 +154,12 @@ _LEGACY_SUPPRESSIONS_FILE = _BASE_DIR / "ai_scanner_suppressions.json"
 _LEGACY_LLM_CFG_FILE = _BASE_DIR / "ai_scanner_llm_config.json"
 _LEGACY_TLS_CFG_FILE = _BASE_DIR / "ai_scanner_tls_config.json"
 _LEGACY_ACCESS_FILE = _BASE_DIR / "access_control.json"
+_LEGACY_RUNTIME_FILES = (
+    ("Access Control", _LEGACY_ACCESS_FILE, Path(ACCESS_FILE)),
+    ("LLM Config", _LEGACY_LLM_CFG_FILE, Path(LLM_CFG_FILE)),
+    ("TLS Config", _LEGACY_TLS_CFG_FILE, Path(TLS_CFG_FILE)),
+    ("Suppressions", _LEGACY_SUPPRESSIONS_FILE, Path(SUPPRESSIONS_FILE)),
+)
 
 
 def _prepare_runtime_file(target: Path, *, legacy: Path | None = None, default_json: dict | None = None) -> None:
@@ -171,6 +177,19 @@ _prepare_runtime_file(Path(LLM_CFG_FILE), legacy=_LEGACY_LLM_CFG_FILE, default_j
 _prepare_runtime_file(Path(TLS_CFG_FILE), legacy=_LEGACY_TLS_CFG_FILE, default_json=DEFAULT_TLS_CONFIG)
 _prepare_runtime_file(Path(SUPPRESSIONS_FILE), legacy=_LEGACY_SUPPRESSIONS_FILE, default_json={"version": 2, "triage": []})
 _prepare_runtime_file(Path(ACCESS_FILE), legacy=_LEGACY_ACCESS_FILE)
+
+
+def _legacy_runtime_artifacts() -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for label, legacy_path, active_path in _LEGACY_RUNTIME_FILES:
+        if not legacy_path.exists():
+            continue
+        items.append({
+            "label": label,
+            "legacy_path": str(legacy_path.resolve()),
+            "active_path": str(active_path.resolve()),
+        })
+    return items
 
 
 # ── Utility helpers (lifted from main.py) ─────────────────────────────────────
@@ -1831,6 +1850,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             output_dir=str(Path(OUTPUT_DIR).resolve()),
             llm_cfg=load_llm_config(),
             tls_cfg=load_tls_config(),
+            state_dir=str(STATE_DIR.resolve()),
+            legacy_runtime_files=_legacy_runtime_artifacts(),
             csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
@@ -2375,6 +2396,12 @@ def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.Thread
 
     url = f"http://127.0.0.1:{port}/"
     print(f"  AI Scanner -> {url}")
+    legacy_runtime_files = _legacy_runtime_artifacts()
+    if legacy_runtime_files:
+        print("  Warning: legacy repo-root runtime files were found. The app now uses the state directory below.")
+        print(f"  Active state dir -> {Path(STATE_DIR).resolve()}")
+        for item in legacy_runtime_files:
+            print(f"  Legacy file     -> {item['legacy_path']}")
 
     if open_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()

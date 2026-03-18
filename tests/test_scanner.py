@@ -2026,6 +2026,7 @@ def test_settings_page_is_server_rendered():
         output_dir=srv.OUTPUT_DIR,
         llm_cfg={"base_url": "http://localhost:11434", "model": "m"},
         tls_cfg={"verify_ssl": True, "ca_bundle": "C:\\corp-ca.pem"},
+        state_dir="C:\\Users\\demo\\AppData\\Local\\AI Scanner",
     ).decode("utf-8")
 
     assert 'action="/settings/save"' in html
@@ -2033,6 +2034,60 @@ def test_settings_page_is_server_rendered():
     assert 'name="bitbucket_ca_bundle"' in html
     assert 'value="C:\\corp-ca.pem"' in html
     assert 'name="bitbucket_verify_ssl"' in html
+
+
+def test_settings_page_warns_about_legacy_repo_root_runtime_files():
+    import app_server as srv
+
+    html = srv.render_settings_page(
+        bitbucket_url=srv.BITBUCKET_URL,
+        output_dir=srv.OUTPUT_DIR,
+        llm_cfg={"base_url": "http://localhost:11434", "model": "m"},
+        tls_cfg={"verify_ssl": True, "ca_bundle": ""},
+        state_dir="C:\\Users\\demo\\AppData\\Local\\AI Scanner",
+        legacy_runtime_files=[
+            {
+                "label": "LLM Config",
+                "legacy_path": "C:\\aitool\\ai_scanner_llm_config.json",
+                "active_path": "C:\\Users\\demo\\AppData\\Local\\AI Scanner\\ai_scanner_llm_config.json",
+            }
+        ],
+    ).decode("utf-8")
+
+    assert "Legacy repo-root runtime files detected" in html
+    assert "Editing the old repo-root files will not change live settings." in html
+    assert "C:\\aitool\\ai_scanner_llm_config.json" in html
+
+
+def test_legacy_runtime_artifacts_lists_existing_repo_root_runtime_files():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_base = srv._BASE_DIR
+    orig_state_dir = srv.STATE_DIR
+    orig_legacy_runtime_files = srv._LEGACY_RUNTIME_FILES
+    try:
+        legacy_cfg = d / "ai_scanner_llm_config.json"
+        legacy_cfg.write_text("{}", encoding="utf-8")
+        active_cfg = d / "state" / "ai_scanner_llm_config.json"
+        active_cfg.parent.mkdir(parents=True, exist_ok=True)
+        active_cfg.write_text("{}", encoding="utf-8")
+        srv._BASE_DIR = d
+        srv.STATE_DIR = d / "state"
+        srv._LEGACY_RUNTIME_FILES = (
+            ("LLM Config", legacy_cfg, active_cfg),
+        )
+
+        result = srv._legacy_runtime_artifacts()
+        assert result == [{
+            "label": "LLM Config",
+            "legacy_path": str(legacy_cfg.resolve()),
+            "active_path": str(active_cfg.resolve()),
+        }]
+    finally:
+        srv._BASE_DIR = orig_base
+        srv.STATE_DIR = orig_state_dir
+        srv._LEGACY_RUNTIME_FILES = orig_legacy_runtime_files
 
 
 def test_help_page_is_server_rendered():
