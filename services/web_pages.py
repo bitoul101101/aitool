@@ -560,6 +560,7 @@ def render_scan_page(
         <div class="inventory-repos" id="inventory-repos-list">{repo_blocks or '<div class="muted">No repo inventory available.</div>'}</div>
       </div>
     </section>"""
+    inventory_html = ""
     report_actions = ""
     if scan_complete and all_findings:
         html_name = report.get("html_name", "")
@@ -619,33 +620,6 @@ def render_scan_page(
     <div>
       <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
       <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
-    </div>
-    <div class="findings-panel">
-      <h2 style="margin:0 0 8px;font-size:16px">Current Findings</h2>
-        <div class="finding-table-wrap">
-          <table>
-          <thead><tr><th>Finding</th><th>Capability</th><th>Actions</th></tr></thead>
-          <tbody id="current-findings-body">{findings_rows}</tbody>
-        </table>
-      </div>
-    </div>
-    <div class="mitigate-section">
-      <h3>To Mitigate</h3>
-      <div class="mitigate-wrap">
-        <table>
-          <thead><tr><th>Finding</th><th>Status</th><th>Details</th><th>Actions</th></tr></thead>
-          <tbody id="mitigate-findings-body">{mitigate_rows}</tbody>
-        </table>
-      </div>
-    </div>
-    <div class="suppressed-section">
-      <h3>Suppressed / Accepted Findings</h3>
-      <div class="suppressed-wrap">
-        <table>
-          <thead><tr><th>Finding</th><th>Status</th><th>Details</th><th>Actions</th></tr></thead>
-          <tbody id="suppressed-findings-body">{suppressed_rows}</tbody>
-        </table>
-      </div>
     </div>
   </section>
   <aside class="stack">

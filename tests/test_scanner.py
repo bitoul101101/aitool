@@ -1018,36 +1018,20 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
         phase_timeline=[("scan", "00:02")],
     ).decode("utf-8")
 
-    assert "Current Findings" in html
-    assert "To Mitigate" in html
-    assert "Suppressed / Accepted Findings" in html
-    assert 'action="/findings/triage"' in html
-    assert 'action="/findings/reset"' in html
-    assert "triagePromptSubmit" in html
-    assert 'name="note" value=""' in html
-    assert ">To Mitigate<" in html
-    assert "client = OpenAI(api_key=token)" in html
-    assert "Finding" in html
-    assert "Expected internal example" in html
-    assert "reviewed" in html.lower()
+    assert "Current Findings" not in html
+    assert '<div class="findings-panel">' not in html
+    assert '<div class="mitigate-section">' not in html
+    assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
     assert html.index("Phase Timeline") < html.index("Open HTML Report")
     assert "Download CSV File" in html
     assert "Download Logs" in html
     assert "Baseline" in html
-    assert "AI Inventory" in html
-    assert "Openai 1" in html
-    assert "gpt-4o" in html
-    assert "Prompt Handling" in html
+    assert 'id="inventory-summary"' not in html
     assert "Compared to AI_Scan_Report_COGI_repo1_20260317_140000.csv" in html
     assert "old.py:12" in html
     assert "New" in html
     assert "Existing" in html
-    assert "Det 88" in html
-    assert "Prod 97" in html
-    assert "Evd 82" in html
-    assert "LLM 79" in html
-    assert "Sig 88" in html
 
 
 def test_scan_session_log_normalizes_blank_lines():
