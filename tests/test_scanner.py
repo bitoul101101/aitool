@@ -2020,17 +2020,22 @@ def test_cleanup_stale_temp_clones_removes_leftovers():
 
     d = Path(tempfile.mkdtemp())
     orig_temp = srv.TEMP_DIR
-    stale_dir = d / "stale-repo"
+    stale_dir = d / "scan_stale-run"
     stale_dir.mkdir(parents=True)
     (stale_dir / "keep.txt").write_text("leftover")
-    stale_file = d / "stale.tmp"
-    stale_file.write_text("x")
+    active_dir = d / "scan_active-run"
+    active_dir.mkdir(parents=True)
+    (active_dir / "keep.txt").write_text("fresh")
+    stale_age = time.time() - (7 * 60 * 60)
+    os.utime(stale_dir, (stale_age, stale_age))
+    os.utime(stale_dir / "keep.txt", (stale_age, stale_age))
 
     try:
         srv.TEMP_DIR = str(d)
         srv._cleanup_stale_temp_clones()
 
-        assert list(d.iterdir()) == []
+        assert not stale_dir.exists()
+        assert active_dir.exists()
     finally:
         srv.TEMP_DIR = orig_temp
 

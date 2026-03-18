@@ -195,6 +195,8 @@ class ScanJobPaths:
 
 
 class ScanJobService:
+    _STALE_SCAN_ROOT_SECONDS = 6 * 60 * 60
+
     def __init__(
         self,
         *,
@@ -216,6 +218,13 @@ class ScanJobService:
         self._git_head_commit = git_head_commit
         self._ollama_ping = ollama_ping
         self._ensure_db()
+
+    @staticmethod
+    def _scan_workspace_name(scan_id: str) -> str:
+        return f"scan_{scan_id}" if scan_id else "scan_unknown"
+
+    def _scan_temp_root(self, session: ScanSession) -> Path:
+        return Path(self.paths.temp_dir) / self._scan_workspace_name(session.scan_id)
 
     def update_paths(
         self,
@@ -580,17 +589,24 @@ class ScanJobService:
         except Exception:
             pass
 
-    def cleanup_stale_temp_clones(self) -> None:
+    def cleanup_stale_temp_clones(self, *, current_scan_id: str = "") -> None:
         from scanner.bitbucket import cleanup_clone
 
         temp_root = Path(self.paths.temp_dir)
         if not temp_root.exists():
             return
+        now = time.time()
+        current_workspace = self._scan_workspace_name(current_scan_id)
         for child in temp_root.iterdir():
             try:
-                if child.is_dir():
+                if child.name == current_workspace:
+                    continue
+                age_s = now - child.stat().st_mtime
+                if age_s < self._STALE_SCAN_ROOT_SECONDS:
+                    continue
+                if child.is_dir() and child.name.startswith("scan_"):
                     cleanup_clone(child)
-                else:
+                elif child.is_file() and child.name.startswith("scan_"):
                     child.unlink()
             except Exception:
                 pass
@@ -641,7 +657,9 @@ class ScanJobService:
 
         Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.paths.temp_dir).mkdir(parents=True, exist_ok=True)
-        self.cleanup_stale_temp_clones()
+        scan_temp_root = self._scan_temp_root(session)
+        scan_temp_root.mkdir(parents=True, exist_ok=True)
+        self.cleanup_stale_temp_clones(current_scan_id=session.scan_id)
 
         t_start = time.time()
         with session.state_lock:
@@ -740,7 +758,7 @@ class ScanJobService:
             branch = meta.get("branch")
             owner = meta.get("owner", "User")
             clone_url = meta.get("url", "")
-            clone_dir = Path(self.paths.temp_dir) / slug
+            clone_dir = scan_temp_root / slug
             try:
                 shallow_clone(
                     clone_url,
@@ -1083,3 +1101,9 @@ class ScanJobService:
         with session.state_lock:
             session.completed_at_utc = self._utc_now_iso()
         persist_record(session, final)
+        try:
+            from scanner.bitbucket import cleanup_clone
+
+            cleanup_clone(scan_temp_root)
+        except Exception:
+            pass
