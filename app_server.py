@@ -271,8 +271,47 @@ _state_lock = threading.RLock()
 _session.state_lock = _state_lock
 _app_exit_event = threading.Event()
 _server_instance: Optional[http.server.ThreadingHTTPServer] = None
-_browser_session_id = ""
-_browser_csrf_token = ""
+_browser_sessions: dict[str, dict[str, Any]] = {}
+
+
+def _current_session() -> ScanSession:
+    with _state_lock:
+        return _session
+
+
+def _replace_current_session(session: ScanSession) -> ScanSession:
+    global _session
+    session.state_lock = _state_lock
+    with _state_lock:
+        _session = session
+        return _session
+
+
+def _current_session_snapshot(*, include_status: bool = False, log_limit: int | None = None) -> dict[str, Any]:
+    with _state_lock:
+        session = _session
+        log_lines = list(session.log_lines[-log_limit:]) if log_limit else list(session.log_lines)
+        data = {
+            "session": session,
+            "scan_id": session.scan_id,
+            "project_key": session.project_key,
+            "repo_slugs": list(session.repo_slugs),
+            "state": session.state,
+            "started_at_utc": session.started_at_utc,
+            "completed_at_utc": session.completed_at_utc,
+            "scan_duration_s": session.scan_duration_s,
+            "llm_model": session.llm_model,
+            "llm_model_info": dict(session.llm_model_info or {}),
+            "log_lines": log_lines,
+            "report_paths": dict(session.report_paths or {}),
+            "delta": dict(session.delta or {}),
+            "inventory": dict(session.inventory or {}),
+            "findings": list(session.findings),
+            "suppressed_findings": list(session.suppressed_findings),
+        }
+        if include_status:
+            data["status"] = session.to_status()
+        return data
 
 
 # ── Scan job service ─────────────────────────────────────────────────────────
@@ -367,16 +406,14 @@ def _parse_cookie_header(cookie_header: str) -> dict[str, str]:
 
 
 def _issue_browser_session() -> tuple[str, str]:
-    global _browser_session_id, _browser_csrf_token
+    session_id = secrets.token_urlsafe(24)
+    csrf_token = secrets.token_urlsafe(24)
     with _state_lock:
-        _browser_session_id = secrets.token_urlsafe(24)
-        _browser_csrf_token = secrets.token_urlsafe(24)
-        return _browser_session_id, _browser_csrf_token
-
-
-def _current_csrf_token() -> str:
-    with _state_lock:
-        return _browser_csrf_token
+        _browser_sessions[session_id] = {
+            "csrf_token": csrf_token,
+            "issued_at": time.time(),
+        }
+    return session_id, csrf_token
 
 
 def _browser_cookie_value(handler) -> str:
@@ -388,22 +425,38 @@ def _browser_cookie_value(handler) -> str:
     return _parse_cookie_header(raw).get("ai_scanner_session", "")
 
 
-def _has_valid_browser_session(handler) -> bool:
+def _browser_session(handler) -> dict[str, Any] | None:
+    session_id = _browser_cookie_value(handler)
+    if not session_id:
+        return None
     with _state_lock:
-        expected = _browser_session_id
-    if not expected:
-        return False
-    return _browser_cookie_value(handler) == expected
+        session = _browser_sessions.get(session_id)
+        if not session:
+            return None
+        return dict(session)
+
+
+def _has_valid_browser_session(handler) -> bool:
+    return _browser_session(handler) is not None
+
+
+def _current_csrf_token(handler=None) -> str:
+    if handler is None:
+        return ""
+    session = _browser_session(handler)
+    if not session:
+        return ""
+    return str(session.get("csrf_token", "") or "")
 
 
 def _csrf_matches(handler, body: dict) -> bool:
-    if not _has_valid_browser_session(handler):
+    session = _browser_session(handler)
+    if not session:
         return False
     token = ""
     if isinstance(body, dict):
         token = str(body.get("csrf_token", "") or "")
-    with _state_lock:
-        expected = _browser_csrf_token
+    expected = str(session.get("csrf_token", "") or "")
     return bool(expected) and token == expected
 
 
@@ -581,40 +634,40 @@ def _find_history_record_by_report_name(filename: str) -> dict | None:
 
 
 def _report_record_for_scan(scan_id: str) -> dict | None:
-    with _state_lock:
-        current_report = (_session.report_paths or {}).get("__all__", {})
-        if _session.scan_id == scan_id and current_report.get("html_name"):
-            return {
-                "scan_id": _session.scan_id,
-                "project_key": _session.project_key,
-                "repo_slugs": list(_session.repo_slugs),
-                "state": _session.state,
-                "started_at_utc": _session.started_at_utc,
-                "reports": {"__all__": dict(current_report)},
-                "log_file": f"{scan_id}.txt" if scan_id else "",
-            }
+    snapshot = _current_session_snapshot()
+    current_report = (snapshot["report_paths"] or {}).get("__all__", {})
+    if snapshot["scan_id"] == scan_id and current_report.get("html_name"):
+        return {
+            "scan_id": snapshot["scan_id"],
+            "project_key": snapshot["project_key"],
+            "repo_slugs": list(snapshot["repo_slugs"]),
+            "state": snapshot["state"],
+            "started_at_utc": snapshot["started_at_utc"],
+            "reports": {"__all__": dict(current_report)},
+            "log_file": f"{scan_id}.txt" if scan_id else "",
+        }
     return _find_history_record_by_scan_id(scan_id)
 
 
 def _scan_record_for_id(scan_id: str) -> dict | None:
-    with _state_lock:
-        if _session.scan_id == scan_id:
-            current_report = (_session.report_paths or {}).get("__all__", {})
-            return {
-                "scan_id": _session.scan_id,
-                "project_key": _session.project_key,
-                "repo_slugs": list(_session.repo_slugs),
-                "state": _session.state,
-                "started_at_utc": _session.started_at_utc,
-                "completed_at_utc": _session.completed_at_utc,
-                "duration_s": _session.scan_duration_s,
-                "reports": {"__all__": dict(current_report)},
-                "delta": dict(_session.delta or {}),
-                "inventory": dict(_session.inventory or {}),
-                "finding_total": len(_session.findings),
-                "suppressed_total": len(_session.suppressed_findings),
-                "log_file": f"{scan_id}.txt" if scan_id else "",
-            }
+    snapshot = _current_session_snapshot()
+    if snapshot["scan_id"] == scan_id:
+        current_report = (snapshot["report_paths"] or {}).get("__all__", {})
+        return {
+            "scan_id": snapshot["scan_id"],
+            "project_key": snapshot["project_key"],
+            "repo_slugs": list(snapshot["repo_slugs"]),
+            "state": snapshot["state"],
+            "started_at_utc": snapshot["started_at_utc"],
+            "completed_at_utc": snapshot["completed_at_utc"],
+            "duration_s": snapshot["scan_duration_s"],
+            "reports": {"__all__": dict(current_report)},
+            "delta": dict(snapshot["delta"] or {}),
+            "inventory": dict(snapshot["inventory"] or {}),
+            "finding_total": len(snapshot["findings"]),
+            "suppressed_total": len(snapshot["suppressed_findings"]),
+            "log_file": f"{scan_id}.txt" if scan_id else "",
+        }
     return _find_history_record_by_scan_id(scan_id)
 
 
@@ -637,46 +690,45 @@ def _is_connected() -> bool:
 
 
 def _has_scan_results() -> bool:
-    with _state_lock:
-        return bool(_session.scan_id)
+    return bool(_current_session_snapshot().get("scan_id"))
 
 
 def _current_session_history_record() -> dict | None:
-    with _state_lock:
-        if not _session.scan_id or _session.state not in {"running", "stopped"}:
-            return None
-        if not any(str(slug).strip() for slug in list(_session.repo_slugs or [])):
-            return None
-        findings = list(_session.findings)
-        suppressed = list(_session.suppressed_findings)
-        report_paths = dict(_session.report_paths)
-        inventory = dict(_session.inventory)
-        critical_prod = sum(
-            1 for f in findings
-            if f.get("severity") == 1 and str(f.get("context", "production")).lower() == "production"
-        )
-        high_prod = sum(
-            1 for f in findings
-            if f.get("severity") == 2 and str(f.get("context", "production")).lower() == "production"
-        )
-        return {
-            "scan_id": _session.scan_id,
-            "project_key": _session.project_key,
-            "repo_slugs": list(_session.repo_slugs),
-            "state": _session.state,
-            "started_at_utc": _session.started_at_utc,
-            "completed_at_utc": _session.completed_at_utc,
-            "total": len(findings),
-            "active_total": len(findings),
-            "suppressed_total": len(suppressed),
-            "llm_model": _session.llm_model,
-            "duration_s": _session.scan_duration_s,
-            "critical_prod": critical_prod,
-            "high_prod": high_prod,
-            "reports": report_paths,
-            "inventory": inventory,
-            "log_file": "",
-        }
+    snapshot = _current_session_snapshot()
+    if not snapshot["scan_id"] or snapshot["state"] not in {"running", "stopped"}:
+        return None
+    if not any(str(slug).strip() for slug in list(snapshot["repo_slugs"] or [])):
+        return None
+    findings = list(snapshot["findings"])
+    suppressed = list(snapshot["suppressed_findings"])
+    report_paths = dict(snapshot["report_paths"])
+    inventory = dict(snapshot["inventory"])
+    critical_prod = sum(
+        1 for f in findings
+        if f.get("severity") == 1 and str(f.get("context", "production")).lower() == "production"
+    )
+    high_prod = sum(
+        1 for f in findings
+        if f.get("severity") == 2 and str(f.get("context", "production")).lower() == "production"
+    )
+    return {
+        "scan_id": snapshot["scan_id"],
+        "project_key": snapshot["project_key"],
+        "repo_slugs": list(snapshot["repo_slugs"]),
+        "state": snapshot["state"],
+        "started_at_utc": snapshot["started_at_utc"],
+        "completed_at_utc": snapshot["completed_at_utc"],
+        "total": len(findings),
+        "active_total": len(findings),
+        "suppressed_total": len(suppressed),
+        "llm_model": snapshot["llm_model"],
+        "duration_s": snapshot["scan_duration_s"],
+        "critical_prod": critical_prod,
+        "high_prod": high_prod,
+        "reports": report_paths,
+        "inventory": inventory,
+        "log_file": "",
+    }
 
 
 def _format_log_text(entries: list[dict]) -> str:
@@ -1166,23 +1218,25 @@ def _apply_triage_metadata(finding: dict, meta: dict) -> dict:
 
 
 def _rebuild_session_per_repo() -> None:
+    session = _current_session()
     with _state_lock:
         rebuilt: Dict[str, Any] = {}
-        for slug, data in _session.per_repo.items():
+        for slug, data in session.per_repo.items():
             rebuilt[slug] = None if data is None else []
-        for slug in _session.repo_slugs:
+        for slug in session.repo_slugs:
             rebuilt.setdefault(slug, [])
-        for finding in _session.findings:
+        for finding in session.findings:
             slug = finding.get("repo", "")
             if rebuilt.get(slug) is not None:
                 rebuilt.setdefault(slug, []).append(finding)
-        _session.per_repo = rebuilt
+        session.per_repo = rebuilt
 
 
 def _invalidate_session_reports() -> None:
+    session = _current_session()
     with _state_lock:
-        reports = list((_session.report_paths or {}).values())
-        _session.report_paths = {}
+        reports = list((session.report_paths or {}).values())
+        session.report_paths = {}
     for report in reports:
         if not isinstance(report, dict):
             continue
@@ -1200,10 +1254,10 @@ def _invalidate_session_reports() -> None:
 
 def _persist_session_state() -> None:
     _rebuild_session_per_repo()
-    with _state_lock:
-        session = _session
-        findings = list(_session.findings)
-        scan_id = _session.scan_id
+    snapshot = _current_session_snapshot()
+    session = snapshot["session"]
+    findings = list(snapshot["findings"])
+    scan_id = snapshot["scan_id"]
     if scan_id:
         _save_history_record(session, findings)
 
@@ -1214,8 +1268,8 @@ def _cleanup_stale_temp_clones() -> None:
 
 
 def _stop_active_scan() -> bool:
+    session = _current_session()
     with _state_lock:
-        session = _session
         if session.state != "running":
             return False
         session.stop_event.set()
@@ -1270,6 +1324,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return True
         return False
 
+    def _require_browser_api_session(self):
+        if not _has_valid_browser_session(self):
+            self._err(401, "Authentication required")
+            return True
+        return False
+
     # ── Routing ───────────────────────────────────────────────────────────────
 
     def do_GET(self):
@@ -1286,8 +1346,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return
             qs = parse_qs(parsed.query)
             fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
-            with _state_lock:
-                current_scan_id = _session.scan_id
+            current_scan_id = _current_session_snapshot().get("scan_id", "")
             if fresh_scan or not current_scan_id:
                 self._render_scan_page()
             else:
@@ -1334,6 +1393,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return self._404()
             self._send(200, "application/javascript; charset=utf-8", asset_path.read_bytes())
         elif p == "/api/status":
+            if _Handler._require_browser_api_session(self):
+                return
             llm_cfg = load_llm_config()
             llm_info = _ollama_snapshot(llm_cfg.get("base_url", "http://localhost:11434"), refresh=False)
             self._json({
@@ -1352,14 +1413,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "connected": _is_connected(),
             })
         elif p == "/api/scan/status":
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
-            with _state_lock:
-                session = _session
-                log_lines = list(_session.log_lines)
-                state = _session.state
-                scan_id = _session.scan_id
-            status = session.to_status()
+            snapshot = _current_session_snapshot(include_status=True)
+            session = snapshot["session"]
+            log_lines = list(snapshot["log_lines"])
+            state = snapshot["state"]
+            scan_id = snapshot["scan_id"]
+            status = dict(snapshot.get("status") or session.to_status())
             status["phase_timeline"] = _phase_timeline(log_lines, state)
             status["log_url"] = f"/api/history/log/{scan_id}" if scan_id else ""
             status["hardware"] = _hardware_snapshot(session)
@@ -1371,22 +1434,32 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
             self._json(status)
         elif p == "/api/history":
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
             self._json({"history": list(reversed(_history_records_for_user()))})
         elif p == "/api/suppressions":
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
             self._json({"suppressions": list_suppressions(SUPPRESSIONS_FILE)})
         elif p == "/api/triage":
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
             self._json({"triage": list_triage(SUPPRESSIONS_FILE)})
         elif p.startswith("/api/history/log/"):
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
             self._serve_log(p[17:])
         elif p == "/api/settings":
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_ADMIN):
                 return
             self._json({
@@ -1396,16 +1469,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "llm":           load_llm_config(),
             })
         elif p == "/api/scan/stream":
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
             self._sse_stream()
         elif p == "/api/ollama/models":
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
-            qs  = parse_qs(parsed.query)
-            url = (qs.get("url", [None])[0] or
-                   load_llm_config().get("base_url", "http://localhost:11434"))
-            url = url.strip()
+            qs = parse_qs(parsed.query)
+            if "url" in qs:
+                return self._err(400, "Overriding the Ollama URL is not allowed")
+            url = load_llm_config().get("base_url", "http://localhost:11434").strip()
             refresh = (qs.get("refresh", [""])[0] or "").lower() in {"1", "true", "yes"}
             snapshot = _ollama_snapshot(url, refresh=refresh)
             self._json({
@@ -1416,6 +1493,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "fetched_at": snapshot.get("fetched_at", 0),
             })
         elif p.startswith("/reports/"):
+            if _Handler._require_browser_api_session(self):
+                return
             if _require_role(self, ROLE_VIEWER):
                 return
             self._serve_report(p[9:])
@@ -1426,11 +1505,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         p = urlparse(self.path).path
         body = self._read_body()
         exempt_paths = {"/login", "/connect", "/api/connect"}
-        csrf_exempt_paths = exempt_paths | {"/api/ollama", "/ollama"}
         if p not in exempt_paths:
             if not _has_valid_browser_session(self):
                 return self._err(401, "Authentication required")
-            if p not in csrf_exempt_paths and not _csrf_matches(self, body):
+            if not _csrf_matches(self, body):
                 return self._err(403, "CSRF validation failed")
         if p in ("/login", "/connect"):
             return self._page_connect(body)
@@ -1489,7 +1567,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         html = render_login_page(
             bitbucket_url=BITBUCKET_URL,
             has_saved_pat=bool(load_pat()),
-            csrf_token=_current_csrf_token(),
+            csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
@@ -1499,19 +1577,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_VIEWER):
             return
         qs = parse_qs(urlparse(self.path).query)
-        with _state_lock:
-            session_project_key = _session.project_key
-            session_repo_slugs = list(_session.repo_slugs)
-            session_log_lines = list(_session.log_lines[-500:])
-            session_state = _session.state
-            status = _session.to_status() if _is_connected() else {}
-            status["hardware"] = _hardware_snapshot(_session) if _is_connected() else {}
+        snapshot = _current_session_snapshot(include_status=_is_connected(), log_limit=500)
+        session_project_key = snapshot["project_key"]
+        session_repo_slugs = list(snapshot["repo_slugs"])
+        session_log_lines = list(snapshot["log_lines"])
+        session_state = snapshot["state"]
+        status = dict(snapshot.get("status") or {})
+        if _is_connected():
+            status["hardware"] = _hardware_snapshot(snapshot["session"])
             status["llm_stats"] = _llm_stats(
                 session_log_lines,
                 state=session_state,
                 llm_model=str(status.get("llm_model", "") or ""),
                 llm_model_info=status.get("llm_model_info") or {},
-            ) if _is_connected() else {}
+            )
         project_key = (qs.get("project", [""])[0] or session_project_key or "").strip()
         fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
         if project_key and _require_project_access(self, project_key):
@@ -1535,7 +1614,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             phase_timeline=_phase_timeline(session_log_lines, session_state),
             force_selection=fresh_scan,
             show_scan_results=_has_scan_results(),
-            csrf_token=_current_csrf_token(),
+            csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
@@ -1559,18 +1638,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         report = (record.get("reports") or {}).get("__all__", {})
 
         with _state_lock:
-            is_current = _session.scan_id == safe_scan_id
+            is_current = _current_session().scan_id == safe_scan_id
             if is_current:
-                session_log_lines = list(_session.log_lines[-500:])
-                status = _session.to_status() if _is_connected() else {}
-                status["hardware"] = _hardware_snapshot(_session) if _is_connected() else {}
-                status["llm_stats"] = _llm_stats(
-                    session_log_lines,
-                    state=_session.state,
-                    llm_model=str(status.get("llm_model", "") or ""),
-                    llm_model_info=status.get("llm_model_info") or {},
-                ) if _is_connected() else {}
-                session_state = _session.state
+                snapshot = _current_session_snapshot(include_status=_is_connected(), log_limit=500)
+                session_log_lines = list(snapshot["log_lines"])
+                status = dict(snapshot.get("status") or {})
+                if _is_connected():
+                    status["hardware"] = _hardware_snapshot(snapshot["session"])
+                    status["llm_stats"] = _llm_stats(
+                        session_log_lines,
+                        state=snapshot["state"],
+                        llm_model=str(status.get("llm_model", "") or ""),
+                        llm_model_info=status.get("llm_model_info") or {},
+                    )
+                session_state = snapshot["state"]
             else:
                 session_log_lines = []
                 status = {}
@@ -1616,7 +1697,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 log_url=f"/api/history/log/{safe_scan_id}",
                 started_at_utc=str(record.get("started_at_utc", "") or ""),
                 show_scan_results=_has_scan_results(),
-                csrf_token=_current_csrf_token(),
+                csrf_token=_current_csrf_token(self),
                 notice=notice or (qs.get("notice", [""])[0] or ""),
                 error=error or (qs.get("error", [""])[0] or ""),
             )
@@ -1637,7 +1718,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 force_activity_view=True,
                 include_live_script=is_current,
                 show_scan_results=_has_scan_results(),
-                csrf_token=_current_csrf_token(),
+                csrf_token=_current_csrf_token(self),
                 notice=notice or (qs.get("notice", [""])[0] or ""),
                 error=error or (qs.get("error", [""])[0] or ""),
             )
@@ -1649,7 +1730,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         html = render_history_page(
             history=list(reversed(_history_records_for_user())),
-            csrf_token=_current_csrf_token(),
+            csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1667,7 +1748,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         html = render_inventory_page(
             repo_inventory=repo_inventory,
             summary=summary,
-            csrf_token=_current_csrf_token(),
+            csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1683,7 +1764,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             output_dir=str(Path(OUTPUT_DIR).resolve()),
             llm_cfg=load_llm_config(),
             tls_cfg=load_tls_config(),
-            csrf_token=_current_csrf_token(),
+            csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1695,7 +1776,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         qs = parse_qs(urlparse(self.path).query)
         html = render_help_page(
-            csrf_token=_current_csrf_token(),
+            csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1729,7 +1810,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         )
 
     def _page_scan_start(self, body: dict):
-        global _session
         if _require_role(self, ROLE_SCANNER):
             return
         repo_slugs = body.get("repo_slugs", [])
@@ -1740,8 +1820,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         page_body = dict(body)
         page_body["repo_slugs"] = repo_slugs
-        with _state_lock:
-            current_session = _session
+        current_session = _current_session()
         try:
             new_session = start_scan(
                 body=page_body,
@@ -1751,9 +1830,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 save_llm_config=save_llm_config,
                 audit_event=_audit_event,
             )
-            new_session.state_lock = _state_lock
-            with _state_lock:
-                _session = new_session
+            _replace_current_session(new_session)
         except (ValueError, PermissionError, RuntimeError) as e:
             return self._render_scan_page(error=str(e), selected_repos=repo_slugs)
         threading.Thread(target=_run_scan, args=(new_session,), daemon=True).start()
@@ -1762,8 +1839,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _page_scan_stop(self):
         if _require_role(self, ROLE_SCANNER):
             return
-        with _state_lock:
-            current_session = _session
+        current_session = _current_session()
         stop_scan(current_session=current_session, stop_scan_fn=_stop_active_scan, audit_event=_audit_event)
         target = f"/scan/{current_session.scan_id}" if current_session.scan_id else "/scan"
         extra = {"tab": "activity"} if current_session.scan_id else {"new": "1"}
@@ -1807,8 +1883,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if llm_url or llm_model:
                 _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
             if output_dir:
-                with _state_lock:
-                    is_scan_running = _session.state == "running"
+                is_scan_running = _current_session_snapshot().get("state") == "running"
                 _settings_service.save_output_dir(
                     output_dir=output_dir,
                     is_scan_running=is_scan_running,
@@ -1824,7 +1899,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             triage_finding(
                 body=body,
-                session=_session,
+                session=_current_session(),
                 suppressions_file=SUPPRESSIONS_FILE,
                 triage_lookup=_triage_by_hash,
                 apply_triage_metadata=_apply_triage_metadata,
@@ -1834,8 +1909,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_scan_page(error=str(e))
-        with _state_lock:
-            current_scan_id = _session.scan_id
+        current_scan_id = _current_session_snapshot().get("scan_id", "")
         target = f"/scan/{current_scan_id}" if current_scan_id else "/scan"
         extra = {"tab": "activity"} if current_scan_id else {"new": "1"}
         self._redirect(_with_query(target, notice="Finding triage updated", **extra))
@@ -1846,7 +1920,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             reset_finding(
                 body=body,
-                session=_session,
+                session=_current_session(),
                 suppressions_file=SUPPRESSIONS_FILE,
                 clear_finding_triage=_clear_finding_triage,
                 persist_session_state=_persist_session_state,
@@ -1854,8 +1928,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_scan_page(error=str(e))
-        with _state_lock:
-            current_scan_id = _session.scan_id
+        current_scan_id = _current_session_snapshot().get("scan_id", "")
         target = f"/scan/{current_scan_id}" if current_scan_id else "/scan"
         extra = {"tab": "activity"} if current_scan_id else {"new": "1"}
         self._redirect(_with_query(target, notice="Finding triage reset", **extra))
@@ -1883,14 +1956,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._err(401, str(e))
 
     def _api_scan_start(self, body: dict):
-        global _session
         if _require_role(self, ROLE_SCANNER):
             return
         project_key = body.get("project_key", "").strip()
         if _require_project_access(self, project_key):
             return
-        with _state_lock:
-            current_session = _session
+        current_session = _current_session()
         try:
             new_session = start_scan(
                 body=body,
@@ -1900,9 +1971,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 save_llm_config=save_llm_config,
                 audit_event=_audit_event,
             )
-            new_session.state_lock = _state_lock
-            with _state_lock:
-                _session = new_session
+            _replace_current_session(new_session)
         except ValueError as e:
             return self._err(400, str(e))
         except PermissionError as e:
@@ -1916,8 +1985,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _api_scan_stop(self):
         if _require_role(self, ROLE_SCANNER):
             return
-        with _state_lock:
-            current_session = _session
+        current_session = _current_session()
         self._json(stop_scan(
             current_session=current_session,
             stop_scan_fn=_stop_active_scan,
@@ -1953,9 +2021,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         # Snapshot the backlog and remember its length.
         # The queue may already contain some of these same entries —
         # we skip the first backlog_len items from the queue to avoid duplicates.
-        with _state_lock:
-            session = _session
-            backlog = list(session.log_lines)
+        snapshot = _current_session_snapshot()
+        session = snapshot["session"]
+        backlog = list(snapshot["log_lines"])
         backlog_len  = len(backlog)
         queue_skip   = backlog_len   # items to skip from queue (already sent)
 
@@ -2056,8 +2124,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
         if output_dir:
             try:
-                with _state_lock:
-                    is_scan_running = _session.state == "running"
+                is_scan_running = _current_session_snapshot().get("state") == "running"
                 result = _settings_service.save_output_dir(
                     output_dir=output_dir,
                     is_scan_running=is_scan_running,
@@ -2101,7 +2168,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             self._json(triage_finding(
                 body=body,
-                session=_session,
+                session=_current_session(),
                 suppressions_file=SUPPRESSIONS_FILE,
                 triage_lookup=_triage_by_hash,
                 apply_triage_metadata=_apply_triage_metadata,
@@ -2120,7 +2187,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             self._json(reset_finding(
                 body=body,
-                session=_session,
+                session=_current_session(),
                 suppressions_file=SUPPRESSIONS_FILE,
                 clear_finding_triage=_clear_finding_triage,
                 persist_session_state=_persist_session_state,
@@ -2147,6 +2214,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
 
     def _proxy_ollama(self, body: dict):
+        if _require_role(self, ROLE_VIEWER):
+            return
         status, ct, payload = _settings_service.proxy_ollama(body)
         self._send(status, ct, payload)
 
@@ -2230,6 +2299,8 @@ _orig_get = _Handler.do_GET
 def _patched_get(self):
     p = self.path.split("?")[0]
     if p == "/api/projects":
+        if _Handler._require_browser_api_session(self):
+            return
         if _require_role(self, ROLE_VIEWER):
             return
         self._json({
@@ -2238,6 +2309,8 @@ def _patched_get(self):
             "auth": _operator_state.public_auth(),
         })
     elif p == "/api/repos":
+        if _Handler._require_browser_api_session(self):
+            return
         if _require_role(self, ROLE_VIEWER):
             return
         qs = parse_qs(urlparse(self.path).query)

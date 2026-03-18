@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import json
 import base64
+import http.client
+import urllib.parse
 from pathlib import Path
 
 # Add project root to path
@@ -911,6 +913,16 @@ def test_login_redirects_to_new_scan_view():
     assert any(cookie.startswith("ai_scanner_session=") for cookie in handler._response_cookies)
 
 
+def _install_browser_session(srv, session_id="valid-session", csrf_token="expected-csrf"):
+    original_sessions = dict(srv._browser_sessions)
+    srv._browser_sessions.clear()
+    srv._browser_sessions[session_id] = {
+        "csrf_token": csrf_token,
+        "issued_at": time.time(),
+    }
+    return original_sessions
+
+
 def test_do_post_rejects_missing_csrf_for_mutating_routes():
     import app_server as srv
 
@@ -929,17 +941,14 @@ def test_do_post_rejects_missing_csrf_for_mutating_routes():
         def _404(self):
             raise AssertionError("route should not fall through")
 
-    original_session = srv._browser_session_id
-    original_csrf = srv._browser_csrf_token
+    original_sessions = _install_browser_session(srv)
     try:
-        srv._browser_session_id = "valid-session"
-        srv._browser_csrf_token = "expected-csrf"
         handler = DummyHandler()
         srv._Handler.do_POST(handler)
         assert handler.error == (403, "CSRF validation failed")
     finally:
-        srv._browser_session_id = original_session
-        srv._browser_csrf_token = original_csrf
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
 
 
 def test_do_get_protected_page_requires_browser_session():
@@ -960,15 +969,152 @@ def test_do_get_protected_page_requires_browser_session():
         def _render_login_page(self, *, notice: str = "", error: str = ""):
             raise AssertionError("scan page should redirect instead of rendering login")
 
-    original_session = srv._browser_session_id
+    handler = DummyHandler()
+    with patch.object(srv, "_is_connected", return_value=True):
+        srv._Handler.do_GET(handler)
+    assert handler.redirect == "/login"
+
+
+def test_multiple_browser_sessions_remain_valid():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self, session_id):
+            self.headers = {"Cookie": f"ai_scanner_session={session_id}"}
+
+    original_sessions = dict(srv._browser_sessions)
     try:
-        srv._browser_session_id = "valid-session"
-        handler = DummyHandler()
-        with patch.object(srv, "_is_connected", return_value=True):
-            srv._Handler.do_GET(handler)
-        assert handler.redirect == "/login"
+        first_session, _ = srv._issue_browser_session()
+        second_session, _ = srv._issue_browser_session()
+        assert srv._has_valid_browser_session(DummyHandler(first_session)) is True
+        assert srv._has_valid_browser_session(DummyHandler(second_session)) is True
     finally:
-        srv._browser_session_id = original_session
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+
+
+def test_sensitive_get_api_requires_browser_session():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/api/history"
+
+        def __init__(self):
+            self.headers = {}
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+
+    handler = DummyHandler()
+    srv._Handler.do_GET(handler)
+    assert handler.payload == (401, {"error": "Authentication required"})
+
+
+def _start_live_server(srv):
+    server = srv.http.server.ThreadingHTTPServer(("127.0.0.1", 0), srv._Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    time.sleep(0.05)
+    return server, thread
+
+
+def test_live_api_history_requires_browser_session():
+    import app_server as srv
+
+    server, thread = _start_live_server(srv)
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        conn.request("GET", "/api/history")
+        resp = conn.getresponse()
+        body = json.loads(resp.read().decode("utf-8"))
+        assert resp.status == 401
+        assert body["error"] == "Authentication required"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_live_api_ollama_requires_csrf_even_with_valid_session():
+    import app_server as srv
+
+    orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER, ROLE_ADMIN),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+    server, thread = _start_live_server(srv)
+    try:
+        with patch.object(srv._settings_service, "proxy_ollama", side_effect=AssertionError("proxy should not be called")):
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+            body = json.dumps({"prompt": "hello"})
+            conn.request(
+                "POST",
+                "/api/ollama",
+                body=body,
+                headers={
+                    "Cookie": "ai_scanner_session=valid-session",
+                    "Content-Type": "application/json",
+                },
+            )
+            resp = conn.getresponse()
+            payload = json.loads(resp.read().decode("utf-8"))
+            assert resp.status == 403
+            assert payload["error"] == "CSRF validation failed"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
+def test_live_api_ollama_models_rejects_url_override():
+    import app_server as srv
+
+    orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER,),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+    server, thread = _start_live_server(srv)
+    try:
+        with patch.object(srv, "_ollama_snapshot", side_effect=AssertionError("snapshot should not be called")):
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+            path = "/api/ollama/models?" + urllib.parse.urlencode({"url": "http://evil.example", "refresh": "1"})
+            conn.request("GET", path, headers={"Cookie": "ai_scanner_session=valid-session"})
+            resp = conn.getresponse()
+            payload = json.loads(resp.read().decode("utf-8"))
+            assert resp.status == 400
+            assert payload["error"] == "Overriding the Ollama URL is not allowed"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
 
 
 def test_scan_page_selection_view_stays_pre_scan():
@@ -1939,12 +2085,18 @@ def test_api_projects_returns_cached_projects():
         path = "/api/projects"
 
         def __init__(self):
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
             self.payload = None
 
         def _json(self, data, status=200):
             self.payload = (status, data)
 
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
     orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
     srv._operator_state = SingleUserState(
         SingleUserConfig(
             name="Security Engineer",
@@ -1967,6 +2119,8 @@ def test_api_projects_returns_cached_projects():
         assert handler.payload[1]["projects"] == [{"key": "COGI"}, {"key": "APPSEC"}]
         assert handler.payload[1]["owner"] == "Security Engineer"
     finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
         srv._operator_state = orig_state
 
 
@@ -1977,6 +2131,7 @@ def test_api_projects_filters_by_user_scope():
         path = "/api/projects"
 
         def __init__(self):
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
             self.payload = None
 
         def _json(self, data, status=200):
@@ -1987,6 +2142,7 @@ def test_api_projects_filters_by_user_scope():
             return None
 
     orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
     srv._operator_state = SingleUserState(
         SingleUserConfig(
             name="Security Engineer",
@@ -2008,6 +2164,8 @@ def test_api_projects_filters_by_user_scope():
         assert handler.payload[0] == 200
         assert handler.payload[1]["projects"] == [{"key": "COGI"}]
     finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
         srv._operator_state = orig_state
 
 
@@ -2270,6 +2428,7 @@ def test_api_repos_rejects_project_outside_scope():
         path = "/api/repos?project=APPSEC"
 
         def __init__(self):
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
             self.payload = None
 
         def _json(self, data, status=200):
@@ -2280,6 +2439,7 @@ def test_api_repos_rejects_project_outside_scope():
             return None
 
     orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
     try:
         srv._operator_state = SingleUserState(
             SingleUserConfig(
@@ -2298,6 +2458,8 @@ def test_api_repos_rejects_project_outside_scope():
         assert handler.payload[0] == 403
         assert "project access denied" in handler.payload[1]["error"]
     finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
         srv._operator_state = orig_state
 
 
