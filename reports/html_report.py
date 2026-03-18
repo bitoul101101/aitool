@@ -9,6 +9,7 @@ from collections import defaultdict, Counter
 import html as html_mod
 from datetime import datetime
 from dateutil import tz
+from services.inventory import build_inventory
 
 SEV_COLOR = {1: "#C00000", 2: "#e05c00", 3: "#c87800", 4: "#5a8a3a"}
 SEV_LABEL = {1: "Critical", 2: "High", 3: "Medium", 4: "Low"}
@@ -427,6 +428,7 @@ class HTMLReporter:
 <div class="wrap">
   {self._header(findings)}
   {self._section_delta(findings, delta)}
+  {self._section_inventory(findings)}
   {self._section_summary(stats, findings, policy)}
   {self._section_findings(findings, delta)}
   {self._section_remediation(findings)}
@@ -670,6 +672,13 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
 .detail-panel li{margin-bottom:3px;}
 .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
+.inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.inventory-card{padding:12px 14px;border:1px solid var(--bdr);border-radius:12px;background:var(--card)}
+.inventory-card strong{display:block;font-size:22px;line-height:1.1}
+.inventory-list{display:flex;gap:6px;flex-wrap:wrap}
+.inventory-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
+.inventory-repo{padding:10px 12px;border:1px solid var(--bdr);border-radius:12px;background:var(--card);margin-bottom:10px}
+.inventory-repo-meta{font-size:12px;color:var(--dim);margin-top:4px}
 .detail-panel pre{
   display:inline-block;min-width:200px;max-width:100%;
   background:#18120d;color:#f5debe;
@@ -1503,6 +1512,49 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
     # ── Policy (removed — content moved to summary) ────────────────
     def _section_policy(self, findings, policy):
         return ""
+
+    def _section_inventory(self, findings):
+        inventory = self.meta.get("inventory") or build_inventory(findings)
+        if not inventory.get("repos_total", 0):
+            return ""
+        provider_chips = "".join(
+            f'<span class="inventory-chip">{html_mod.escape(item.get("label", ""))} {item.get("count", 0)}</span>'
+            for item in list(inventory.get("providers_by_count") or [])[:8]
+        ) or "<span class='muted'>No providers detected.</span>"
+        model_chips = "".join(
+            f'<span class="inventory-chip">{html_mod.escape(item.get("model", ""))}</span>'
+            for item in list(inventory.get("models_by_count") or [])[:8]
+        ) or "<span class='muted'>No models detected.</span>"
+        repo_cards = "".join(
+            f'<div class="inventory-repo"><strong>{html_mod.escape(profile.get("repo", ""))}</strong>'
+            f'<div class="inventory-repo-meta">{html_mod.escape(", ".join(profile.get("provider_labels", [])[:4]) or "No provider detail")}</div>'
+            f'<div class="inventory-repo-meta">Embeddings / Vector DB: {"Yes" if profile.get("embeddings_vector_db") else "No"}'
+            f' · Prompt Handling: {"Yes" if profile.get("prompt_handling") else "No"}'
+            f' · Model Serving: {"Yes" if profile.get("model_serving") else "No"}'
+            f' · Agent / Tool Use: {"Yes" if profile.get("agent_tool_use") else "No"}</div></div>'
+            for profile in list(inventory.get("repo_profiles") or [])[:12]
+        )
+        return f"""<section id="inventory">
+<h2>🧭 AI Inventory</h2>
+<div class="inventory-grid">
+  <div class="inventory-card"><div class="muted">Repos Using AI</div><strong>{inventory.get("repos_using_ai_count", 0)} / {inventory.get("repos_total", 0)}</strong></div>
+  <div class="inventory-card"><div class="muted">Providers</div><strong>{inventory.get("provider_count", 0)}</strong></div>
+  <div class="inventory-card"><div class="muted">Models</div><strong>{inventory.get("model_count", 0)}</strong></div>
+  <div class="inventory-card"><div class="muted">Embeddings / Vector DB</div><strong>{inventory.get("embeddings_vector_db_repos", 0)}</strong></div>
+  <div class="inventory-card"><div class="muted">Prompt Handling</div><strong>{inventory.get("prompt_handling_repos", 0)}</strong></div>
+  <div class="inventory-card"><div class="muted">Model Serving / Agent Use</div><strong>{inventory.get("model_serving_repos", 0)} / {inventory.get("agent_tool_use_repos", 0)}</strong></div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <h3>Providers</h3>
+  <div class="inventory-list">{provider_chips}</div>
+  <h3 style="margin-top:14px">Models</h3>
+  <div class="inventory-list">{model_chips}</div>
+</div>
+<div class="card">
+  <h3>Repository Profiles</h3>
+  {repo_cards or "<p class='muted'>No repository profiles available.</p>"}
+</div>
+</section>"""
 
     # ── All Findings ───────────────────────────────────────────────
     def _section_findings(self, findings, delta=None):

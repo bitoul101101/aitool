@@ -26,6 +26,7 @@ from scanner.suppressions import (
     apply_suppressions,
     list_triage,
 )
+from services.inventory import build_inventory
 
 
 class ScanSession:
@@ -66,6 +67,7 @@ class ScanSession:
         self.scan_duration_s: int = 0
         self.llm_model_info: dict = {}
         self.delta: dict = {}
+        self.inventory: dict = {}
 
     @staticmethod
     def _finding_detail(finding: dict) -> dict:
@@ -142,6 +144,7 @@ class ScanSession:
                 "low": sev.get(4, 0),
             },
             "delta": self.delta,
+            "inventory": self.inventory,
             "per_repo": {
                 slug: {
                     "skipped": data is None,
@@ -307,6 +310,7 @@ class ScanJobService:
             "active_total": len(findings),
             "suppressed_total": len(session.suppressed_findings),
             "delta": session.delta,
+            "inventory": session.inventory,
             "sev": {
                 "critical": sev.get(1, 0),
                 "high": sev.get(2, 0),
@@ -591,6 +595,7 @@ class ScanJobService:
         session.tool_version = self.app_version
         session.suppressed_findings = []
         session.delta = {}
+        session.inventory = {}
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
@@ -829,6 +834,7 @@ class ScanJobService:
             project_key=session.project_key,
             repo_slugs=scanned_slugs,
         )
+        session.inventory = build_inventory(final, repo_slugs=scanned_slugs)
         new_hashes = session.delta.get("new_hashes", set())
         for finding in final:
             finding["delta_status"] = "new" if finding.get("_hash", "") in new_hashes else "existing"
@@ -838,6 +844,14 @@ class ScanJobService:
                 f"{session.delta.get('new_count', 0)} new, "
                 f"{session.delta.get('existing_count', session.delta.get('unchanged_count', 0))} existing, "
                 f"{session.delta.get('fixed_count', 0)} fixed since last scan",
+                "dim",
+            )
+        if session.inventory.get("repos_using_ai_count", 0):
+            log(
+                "Inventory: "
+                f"{session.inventory.get('repos_using_ai_count', 0)}/{session.inventory.get('repos_total', 0)} repos with AI, "
+                f"{session.inventory.get('provider_count', 0)} providers, "
+                f"{session.inventory.get('model_count', 0)} models",
                 "dim",
             )
         log(f"Total findings (deduped): {len(final)}", "hd")
@@ -893,6 +907,7 @@ class ScanJobService:
                         "repos_meta": repos_meta_list,
                         "scan_id": session.scan_id,
                         "delta": session.delta,
+                        "inventory": session.inventory,
                         "llm_model_info": session.llm_model_info,
                         "scan_duration_s": elapsed_so_far,
                         "pre_llm_count": total_pre_llm,
@@ -917,6 +932,7 @@ class ScanJobService:
                         "tool_version": session.tool_version,
                         "scan_id": session.scan_id,
                         "delta": session.delta,
+                        "inventory": session.inventory,
                         "llm_model_info": session.llm_model_info,
                         "scan_duration_s": elapsed_so_far,
                         "pre_llm_count": total_pre_llm,

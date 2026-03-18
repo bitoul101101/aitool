@@ -582,6 +582,49 @@ def test_csv_reporter_writes_stable_finding_id_for_baselines():
     assert rows[0]["delta_status"] == "new"
 
 
+def test_build_inventory_aggregates_ai_usage_profiles():
+    from services.inventory import build_inventory
+
+    inventory = build_inventory([
+        {
+            "repo": "repo1",
+            "provider_or_lib": "openai",
+            "ai_category": "External AI API",
+            "capability": "LLM/Completion",
+            "match": "gpt-4o",
+            "snippet": "client.responses.create(model='gpt-4o')",
+        },
+        {
+            "repo": "repo1",
+            "provider_or_lib": "pinecone",
+            "ai_category": "RAG/Vector DB",
+            "capability": "Vector DB",
+            "snippet": "pinecone.Index('docs')",
+        },
+        {
+            "repo": "repo2",
+            "provider_or_lib": "langchain",
+            "ai_category": "External AI API",
+            "capability": "LLM Orchestration",
+            "snippet": "PromptTemplate.from_template(...)",
+        },
+        {
+            "repo": "repo2",
+            "provider_or_lib": "vllm",
+            "ai_category": "Local LLM Runtime",
+            "capability": "Local Inference Server",
+        },
+    ])
+
+    assert inventory["repos_using_ai_count"] == 2
+    assert inventory["provider_count"] >= 3
+    assert "gpt-4o" in inventory["models"]
+    assert inventory["embeddings_vector_db_repos"] == 1
+    assert inventory["prompt_handling_repos"] >= 1
+    assert inventory["model_serving_repos"] == 1
+    assert inventory["agent_tool_use_repos"] >= 1
+
+
 # ── History persistence (_save_history_record) ────────────────────
 
 def test_save_history_record_creates_file():
@@ -620,6 +663,13 @@ def test_save_history_record_creates_file():
         session.repo_details = {
             "my-repo": {"owner": "alice", "branch": "main", "commit": "deadbeefcafebabe"}
         }
+        session.inventory = {
+            "repos_using_ai_count": 1,
+            "repos_total": 1,
+            "provider_count": 1,
+            "model_count": 1,
+            "repo_profiles": [{"repo": "my-repo", "provider_labels": ["Openai"], "models": ["gpt-4o"]}],
+        }
         session.suppressed_findings = [
             {"_hash": "suppressed-1", "repo": "my-repo", "file": "docs.md"}
         ]
@@ -651,6 +701,7 @@ def test_save_history_record_creates_file():
         assert r["tool_version"] == "19.1"
         assert r["repo_details"]["my-repo"]["branch"] == "main"
         assert r["suppressed_total"] == 1
+        assert r["inventory"]["repos_using_ai_count"] == 1
 
         # Log file should exist
         log_path = Path(srv.LOG_DIR) / "20250315_120000.log"
@@ -849,6 +900,31 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             {"finding_id": "fixed-1", "repo": "repo1", "file": "old.py", "line": "12"},
         ],
     }
+    session.inventory = {
+        "repos_using_ai_count": 1,
+        "repos_total": 1,
+        "provider_count": 2,
+        "model_count": 1,
+        "providers_by_count": [
+            {"provider": "openai", "label": "Openai", "count": 1},
+            {"provider": "langchain", "label": "Langchain", "count": 1},
+        ],
+        "models_by_count": [{"model": "gpt-4o", "count": 1}],
+        "embeddings_vector_db_repos": 0,
+        "prompt_handling_repos": 1,
+        "model_serving_repos": 0,
+        "agent_tool_use_repos": 1,
+        "repo_profiles": [
+            {
+                "repo": "repo1",
+                "provider_labels": ["Openai", "Langchain"],
+                "embeddings_vector_db": False,
+                "prompt_handling": True,
+                "model_serving": False,
+                "agent_tool_use": True,
+            }
+        ],
+    }
     session.findings = [
         {
             "_hash": "hash-0",
@@ -938,6 +1014,10 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "Download CSV File" in html
     assert "Download Logs" in html
     assert "Baseline" in html
+    assert "AI Inventory" in html
+    assert "Openai 1" in html
+    assert "gpt-4o" in html
+    assert "Prompt Handling" in html
     assert "Compared to AI_Scan_Report_COGI_repo1_20260317_140000.csv" in html
     assert "old.py:12" in html
     assert "New" in html

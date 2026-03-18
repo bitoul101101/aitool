@@ -174,6 +174,16 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
   .baseline-label{display:block;font-size:11px;color:#705333;text-transform:uppercase;letter-spacing:.04em}
   .baseline-fixed-list{margin:0;padding-left:18px;font-size:12px;color:#4b331b}
   .baseline-fixed-list li{margin:0 0 6px}
+  .inventory-summary{display:grid;gap:8px}
+  .inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .inventory-stat{padding:10px 12px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8}
+  .inventory-stat strong{display:block;font-size:18px;line-height:1.1}
+  .inventory-list{display:flex;flex-wrap:wrap;gap:6px}
+  .inventory-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#efe1cf;color:#5d3b15;font-size:11px;font-weight:700}
+  .inventory-repos{display:grid;gap:8px}
+  .inventory-repo{padding:8px 10px;border:1px solid #ead4ba;border-radius:10px;background:#fffdf8}
+  .inventory-repo strong{display:block;margin-bottom:4px}
+  .inventory-meta{font-size:11px;color:#705333}
   button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
@@ -476,6 +486,7 @@ def render_scan_page(
     state_text = "Running" if running else "Done" if state == "done" else "Stopped" if state == "stopped" else "Ready"
     report = status.get("report") or {}
     delta = status.get("delta") or {}
+    inventory = status.get("inventory") or {}
     fixed_findings = list(delta.get("fixed_findings") or [])[:8]
     baseline_html = ""
     if scan_complete and delta.get("has_baseline"):
@@ -498,6 +509,46 @@ def render_scan_page(
       </div>
     </section>"""
     scan_id = status.get("scan_id", "")
+    inventory_html = ""
+    if inventory.get("repos_total", 0):
+        provider_chips = "".join(
+            f'<span class="inventory-chip">{_esc(item.get("label", ""))} {_esc(item.get("count", 0))}</span>'
+            for item in list(inventory.get("providers_by_count") or [])[:6]
+        ) or '<span class="muted">No providers detected.</span>'
+        model_chips = "".join(
+            f'<span class="inventory-chip">{_esc(item.get("model", ""))}</span>'
+            for item in list(inventory.get("models_by_count") or [])[:6]
+        ) or '<span class="muted">No models detected.</span>'
+        repo_blocks = "".join(
+            f'<div class="inventory-repo"><strong>{_esc(profile.get("repo", ""))}</strong>'
+            f'<div class="inventory-meta">{", ".join(_esc(label) for label in profile.get("provider_labels", [])[:4]) or "No provider detail"}</div>'
+            f'<div class="inventory-meta">'
+            f'Embeddings/Vector DB: {"Yes" if profile.get("embeddings_vector_db") else "No"} · '
+            f'Prompt Handling: {"Yes" if profile.get("prompt_handling") else "No"} · '
+            f'Model Serving: {"Yes" if profile.get("model_serving") else "No"} · '
+            f'Agent/Tool Use: {"Yes" if profile.get("agent_tool_use") else "No"}'
+            f'</div></div>'
+            for profile in list(inventory.get("repo_profiles") or [])[:8]
+        )
+        inventory_html = f"""
+    <section class="card">
+      <h2 style="margin:0 0 8px;font-size:16px">AI Inventory</h2>
+      <div class="inventory-summary" id="inventory-summary">
+        <div class="inventory-grid">
+          <div class="inventory-stat"><span class="baseline-label">Repos Using AI</span><strong id="inventory-repos-ai">{_esc(inventory.get("repos_using_ai_count", 0))}/{_esc(inventory.get("repos_total", 0))}</strong></div>
+          <div class="inventory-stat"><span class="baseline-label">Providers</span><strong id="inventory-provider-count">{_esc(inventory.get("provider_count", 0))}</strong></div>
+          <div class="inventory-stat"><span class="baseline-label">Models</span><strong id="inventory-model-count">{_esc(inventory.get("model_count", 0))}</strong></div>
+        </div>
+        <div class="inventory-grid">
+          <div class="inventory-stat"><span class="baseline-label">Embeddings / Vector DB</span><strong id="inventory-embed-count">{_esc(inventory.get("embeddings_vector_db_repos", 0))}</strong></div>
+          <div class="inventory-stat"><span class="baseline-label">Prompt Handling</span><strong id="inventory-prompt-count">{_esc(inventory.get("prompt_handling_repos", 0))}</strong></div>
+          <div class="inventory-stat"><span class="baseline-label">Model Serving / Agent Use</span><strong id="inventory-serving-agent">{_esc(inventory.get("model_serving_repos", 0))}/{_esc(inventory.get("agent_tool_use_repos", 0))}</strong></div>
+        </div>
+        <div><div class="muted" style="margin-bottom:4px">Providers</div><div class="inventory-list" id="inventory-providers">{provider_chips}</div></div>
+        <div><div class="muted" style="margin-bottom:4px">Models</div><div class="inventory-list" id="inventory-models">{model_chips}</div></div>
+        <div class="inventory-repos" id="inventory-repos-list">{repo_blocks or '<div class="muted">No repo inventory available.</div>'}</div>
+      </div>
+    </section>"""
     report_actions = ""
     if scan_complete and all_findings:
         html_name = report.get("html_name", "")
@@ -599,6 +650,7 @@ def render_scan_page(
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
     {baseline_html}
+    {inventory_html}
     {"<section class=\"card\"><h2 style=\"margin:0 0 8px;font-size:16px\">Reports</h2>" + report_actions + "</section>" if report_actions else ""}
   </aside>
 </section>
@@ -674,6 +726,7 @@ filterRepos();
   const suppressedBody=document.getElementById('suppressed-findings-body');
   const timelineEl=document.getElementById('phase-timeline');
   const baselineSummary=document.getElementById('baseline-summary');
+  const inventorySummary=document.getElementById('inventory-summary');
   if(!logEl) return;
   function esc(value){{
     return String(value ?? '').replace(/[&<>\"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[ch]));
@@ -733,6 +786,39 @@ filterRepos();
       const line=item.line ? `:${{esc(item.line)}}` : '';
       return `<li><strong>${{repo}}</strong> <span class="muted">${{esc(item.file || '')}}${{line}}</span></li>`;
     }}).join('');
+  }}
+  function inventoryChips(items, keyLabel, keyCount){{
+    if(!items || !items.length) return '<span class="muted">None</span>';
+    return items.slice(0,6).map(item => `<span class="inventory-chip">${{esc(item[keyLabel] || item.label || item.model || '')}}${{item[keyCount] ? ` ${{esc(item[keyCount])}}` : ''}}</span>`).join('');
+  }}
+  function inventoryRepos(items){{
+    if(!items || !items.length) return '<div class="muted">No repo inventory available.</div>';
+    return items.slice(0,8).map(item => {{
+      const labels=(item.provider_labels||[]).slice(0,4).join(', ') || 'No provider detail';
+      return `<div class="inventory-repo"><strong>${{esc(item.repo||'')}}</strong><div class="inventory-meta">${{esc(labels)}}</div><div class="inventory-meta">Embeddings/Vector DB: ${{item.embeddings_vector_db ? 'Yes' : 'No'}} · Prompt Handling: ${{item.prompt_handling ? 'Yes' : 'No'}} · Model Serving: ${{item.model_serving ? 'Yes' : 'No'}} · Agent/Tool Use: ${{item.agent_tool_use ? 'Yes' : 'No'}}</div></div>`;
+    }}).join('');
+  }}
+  function renderInventory(data){{
+    const inventory=data.inventory||{{}};
+    if(!inventorySummary) return;
+    const reposAi=document.getElementById('inventory-repos-ai');
+    const providers=document.getElementById('inventory-provider-count');
+    const models=document.getElementById('inventory-model-count');
+    const embed=document.getElementById('inventory-embed-count');
+    const prompt=document.getElementById('inventory-prompt-count');
+    const servingAgent=document.getElementById('inventory-serving-agent');
+    const providerList=document.getElementById('inventory-providers');
+    const modelList=document.getElementById('inventory-models');
+    const repoList=document.getElementById('inventory-repos-list');
+    if(reposAi) reposAi.textContent=`${{inventory.repos_using_ai_count || 0}}/${{inventory.repos_total || 0}}`;
+    if(providers) providers.textContent=String(inventory.provider_count || 0);
+    if(models) models.textContent=String(inventory.model_count || 0);
+    if(embed) embed.textContent=String(inventory.embeddings_vector_db_repos || 0);
+    if(prompt) prompt.textContent=String(inventory.prompt_handling_repos || 0);
+    if(servingAgent) servingAgent.textContent=`${{inventory.model_serving_repos || 0}}/${{inventory.agent_tool_use_repos || 0}}`;
+    if(providerList) providerList.innerHTML=inventoryChips(inventory.providers_by_count || [], 'label', 'count');
+    if(modelList) modelList.innerHTML=inventoryChips(inventory.models_by_count || [], 'model', '');
+    if(repoList) repoList.innerHTML=inventoryRepos(inventory.repo_profiles || []);
   }}
   function renderBaseline(data){{
     const delta=data.delta||{{}};
@@ -842,6 +928,7 @@ filterRepos();
           if(suppressedBody) suppressedBody.innerHTML=renderSuppressedRows([...(data.finding_details||[]).filter(item => item.triage_status === 'accepted_risk'), ...(data.suppressed_details||[])]);
       if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[], state);
       renderBaseline(data);
+      renderInventory(data);
       reportActions(data);
       if(state==='running') return;
       clearInterval(timer);
@@ -1068,12 +1155,13 @@ def render_help_page(*, notice: str = "", error: str = "") -> bytes:
     </table>
   </section>
 
-  <section>
-    <h3 style="margin:0 0 8px">Outputs</h3>
-    <ul style="margin:0;padding-left:18px">
-      <li><strong>HTML Report:</strong> analyst-friendly report with summary, findings, and remediation context.</li>
-      <li><strong>CSV Report:</strong> flat export for filtering, tracking, and external review.</li>
-      <li><strong>Scan Log:</strong> terminal-like execution log showing scan phases and processing activity.</li>
+    <section>
+      <h3 style="margin:0 0 8px">Outputs</h3>
+      <ul style="margin:0;padding-left:18px">
+        <li><strong>AI Inventory:</strong> summary of repos using AI, detected providers and models, and where embeddings, prompt handling, model serving, and agent/tool-use patterns appear.</li>
+        <li><strong>HTML Report:</strong> analyst-friendly report with summary, findings, and remediation context.</li>
+        <li><strong>CSV Report:</strong> flat export for filtering, tracking, and external review.</li>
+        <li><strong>Scan Log:</strong> terminal-like execution log showing scan phases and processing activity.</li>
       <li><strong>History Record:</strong> persisted scan metadata including duration, status, model used, and report references.</li>
     </ul>
   </section>
