@@ -13,6 +13,8 @@ import requests
 from pathlib import Path
 from typing import List, Optional, Callable
 
+from requests import RequestException
+
 
 # ── Rate-limiting defaults ────────────────────────────────────────
 _DEFAULT_MIN_INTERVAL = 0.12   # seconds between requests (≈8 req/s)
@@ -96,7 +98,7 @@ class BitbucketClient:
                 if self._rate_cb:
                     try:
                         self._rate_cb(msg)
-                    except Exception:
+                    except (AttributeError, TypeError):
                         pass
                 if attempt < self._max_retries:
                     time.sleep(retry_after)
@@ -134,7 +136,7 @@ class BitbucketClient:
             dt = parsedate_to_datetime(header_value)
             secs = (dt.timestamp() - time.time())
             return max(0.0, secs)
-        except Exception:
+        except (TypeError, ValueError, OverflowError):
             pass
         return fallback
 
@@ -152,14 +154,14 @@ class BitbucketClient:
                     or data.get("name")
                     or data.get("slug")
                     or "Unknown")
-        except Exception:
+        except (RequestException, ValueError, TypeError):
             pass
         try:
             # Alternative endpoint for some Bitbucket Server versions
             data = self._get(f"{self.base_url}/plugins/servlet/applinks/whoami")
             if isinstance(data, str):
                 return data
-        except Exception:
+        except (RequestException, ValueError, TypeError):
             pass
         return "Unknown"
 
@@ -226,7 +228,7 @@ class BitbucketClient:
             data = self._get(url)
             # Bitbucket Server returns {"id": "refs/heads/main", "displayId": "main", ...}
             return data.get("displayId") or data.get("id", "").replace("refs/heads/", "") or None
-        except Exception:
+        except (RequestException, ValueError, TypeError):
             return None
 
     def get_repo_owner(self, project_key: str, repo_slug: str) -> str:
@@ -245,7 +247,7 @@ class BitbucketClient:
                 name = author.get("displayName") or author.get("name") or author.get("emailAddress", "")
                 if name:
                     return name
-        except Exception:
+        except (RequestException, ValueError, TypeError):
             pass
         try:
             # Fall back: project lead
@@ -255,7 +257,7 @@ class BitbucketClient:
             name = lead.get("displayName") or lead.get("slug") or lead.get("name", "")
             if name:
                 return name
-        except Exception:
+        except (RequestException, ValueError, TypeError):
             pass
         return "Unknown"
 
@@ -272,7 +274,7 @@ class BitbucketClient:
             repo_bytes = data.get("repository") or data.get("size")
             if repo_bytes is not None:
                 return int(repo_bytes)
-        except Exception:
+        except (RequestException, ValueError, TypeError):
             pass
         # Fallback: try the main repo info endpoint
         try:
@@ -282,7 +284,7 @@ class BitbucketClient:
             size = data.get("size")
             if size is not None:
                 return int(size)
-        except Exception:
+        except (RequestException, ValueError, TypeError):
             pass
         return None
 
@@ -331,7 +333,7 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
     def _best_effort_cleanup() -> None:
         try:
             cleanup_clone(dest)
-        except Exception:
+        except OSError:
             pass
 
     if dest.exists():
@@ -451,7 +453,7 @@ def cleanup_clone(path: Path) -> None:
         try:
             os.chmod(p, stat.S_IWRITE)
             func(p)
-        except Exception:
+        except OSError:
             pass
 
     shutil.rmtree(path, onerror=_force_remove)

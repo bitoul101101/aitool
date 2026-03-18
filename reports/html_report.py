@@ -194,7 +194,7 @@ class HTMLReporter:
                 llm_details = self._fetch_llm_details(
                     findings, ollama_url.rstrip("/"), ollama_model,
                     progress_fn=progress_fn)
-            except Exception:
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
                 pass  # LLM unavailable — report still generates without answers
         path.write_text(self._render(findings, policy or {}, llm_details),
                         encoding="utf-8")
@@ -377,7 +377,7 @@ class HTMLReporter:
             if progress_fn:
                 try:
                     progress_fn(i, n_total, cap)
-                except Exception:
+                except (TypeError, ValueError):
                     pass
             prompt = _build_prompt(f)
             body   = _json.dumps({
@@ -406,7 +406,7 @@ class HTMLReporter:
                     content = (data.get("message") or {}).get("content", "") or \
                               data.get("response", "")
                 results[key] = _render_html(content)
-            except Exception as exc:
+            except (urllib.error.URLError, TimeoutError, OSError, ValueError, _json.JSONDecodeError) as exc:
                 results[key] = _render_html(
                     "", f"⚠ LLM unavailable ({model}): {exc}")
         return results
@@ -767,7 +767,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
             if ISRAEL_TZ:
                 dt = dt.replace(tzinfo=ISRAEL_TZ)
             scan_dt = dt.strftime("%d %b %Y  %H:%M:%S")
-        except Exception:
+        except ValueError:
             scan_dt = raw_sid or "—"
 
         # ── Duration ──────────────────────────────────────────────

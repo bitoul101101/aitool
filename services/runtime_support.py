@@ -5,6 +5,7 @@ import os
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Callable
@@ -27,16 +28,13 @@ def load_llm_config(path: str) -> dict:
         cfg = dict(DEFAULT_LLM_CONFIG)
         cfg.update({k: v for k, v in data.items() if k in DEFAULT_LLM_CONFIG})
         return cfg
-    except Exception:
+    except (FileNotFoundError, OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError, TypeError):
         return dict(DEFAULT_LLM_CONFIG)
 
 
 def save_llm_config(path: str, cfg: dict) -> None:
     """Persist LLM settings to JSON file."""
-    try:
-        Path(path).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-    except Exception as exc:
-        print(f"[WARN] Could not save LLM config: {exc}")
+    Path(path).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
 def ollama_ping(base_url: str, *, timeout: int = 4) -> bool:
@@ -45,7 +43,7 @@ def ollama_ping(base_url: str, *, timeout: int = 4) -> bool:
         req = urllib.request.Request(base_url.rstrip("/") + "/api/tags")
         with urllib.request.urlopen(req, timeout=timeout):
             return True
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
         return False
 
 
@@ -81,7 +79,7 @@ def ollama_snapshot(
             data = json.loads(resp.read())
         models = sorted(m.get("name", "") for m in data.get("models", []) if m.get("name"))
         snapshot.update({"reachable": True, "models": models})
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
         if cached:
             snapshot.update({
                 "reachable": bool(cached.get("reachable", False)),
@@ -126,7 +124,7 @@ def ensure_ollama_running(
         if log_fn:
             log_fn(f"  [LLM] {msg}")
         return False, msg
-    except Exception as exc:
+    except OSError as exc:
         msg = f"Failed to start ollama: {exc}"
         if log_fn:
             log_fn(f"  [LLM] {msg}")

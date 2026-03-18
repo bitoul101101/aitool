@@ -10,6 +10,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -549,7 +550,7 @@ class ScanJobService:
         self._migrate_legacy_history_if_needed()
         try:
             records = self._load_db_history_records()
-        except Exception:
+        except sqlite3.Error:
             records = []
         return sorted(records, key=self._history_sort_key)
 
@@ -567,12 +568,15 @@ class ScanJobService:
                     ts = datetime.fromtimestamp(row["ts"]).strftime("%H:%M:%S")
                     lines.append(f"[{ts}] {row['msg']}")
                 return "\n".join(lines) + "\n"
-        except Exception:
+        except sqlite3.Error:
             pass
         for suffix in (".txt", ".log"):
             path = Path(self.paths.log_dir) / f"{scan_id}{suffix}"
             if path.exists():
-                return path.read_text("utf-8")
+                try:
+                    return path.read_text("utf-8")
+                except (OSError, UnicodeDecodeError):
+                    return ""
         return ""
 
     def delete_history(self, scan_ids: list[str]) -> None:
@@ -590,12 +594,12 @@ class ScanJobService:
                     [(scan_id,) for scan_id in scan_ids],
                 )
                 conn.commit()
-        except Exception:
-            pass
+        except sqlite3.Error as exc:
+            raise RuntimeError(f"Failed to delete stored history: {exc}") from exc
         try:
             self._sync_legacy_history_export()
-        except Exception:
-            pass
+        except OSError as exc:
+            raise RuntimeError(f"Failed to update history export: {exc}") from exc
 
     def cleanup_stale_temp_clones(self, *, current_scan_id: str = "") -> None:
         from scanner.bitbucket import cleanup_clone
@@ -616,32 +620,29 @@ class ScanJobService:
                     cleanup_clone(child)
                 elif child.is_file() and child.name.startswith("scan_"):
                     child.unlink()
-            except Exception:
+            except OSError:
                 pass
 
     def save_history_record(self, session: ScanSession, findings: list) -> None:
-        try:
-            self._migrate_legacy_history_if_needed()
-            Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
-            Path(self.paths.log_dir).mkdir(parents=True, exist_ok=True)
-            log_path = Path(self.paths.log_dir) / f"{session.scan_id}.txt"
-            try:
-                with session.state_lock:
-                    log_lines = list(session.log_lines)
-                with open(log_path, "w", encoding="utf-8") as fh:
-                    for entry in log_lines:
-                        ts = datetime.fromtimestamp(entry["ts"]).strftime("%H:%M:%S")
-                        fh.write(f"[{ts}] {entry.get('msg', '')}\n")
-            except Exception:
-                log_path = None
+        self._migrate_legacy_history_if_needed()
+        Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.paths.log_dir).mkdir(parents=True, exist_ok=True)
+        log_path = Path(self.paths.log_dir) / f"{session.scan_id}.txt"
+        with session.state_lock:
+            log_lines = list(session.log_lines)
+        with open(log_path, "w", encoding="utf-8") as fh:
+            for entry in log_lines:
+                ts = datetime.fromtimestamp(entry["ts"]).strftime("%H:%M:%S")
+                fh.write(f"[{ts}] {entry.get('msg', '')}\n")
 
-            with session.state_lock:
-                record = self._build_record(session, findings, log_file=str(log_path) if log_path else "")
+        with session.state_lock:
+            record = self._build_record(session, findings, log_file=str(log_path))
+        try:
             self._upsert_job_record(record)
-            self._replace_scan_logs(session.scan_id, log_lines if 'log_lines' in locals() else [])
+            self._replace_scan_logs(session.scan_id, log_lines)
             self._sync_legacy_history_export()
-        except Exception as exc:
-            print(f"[WARN] Could not save history: {exc}")
+        except (sqlite3.Error, OSError, TypeError, ValueError, JSONDecodeError) as exc:
+            raise RuntimeError(f"Could not save history: {exc}") from exc
 
     def run_scan(
         self,
@@ -1113,5 +1114,5 @@ class ScanJobService:
             from scanner.bitbucket import cleanup_clone
 
             cleanup_clone(scan_temp_root)
-        except Exception:
+        except OSError:
             pass
