@@ -1447,6 +1447,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 force_selection=False,
                 scan_id=safe_scan_id,
                 workspace_tab="activity",
+                force_activity_view=True,
                 include_live_script=is_current,
                 show_scan_results=_has_scan_results(),
                 csrf_token=_current_csrf_token(),

@@ -263,7 +263,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
             '<div class="header-nav">'
             + f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
             + f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
-            + f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
+            + f'<a class="nav{" active" if active == "history" else ""}" href="/history">Past Scans</a>'
             + f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
             + f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
             + '</div>'
@@ -333,6 +333,7 @@ def render_scan_page(
     force_selection: bool = False,
     scan_id: str = "",
     workspace_tab: str = "activity",
+    force_activity_view: bool = False,
     include_live_script: bool = True,
     show_scan_results: bool = True,
     csrf_token: str = "",
@@ -684,7 +685,7 @@ def render_scan_page(
     body = f"""
 {_flash(notice, error)}
 <section class="scan-shell">
-  {running_view if (not force_selection and (running or state in ("done", "stopped") and log_text)) else selection_view}
+  {running_view if (force_activity_view or (not force_selection and (running or state in ("done", "stopped") and log_text))) else selection_view}
 </section>
 {'<script src="/assets/scan_page.js" defer></script>' if include_live_script else ''}"""
     nav_active = "" if scan_id else "new_scan"
@@ -809,7 +810,7 @@ prevBtn?.addEventListener('click',()=>{{if(currentPage>1){{currentPage-=1;render
 nextBtn?.addEventListener('click',()=>{{const totalPages=Math.max(1, Math.ceil(filteredRows().length / PAGE_SIZE)); if(currentPage<totalPages){{currentPage+=1;renderPage();}}}});
 sortHistory(1,'datetime');
 </script>"""
-    return _layout(title="History", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
 def render_results_page(
@@ -1073,7 +1074,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
       <li>Choose the LLM model used for review, then start the scan.</li>
       <li>The tool clones repositories, scans files, optionally runs LLM review, then generates reports.</li>
       <li>During or after the scan, use <strong>To Mitigate</strong>, <strong>Accept Risk</strong>, or <strong>Suppress</strong> to triage findings.</li>
-      <li>Use <strong>History</strong> to revisit prior scans, open reports, download CSV output, or inspect logs.</li>
+      <li>Use <strong>Past Scans</strong> to revisit prior scans, open reports, download CSV output, or inspect logs.</li>
     </ol>
   </section>
 
@@ -1085,7 +1086,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <tr><td>New Scan</td><td>Select project, repositories, and LLM model for a new run.</td></tr>
         <tr><td>Scan Workspace</td><td>Open a specific scan and switch between the live activity view and the finished detailed report.</td></tr>
         <tr><td>AI Inventory</td><td>Review the latest known AI usage profile per repository, including providers, models, and usage patterns.</td></tr>
-        <tr><td>History</td><td>Search, filter, sort, and open results from previous scans.</td></tr>
+        <tr><td>Past Scans</td><td>Search, filter, sort, and open results from previous scans.</td></tr>
         <tr><td>Settings</td><td>Configure output directory and LLM connection settings.</td></tr>
         <tr><td>Help</td><td>Understand the tool architecture, workflow, and limitations.</td></tr>
       </tbody>

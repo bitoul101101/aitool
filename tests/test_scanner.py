@@ -1605,6 +1605,58 @@ def test_scan_workspace_results_page_handles_missing_report():
         srv._find_history_record_by_scan_id = orig_find
 
 
+def test_scan_workspace_activity_renders_for_empty_scan_record_without_log_text():
+    import app_server as srv
+
+    orig_find = srv._find_history_record_by_scan_id
+    orig_get_log = srv._get_log_text
+    try:
+        record = {
+            "scan_id": "20260318_160000",
+            "project_key": "EMPTY",
+            "repo_slugs": [],
+            "state": "done",
+            "started_at_utc": "2026-03-18T16:00:00Z",
+            "reports": {"__all__": {}},
+            "delta": {},
+            "inventory": {},
+            "log_file": "",
+            "total": 0,
+            "suppressed_total": 0,
+        }
+        srv._find_history_record_by_scan_id = lambda _scan_id: record
+        srv._get_log_text = lambda _scan_id: ""
+
+        class DummyHandler:
+            def __init__(self):
+                self.path = "/scan/20260318_160000?tab=activity"
+                self.sent = None
+
+            def _send(self, status, ct, body):
+                self.sent = (status, ct, body)
+
+            def _err(self, status, msg):
+                raise AssertionError(f"{status}: {msg}")
+
+        handler = DummyHandler()
+        with patch.object(srv, "_require_role", return_value=False), \
+             patch.object(srv, "_require_project_access", return_value=False), \
+             patch.object(srv, "_has_scan_results", return_value=False), \
+             patch.object(srv, "_current_csrf_token", return_value="csrf-demo"), \
+             patch.object(srv, "filter_projects", return_value=[]), \
+             patch.object(srv, "load_llm_config", return_value={"base_url": "http://localhost:11434", "model": "m1"}), \
+             patch.object(srv, "_ollama_snapshot", return_value={"models": ["m1"]}):
+            srv._Handler._render_scan_workspace_page(handler, "20260318_160000")
+
+        html = handler.sent[2].decode("utf-8")
+        assert "Activity Log" in html
+        assert "Start Scan" not in html
+        assert "No activity yet." in html
+    finally:
+        srv._find_history_record_by_scan_id = orig_find
+        srv._get_log_text = orig_get_log
+
+
 def test_settings_page_is_server_rendered():
     import app_server as srv
 
