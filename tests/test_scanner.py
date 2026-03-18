@@ -2667,6 +2667,71 @@ def test_html_report_header_excludes_triage_summary_stats():
     assert "Suppressed" not in html
 
 
+def test_html_report_llm_enrichment_deduplicates_repeated_findings():
+    from io import BytesIO
+    import urllib.request
+    from reports import html_report as report_mod
+
+    reporter = HTMLReporter(output_dir=tempfile.mkdtemp(), scan_id="20260318_180000")
+    findings = [
+        {"file": "app.py", "line": 10, "provider_or_lib": "openai", "capability": "chat", "severity": 2},
+        {"file": "app.py", "line": 10, "provider_or_lib": "openai", "capability": "chat", "severity": 2},
+    ]
+
+    class FakeResponse(BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    calls = []
+
+    def fake_urlopen(req, timeout=0):
+        calls.append((req.full_url, timeout))
+        payload = json.dumps({"message": {"content": "## Why It's Problematic\nIssue.\n## How to Fix It\n- Fix\n- Test\n- Review\n## References\nhttps://owasp.org"}}).encode("utf-8")
+        return FakeResponse(payload)
+
+    with patch.object(urllib.request, "urlopen", side_effect=fake_urlopen):
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen")
+
+    assert len(calls) == 1
+    assert len(details) == 1
+
+
+def test_html_report_llm_enrichment_applies_budget_placeholder():
+    from io import BytesIO
+    import urllib.request
+    from reports import html_report as report_mod
+
+    reporter = HTMLReporter(output_dir=tempfile.mkdtemp(), scan_id="20260318_180100")
+    findings = [
+        {"file": f"app{i}.py", "line": i, "provider_or_lib": "openai", "capability": "chat", "severity": 2}
+        for i in range(report_mod.REPORT_LLM_MAX_FINDINGS + 2)
+    ]
+
+    class FakeResponse(BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    calls = []
+
+    def fake_urlopen(req, timeout=0):
+        calls.append(req.full_url)
+        payload = json.dumps({"message": {"content": "## Why It's Problematic\nIssue.\n## How to Fix It\n- Fix\n- Test\n- Review\n## References\nhttps://owasp.org"}}).encode("utf-8")
+        return FakeResponse(payload)
+
+    with patch.object(urllib.request, "urlopen", side_effect=fake_urlopen):
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen")
+
+    assert len(calls) == report_mod.REPORT_LLM_MAX_FINDINGS
+    skipped_key = f"app{report_mod.REPORT_LLM_MAX_FINDINGS}.py:{report_mod.REPORT_LLM_MAX_FINDINGS}:openai"
+    assert "skipped for this finding" in details[skipped_key]
+
+
 def test_report_server_allows_only_its_local_origin():
     from reports.report_server import _allowed_origin
 

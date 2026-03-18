@@ -3,6 +3,9 @@ HTML Report Generator
 AI Security & Compliance Monitoring
 """
 
+import json
+import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Dict, Any
 from collections import defaultdict, Counter
@@ -14,6 +17,8 @@ from services.inventory import build_inventory
 SEV_COLOR = {1: "#C00000", 2: "#e05c00", 3: "#c87800", 4: "#5a8a3a"}
 SEV_LABEL = {1: "Critical", 2: "High", 3: "Medium", 4: "Low"}
 ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
+REPORT_LLM_MAX_FINDINGS = 12
+REPORT_LLM_MAX_WORKERS = 3
 
 POLICY_COLOR = {
     "CRITICAL":   "#C00000",
@@ -211,7 +216,7 @@ class HTMLReporter:
         import urllib.request, urllib.error, json as _json, html as _html
 
         endpoint = base_url + "/api/chat"
-        timeout  = 60          # seconds per finding
+        timeout  = 60
         results  = {}
 
         _SYSTEM_PROMPT = (
@@ -370,15 +375,11 @@ class HTMLReporter:
         def _key(f: dict) -> str:
             return f"{f.get('file','')}:{f.get('line','')}:{f.get('provider_or_lib','')}"
 
-        n_total = len(findings)
-        for i, f in enumerate(findings, 1):
+        def _placeholder_html(message: str) -> str:
+            return _render_html("", message)
+
+        def _fetch_one(f: dict) -> tuple[str, str]:
             key    = _key(f)
-            cap    = f.get("capability", f.get("provider_or_lib", ""))
-            if progress_fn:
-                try:
-                    progress_fn(i, n_total, cap)
-                except (TypeError, ValueError):
-                    pass
             prompt = _build_prompt(f)
             body   = _json.dumps({
                 "model":   model,
@@ -405,10 +406,55 @@ class HTMLReporter:
                     data    = _json.loads(resp.read().decode("utf-8"))
                     content = (data.get("message") or {}).get("content", "") or \
                               data.get("response", "")
-                results[key] = _render_html(content)
+                return key, _render_html(content)
             except (urllib.error.URLError, TimeoutError, OSError, ValueError, _json.JSONDecodeError) as exc:
-                results[key] = _render_html(
-                    "", f"⚠ LLM unavailable ({model}): {exc}")
+                return key, _placeholder_html(f"⚠ LLM unavailable ({model}): {exc}")
+
+        limited_findings = list(findings[:REPORT_LLM_MAX_FINDINGS])
+        skipped_findings = list(findings[REPORT_LLM_MAX_FINDINGS:])
+        for finding in skipped_findings:
+            results[_key(finding)] = _placeholder_html(
+                f"⚠ LLM analysis skipped for this finding to keep report generation responsive. "
+                f"Only the first {REPORT_LLM_MAX_FINDINGS} findings are enriched per report."
+            )
+
+        unique_findings: dict[str, dict] = {}
+        for finding in limited_findings:
+            unique_findings.setdefault(_key(finding), finding)
+
+        work_items = list(unique_findings.values())
+        total_work = len(work_items)
+        if not work_items:
+            return results
+
+        max_workers = max(1, min(REPORT_LLM_MAX_WORKERS, total_work))
+        if max_workers == 1:
+            for i, finding in enumerate(work_items, 1):
+                key, html = _fetch_one(finding)
+                results[key] = html
+                if progress_fn:
+                    try:
+                        progress_fn(i, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
+                    except (TypeError, ValueError):
+                        pass
+            return results
+
+        future_meta = {}
+        completed = 0
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="report-llm") as executor:
+            for finding in work_items:
+                future = executor.submit(_fetch_one, finding)
+                future_meta[future] = finding
+            for future in as_completed(future_meta):
+                finding = future_meta[future]
+                key, html = future.result()
+                results[key] = html
+                completed += 1
+                if progress_fn:
+                    try:
+                        progress_fn(completed, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
+                    except (TypeError, ValueError):
+                        pass
         return results
 
     def _render(self, findings, policy, llm_details=None):
