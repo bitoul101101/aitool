@@ -2199,6 +2199,34 @@ def test_sse_write_returns_false_on_client_disconnect():
     assert srv._Handler._sse_write(handler, {"msg": "hello", "ts": 0, "level": "info"}) is False
 
 
+def test_send_swallows_client_disconnects():
+    import app_server as srv
+
+    class BrokenWriter:
+        def write(self, _data):
+            raise ConnectionAbortedError(10053, "connection aborted")
+
+    class DummyHandler:
+        def __init__(self):
+            self.wfile = BrokenWriter()
+
+        def send_response(self, _status):
+            pass
+
+        def send_header(self, _name, _value):
+            pass
+
+        def _cors(self):
+            pass
+
+        def end_headers(self):
+            pass
+
+    handler = DummyHandler()
+
+    srv._Handler._send(handler, 200, "text/plain", b"ok")
+
+
 def test_run_scan_with_no_repos_completes_cleanly():
     import app_server as srv
 

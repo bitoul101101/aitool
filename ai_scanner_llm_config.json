@@ -1,4 +1,4 @@
 {
   "base_url": "http://localhost:11434",
-  "model": "qwen2.5-coder:7b-instruct"
+  "model": "gemma3:4b"
 }

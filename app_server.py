@@ -1338,12 +1338,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._json({"error": msg}, status)
 
     def _send(self, status: int, ct: str, body: bytes):
-        self.send_response(status)
-        self.send_header("Content-Type", ct)
-        self.send_header("Content-Length", str(len(body)))
-        self._cors()
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", ct)
+            self.send_header("Content-Length", str(len(body)))
+            self._cors()
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+            return
 
     def _redirect(self, location: str):
         body = b""
