@@ -40,6 +40,36 @@
       "note": "fdfdfd",
       "marked_by": "Unknown",
       "marked_at": "2026-03-17"
+    },
+    {
+      "hash": "75063e701c132be64f46edf800d4e904",
+      "file": "system-config-tool.py",
+      "capability": "SQL Generation Risk",
+      "repo": "cogi-base-system",
+      "status": "false_positive",
+      "note": "f",
+      "marked_by": "Unknown",
+      "marked_at": "2026-03-18"
+    },
+    {
+      "hash": "8998f5254dad32b84eec8b666f53b20f",
+      "file": "system-config-tool.py",
+      "capability": "SQL Generation Risk",
+      "repo": "cogi-base-system",
+      "status": "accepted_risk",
+      "note": "fggfg",
+      "marked_by": "Unknown",
+      "marked_at": "2026-03-18"
+    },
+    {
+      "hash": "b214e151c7aea11f9920c1edb34c5d03",
+      "file": "system-config-tool.py",
+      "capability": "SQL Generation Risk",
+      "repo": "cogi-base-system",
+      "status": "reviewed",
+      "note": "fgfgsd",
+      "marked_by": "Unknown",
+      "marked_at": "2026-03-18"
     }
   ]
 }

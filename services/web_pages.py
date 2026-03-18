@@ -868,6 +868,10 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         state = str(rec.get("state", ""))
         status_class = {"running": "status-running", "done": "status-done", "stopped": "status-stopped"}.get(state.lower(), "")
         total_findings = rec.get("total", rec.get("finding_total", rec.get("active_total", 0)))
+        delta = rec.get("delta") or {}
+        delta_new = delta.get("new_count", 0)
+        delta_existing = delta.get("existing_count", delta.get("unchanged_count", 0))
+        delta_fixed = delta.get("fixed_count", 0)
         reports = (rec.get("reports") or {}).get("__all__", {})
         html_link = f'<a class="icon-link" href="/reports/{_esc(reports.get("html_name",""))}" target="_blank" title="Open HTML Report"><img src="{HTML_ICON}" alt="HTML"></a>' if reports.get("html_name") else ""
         csv_link = f'<a class="icon-link" href="/reports/{_esc(reports.get("csv_name",""))}" download title="Download CVS Report"><img src="{CSV_ICON}" alt="CSV"></a>' if reports.get("csv_name") else ""
@@ -879,6 +883,9 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             f'<td>{_esc(project)}</td>'
             f'<td>{_esc(repo_label)}</td>'
             f'<td>{_esc(total_findings)}</td>'
+            f'<td>{_esc(delta_new)}</td>'
+            f'<td>{_esc(delta_existing)}</td>'
+            f'<td>{_esc(delta_fixed)}</td>'
             f'<td>{_esc(rec.get("critical_prod", 0))}</td>'
             f'<td>{_esc(rec.get("high_prod", 0))}</td>'
             f'<td>{_esc(rec.get("llm_model", ""))}</td>'
@@ -908,6 +915,9 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             <th data-sort="text">Project</th>
             <th data-sort="text">Repo</th>
             <th data-sort="number">Total<br>Findings</th>
+            <th data-sort="number">New</th>
+            <th data-sort="number">Existing</th>
+            <th data-sort="number">Fixed</th>
             <th data-sort="number">Critical<br>in Prod</th>
             <th data-sort="number">High<br>in Prod</th>
             <th data-sort="text">LLM<br>Model</th>
@@ -918,7 +928,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             <th>LOG</th>
           </tr>
         </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="13">No scan history available.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="16">No scan history available.</td></tr>'}</tbody>
       </table>
     </div>
     <div class="history-pagination">

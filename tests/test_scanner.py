@@ -1155,6 +1155,7 @@ def test_history_page_is_server_rendered():
                 "repo_slugs": ["repo1"],
                 "state": "done",
                 "total": 3,
+                "delta": {"new_count": 1, "existing_count": 2, "fixed_count": 4},
                 "suppressed_total": 1,
                 "critical_prod": 1,
                 "high_prod": 2,
@@ -1173,6 +1174,12 @@ def test_history_page_is_server_rendered():
     assert 'id="history-prev-btn"' in html
     assert 'id="history-next-btn"' in html
     assert "Page 1 of 1" in html
+    assert "New" in html
+    assert "Existing" in html
+    assert "Fixed" in html
+    assert ">1</td>" in html
+    assert ">2</td>" in html
+    assert ">4</td>" in html
     assert "/reports/r.html" in html
     assert ".table-shell tbody tr:hover" in html
 
