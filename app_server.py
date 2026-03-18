@@ -986,6 +986,7 @@ def _process_disk_io_text() -> str:
         return "Unavailable"
     try:
         import ctypes
+        from ctypes import wintypes
 
         class IO_COUNTERS(ctypes.Structure):
             _fields_ = [
@@ -997,9 +998,14 @@ def _process_disk_io_text() -> str:
                 ("OtherTransferCount", ctypes.c_uint64),
             ]
 
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel32.GetProcessIoCounters.argtypes = [wintypes.HANDLE, ctypes.POINTER(IO_COUNTERS)]
+        kernel32.GetProcessIoCounters.restype = wintypes.BOOL
+
         counters = IO_COUNTERS()
-        proc = ctypes.windll.kernel32.GetCurrentProcess()
-        if not ctypes.windll.kernel32.GetProcessIoCounters(proc, ctypes.byref(counters)):
+        proc = kernel32.GetCurrentProcess()
+        if not kernel32.GetProcessIoCounters(proc, ctypes.byref(counters)):
             return "Unavailable"
         now = time.time()
         with _RESOURCE_LOCK:
