@@ -110,7 +110,6 @@ def test_save_tls_settings_validates_pem_bundle_content():
     service = SettingsService(
         load_llm_config=lambda: {},
         save_llm_config=lambda cfg: None,
-        load_tls_config=lambda: {},
         save_tls_config=lambda cfg: captured.update(cfg),
         ensure_ollama_running=lambda url: {"ok": True},
         list_ollama_models=lambda url: [],
@@ -137,7 +136,6 @@ def test_save_tls_settings_rejects_non_pem_bundle_with_clear_error():
     service = SettingsService(
         load_llm_config=lambda: {},
         save_llm_config=lambda cfg: None,
-        load_tls_config=lambda: {},
         save_tls_config=lambda cfg: None,
         ensure_ollama_running=lambda url: {"ok": True},
         list_ollama_models=lambda url: [],

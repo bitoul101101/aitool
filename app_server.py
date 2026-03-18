@@ -1195,7 +1195,6 @@ def _gpu_snapshot() -> str:
 _settings_service = SettingsService(
     load_llm_config=load_llm_config,
     save_llm_config=save_llm_config,
-    load_tls_config=load_tls_config,
     save_tls_config=save_tls_config,
     ensure_ollama_running=_ollama_ensure_running,
     list_ollama_models=_ollama_list_models,

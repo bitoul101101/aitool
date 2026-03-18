@@ -14,7 +14,6 @@ class SettingsService:
         *,
         load_llm_config: Callable[[], dict],
         save_llm_config: Callable[[dict], None],
-        load_tls_config: Callable[[], dict],
         save_tls_config: Callable[[dict], None],
         ensure_ollama_running: Callable[[str], dict],
         list_ollama_models: Callable[[str], list],
@@ -23,7 +22,6 @@ class SettingsService:
     ):
         self._load_llm_config = load_llm_config
         self._save_llm_config = save_llm_config
-        self._load_tls_config = load_tls_config
         self._save_tls_config = save_tls_config
         self._ensure_ollama_running = ensure_ollama_running
         self._list_ollama_models = list_ollama_models
