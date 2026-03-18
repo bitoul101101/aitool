@@ -1026,6 +1026,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert html.index("Phase Timeline") < html.index("Open HTML Report")
     assert "Download CSV File" in html
     assert "Download Logs" in html
+    assert 'href="/results/20260317_154037"' in html
     assert "Baseline" in html
     assert 'id="inventory-summary"' not in html
     assert "Compared to AI_Scan_Report_COGI_repo1_20260317_140000.csv" in html
@@ -1321,6 +1322,66 @@ def test_history_page_is_server_rendered():
     assert ">4</td>" in html
     assert "/reports/r.html" in html
     assert ".table-shell tbody tr:hover" in html
+
+
+def test_results_page_is_server_rendered():
+    import app_server as srv
+
+    html = srv.render_results_page(
+        scan_id="20260318_140208",
+        project_key="COGI",
+        repo_label="repo1",
+        state="done",
+        html_name="scan.html",
+        csv_name="scan.csv",
+        log_url="/api/history/log/20260318_140208",
+    ).decode("utf-8")
+
+    assert '<iframe class="results-frame" src="/reports/scan.html"' in html
+    assert 'Open Raw HTML' in html
+    assert 'Download CSV File' in html
+    assert 'Download Logs' in html
+    assert 'Back to Scan' in html
+
+
+def test_render_results_page_resolves_current_session_report():
+    import app_server as srv
+
+    orig_session = srv._session
+    try:
+        session = srv.ScanSession()
+        session.scan_id = "20260318_150000"
+        session.project_key = "COGI"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.started_at_utc = "2026-03-18T15:00:00Z"
+        session.report_paths = {
+            "__all__": {
+                "html_name": "current.html",
+                "csv_name": "current.csv",
+            }
+        }
+        srv._session = session
+
+        class DummyHandler:
+            def __init__(self):
+                self.sent = None
+
+            def _send(self, status, ct, body):
+                self.sent = (status, ct, body)
+
+            def _err(self, status, msg):
+                raise AssertionError(f"{status}: {msg}")
+
+        handler = DummyHandler()
+        with patch.object(srv, "_require_role", return_value=False):
+            srv._Handler._render_results_page(handler, "20260318_150000")
+
+        html = handler.sent[2].decode("utf-8")
+        assert 'src="/reports/current.html"' in html
+        assert "repo1" in html
+    finally:
+        srv._session = orig_session
 
 
 def test_settings_page_is_server_rendered():

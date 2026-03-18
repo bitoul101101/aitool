@@ -203,6 +203,11 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .history-pagination .page-info{font-size:12px;color:#705333}
 .icon-link img{display:block;width:34px;height:34px}
 .filters-row{margin-bottom:12px}
+.results-shell{display:grid;gap:14px}
+.results-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.results-actions{display:flex;gap:8px;flex-wrap:wrap}
+.results-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.results-frame{width:100%;min-height:calc(100vh - 220px);border:1px solid #d8b995;border-radius:14px;background:#fff}
 @media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}}
 @media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}}
 @keyframes fadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
@@ -567,8 +572,10 @@ def render_scan_page(
         csv_name = report.get("csv_name", "")
         log_url = f"/api/history/log/{_esc(scan_id)}" if scan_id else ""
         buttons = []
+        if html_name and scan_id:
+            buttons.append(f'<a class="btn" id="open-results-page" href="/results/{_esc(scan_id)}">Open Results</a>')
         if html_name:
-            buttons.append(f'<a class="btn" id="open-html-report" href="/reports/{_esc(html_name)}" target="_blank">Open HTML Report</a>')
+            buttons.append(f'<a class="btn alt" id="open-html-report" href="/reports/{_esc(html_name)}" target="_blank">Open HTML Report</a>')
         if csv_name:
             buttons.append(f'<a class="btn alt" id="download-csv-report" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
         if log_url:
@@ -705,7 +712,7 @@ filterRepos();
   modelSelect?.addEventListener('change', updateModelWarning);
   updateModelWarning();
   updateStartAvailability();
-    if(startBtn || runningNotice) setInterval(updateStartAvailability, 3000);
+  if(startBtn || runningNotice) setInterval(updateStartAvailability, 3000);
 }})();
 (function() {{
   const logEl=document.getElementById('scan-log');
@@ -882,7 +889,8 @@ filterRepos();
       return;
     }}
     const actions=[];
-    if(report.html_name) actions.push(`<a class="btn" id="open-html-report" href="/reports/${{report.html_name}}" target="_blank">Open HTML Report</a>`);
+    if(report.html_name && data.scan_id) actions.push(`<a class="btn" id="open-results-page" href="/results/${{data.scan_id}}">Open Results</a>`);
+    if(report.html_name) actions.push(`<a class="btn alt" id="open-html-report" href="/reports/${{report.html_name}}" target="_blank">Open HTML Report</a>`);
     if(report.csv_name) actions.push(`<a class="btn alt" id="download-csv-report" href="/reports/${{report.csv_name}}" download>Download CSV File</a>`);
     if(data.scan_id) actions.push(`<a class="btn ghost" id="download-log-report" href="/api/history/log/${{data.scan_id}}" download>Download Logs</a>`);
     if(!actions.length) return;
@@ -895,6 +903,7 @@ filterRepos();
   }}
   const stream=new EventSource('/api/scan/stream');
   let replaceInitialLog = Boolean(logEl.textContent.trim());
+  let redirectedToResults = false;
   stream.onmessage=(event)=>{{
     if(!event.data) return;
     let line=event.data;
@@ -922,9 +931,15 @@ filterRepos();
       if(state==='running') return;
       clearInterval(timer);
       stream.close();
-          if(textEl) textEl.textContent=state ? state.charAt(0).toUpperCase()+state.slice(1) : 'Ready';
+      if(textEl) textEl.textContent=state ? state.charAt(0).toUpperCase()+state.slice(1) : 'Ready';
       const stopBtn=document.getElementById('stop-scan-btn');
       if(stopBtn) stopBtn.disabled=true;
+      if(!redirectedToResults && state === 'done' && data.scan_id && data.report && data.report.html_name) {{
+        redirectedToResults = true;
+        window.setTimeout(() => {{
+          window.location.assign(`/results/${{encodeURIComponent(data.scan_id)}}`);
+        }}, 900);
+      }}
     }} catch (_err) {{}}
   }}, 3000);
 }})();
@@ -958,7 +973,8 @@ filterRepos();
     const state=String(data.state || '').toLowerCase();
     const actions=[];
     if((state === 'done' || state === 'stopped') && findings.length) {{
-      if(report.html_name) actions.push(`<a class="btn" id="open-html-report" href="/reports/${{report.html_name}}" target="_blank">Open HTML Report</a>`);
+      if(report.html_name && data.scan_id) actions.push(`<a class="btn" id="open-results-page" href="/results/${{data.scan_id}}">Open Results</a>`);
+      if(report.html_name) actions.push(`<a class="btn alt" id="open-html-report" href="/reports/${{report.html_name}}" target="_blank">Open HTML Report</a>`);
       if(report.csv_name) actions.push(`<a class="btn alt" id="download-csv-report" href="/reports/${{report.csv_name}}" download>Download CSV File</a>`);
       if(data.scan_id) actions.push(`<a class="btn ghost" id="download-log-report" href="/api/history/log/${{data.scan_id}}" download>Download Logs</a>`);
     }}
@@ -1100,6 +1116,53 @@ nextBtn?.addEventListener('click',()=>{{const totalPages=Math.max(1, Math.ceil(f
 sortHistory(1,'datetime');
 </script>"""
     return _layout(title="History", body=body, active="history", show_scan_results=show_scan_results)
+
+
+def render_results_page(
+    *,
+    scan_id: str,
+    project_key: str,
+    repo_label: str,
+    state: str,
+    html_name: str,
+    csv_name: str = "",
+    log_url: str = "",
+    started_at_utc: str = "",
+    show_scan_results: bool = True,
+    notice: str = "",
+    error: str = "",
+) -> bytes:
+    date_text, time_text, _ = _fmt_dt(started_at_utc)
+    state_name = (state or "done").title()
+    status_class = "status-done" if state.lower() == "done" else "status-stopped" if state.lower() == "stopped" else "status-running"
+    toolbar_actions = []
+    if html_name:
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
+    if csv_name:
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
+    if log_url:
+        toolbar_actions.append(f'<a class="btn ghost" href="{_esc(log_url)}" download>Download Logs</a>')
+    body = f"""
+{_flash(notice, error)}
+<section class="results-shell">
+  <section class="card">
+    <div class="results-toolbar">
+      <div class="results-meta">
+        <span class="pill">{_esc(project_key or "-")}</span>
+        <span class="pill">{_esc(repo_label or "-")}</span>
+        <span class="pill">{_esc(scan_id)}</span>
+        <span class="pill {status_class}">{_esc(state_name)}</span>
+        <span class="muted">{_esc(date_text)} {_esc(time_text)}</span>
+      </div>
+      <div class="results-actions">
+        <a class="btn ghost" href="/scan">Back to Scan</a>
+        {''.join(toolbar_actions)}
+      </div>
+    </div>
+  </section>
+  <iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Scan Results"></iframe>
+</section>"""
+    return _layout(title="Results", body=body, active="scan", show_scan_results=show_scan_results)
 
 
 def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:

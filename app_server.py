@@ -9,6 +9,7 @@ Routes
 ──────
 GET  /                → scan page (HTML)
 GET  /scan            → scan page (HTML)
+GET  /results/<id>    → finished results page (HTML)
 GET  /history         → history page (HTML)
 GET  /settings        → settings page (HTML)
 GET  /help            → help page (HTML)
@@ -82,6 +83,7 @@ from services.web_pages import (
     render_history_page,
     render_inventory_page,
     render_login_page,
+    render_results_page,
     render_scan_page,
     render_settings_page,
 )
@@ -435,6 +437,21 @@ def _find_history_record_by_report_name(filename: str) -> dict | None:
     return find_history_record_by_report_name(_history_records_for_user(), filename)
 
 
+def _report_record_for_scan(scan_id: str) -> dict | None:
+    current_report = (_session.report_paths or {}).get("__all__", {})
+    if _session.scan_id == scan_id and current_report.get("html_name"):
+        return {
+            "scan_id": _session.scan_id,
+            "project_key": _session.project_key,
+            "repo_slugs": list(_session.repo_slugs),
+            "state": _session.state,
+            "started_at_utc": _session.started_at_utc,
+            "reports": {"__all__": current_report},
+            "log_file": f"{scan_id}.log" if scan_id else "",
+        }
+    return _find_history_record_by_scan_id(scan_id)
+
+
 def _triage_by_hash() -> Dict[str, dict]:
     return triage_by_hash(SUPPRESSIONS_FILE)
 
@@ -708,6 +725,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not _is_connected():
                 return self._redirect("/login")
             self._render_scan_page()
+        elif p.startswith("/results/"):
+            if not _is_connected():
+                return self._redirect("/login")
+            self._render_results_page(p[9:])
         elif p == "/history":
             if not _is_connected():
                 return self._redirect("/login")
@@ -891,6 +912,32 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
+    def _render_results_page(self, scan_id: str, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        record = _report_record_for_scan(Path(scan_id).name)
+        if not record:
+            return self._err(404, "Scan results not found")
+        report = (record.get("reports") or {}).get("__all__", {})
+        html_name = report.get("html_name", "")
+        if not html_name:
+            return self._err(404, "HTML report not found for this scan")
+        repo_label = ", ".join(record.get("repo_slugs", record.get("repos", [])))
+        html = render_results_page(
+            scan_id=record.get("scan_id", scan_id),
+            project_key=record.get("project_key", record.get("project", "")),
+            repo_label=repo_label,
+            state=record.get("state", "done"),
+            html_name=html_name,
+            csv_name=report.get("csv_name", ""),
+            log_url=f"/api/history/log/{record.get('scan_id', scan_id)}",
+            started_at_utc=record.get("started_at_utc", ""),
+            show_scan_results=_has_scan_results(),
+            notice=notice,
+            error=error,
         )
         self._send(200, "text/html; charset=utf-8", html)
 
