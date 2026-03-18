@@ -1062,6 +1062,9 @@ def test_history_page_is_server_rendered():
     assert 'action="/history/delete"' in html
     assert "Delete Selected Repos" in html
     assert 'id="history-search"' in html
+    assert 'id="history-prev-btn"' in html
+    assert 'id="history-next-btn"' in html
+    assert "Page 1 of 1" in html
     assert "/reports/r.html" in html
     assert ".table-shell tbody tr:hover" in html
 
@@ -1089,6 +1092,14 @@ def test_help_page_is_server_rendered():
     assert "Reference documentation for the AI Security &amp; Compliance Scanner." in html
     assert "Main Components" in html
     assert "Known Limitations" in html
+
+
+def test_login_page_centers_login_action():
+    import app_server as srv
+
+    html = srv.render_login_page(bitbucket_url=srv.BITBUCKET_URL, has_saved_pat=False).decode("utf-8")
+
+    assert ".login-actions{display:flex;justify-content:center}" in html
 
 
 def test_allowed_origin_only_permits_local_app_hosts():

@@ -103,7 +103,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .checkline input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
 .login-shell{width:min(100%,420px);margin:0 auto}
 .login-grid{display:grid;gap:14px}
-.login-actions{display:flex;justify-content:flex-end}
+.login-actions{display:flex;justify-content:center}
 .login-title{text-align:center;margin:0 0 6px}
 .scan-shell{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
 .selection-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
@@ -171,6 +171,8 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .table-shell thead th{position:sticky;top:0;z-index:2}
 .table-shell tbody tr:hover{background:#f4eadb}
 .history-time{font-size:11px;color:#7a5d3e}
+.history-pagination{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:10px}
+.history-pagination .page-info{font-size:12px;color:#705333}
 .icon-link img{display:block;width:34px;height:34px}
 .filters-row{margin-bottom:12px}
 @media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}}
@@ -237,6 +239,7 @@ def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = 
 {_flash(notice, error)}
 <section class="card login-shell">
   <h2 class="login-title">Login to Bitbucket</h2>
+  <p class="muted" style="margin:10px 0 0;text-align:center">Scan Bitbucket repositories to detect AI usage, insecure AI patterns, and policy-relevant findings.</p>
   <form method="post" action="/login" class="login-grid" style="margin-top:18px">
     <div>
       <label>Personal Access Token</label>
@@ -833,6 +836,11 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         <tbody>{''.join(rows) or '<tr><td colspan="13">No scan history available.</td></tr>'}</tbody>
       </table>
     </div>
+    <div class="history-pagination">
+      <button type="button" class="ghost" id="history-prev-btn">Previous</button>
+      <span class="page-info" id="history-page-info">Page 1 of 1</span>
+      <button type="button" class="ghost" id="history-next-btn">Next</button>
+    </div>
   </form>
 </section>
 <script>
@@ -843,17 +851,26 @@ const fr=document.getElementById('filter-repo');
 const fs=document.getElementById('filter-status');
 const fm=document.getElementById('filter-model');
 const delBtn=document.getElementById('delete-selected-btn');
+const prevBtn=document.getElementById('history-prev-btn');
+const nextBtn=document.getElementById('history-next-btn');
+const pageInfo=document.getElementById('history-page-info');
+const PAGE_SIZE=20;
+let currentPage=1;
 function rows(){{return Array.from(hBody.querySelectorAll('tr')).filter(r=>r.querySelectorAll('td').length>1);}}
 function updateDelete(){{delBtn.classList.toggle('hidden',!rows().some(r=>r.querySelector('.history-check')?.checked));}}
-function applyFilters(){{const q=(search.value||'').toLowerCase().trim();rows().forEach(row=>{{const text=row.textContent.toLowerCase();const ok=!q||text.includes(q);const okP=!fp.value||row.dataset.project===fp.value;const okR=!fr.value||row.dataset.repo===fr.value;const okS=!fs.value||row.dataset.status===fs.value;const okM=!fm.value||row.dataset.model===fm.value;row.style.display=(ok&&okP&&okR&&okS&&okM)?'':'none';}});updateDelete();}}
+function filteredRows(){{const q=(search.value||'').toLowerCase().trim();return rows().filter(row=>{{const text=row.textContent.toLowerCase();const ok=!q||text.includes(q);const okP=!fp.value||row.dataset.project===fp.value;const okR=!fr.value||row.dataset.repo===fr.value;const okS=!fs.value||row.dataset.status===fs.value;const okM=!fm.value||row.dataset.model===fm.value;return ok&&okP&&okR&&okS&&okM;}});}}
+function renderPage(){{const visible=filteredRows();const totalPages=Math.max(1, Math.ceil(visible.length / PAGE_SIZE));currentPage=Math.min(currentPage,totalPages);const start=(currentPage-1)*PAGE_SIZE;const end=start+PAGE_SIZE;rows().forEach(row=>row.style.display='none');visible.slice(start,end).forEach(row=>row.style.display='');if(pageInfo) pageInfo.textContent=`Page ${{totalPages ? currentPage : 1}} of ${{totalPages}}`;if(prevBtn) prevBtn.disabled=currentPage<=1; if(nextBtn) nextBtn.disabled=currentPage>=totalPages; updateDelete();}}
+function applyFilters(){{currentPage=1;renderPage();}}
 let sortState={{index:null,dir:-1,kind:'datetime'}};
 function cellValue(row,index,kind){{if(kind==='datetime') return Number(row.dataset.ts)||0; const text=(row.children[index]?.innerText||'').trim(); if(kind==='number') return Number(text.replace(':','.'))||0; return text.toLowerCase();}}
-function sortHistory(index,kind){{const rs=rows(); if(sortState.index===index) sortState.dir*=-1; else sortState={{index,dir:kind==='datetime'?-1:1,kind}}; rs.sort((a,b)=>{{const av=cellValue(a,sortState.index,sortState.kind); const bv=cellValue(b,sortState.index,sortState.kind); if(av<bv) return -1*sortState.dir; if(av>bv) return 1*sortState.dir; return 0;}}); rs.forEach(r=>hBody.appendChild(r)); applyFilters();}}
+function sortHistory(index,kind){{const rs=rows(); if(sortState.index===index) sortState.dir*=-1; else sortState={{index,dir:kind==='datetime'?-1:1,kind}}; rs.sort((a,b)=>{{const av=cellValue(a,sortState.index,sortState.kind); const bv=cellValue(b,sortState.index,sortState.kind); if(av<bv) return -1*sortState.dir; if(av>bv) return 1*sortState.dir; return 0;}}); rs.forEach(r=>hBody.appendChild(r)); currentPage=1; renderPage();}}
 document.querySelectorAll('#history-table thead th[data-sort]').forEach((th,index)=>th.addEventListener('click',()=>sortHistory(index+1,th.dataset.sort)));
 [search,fp,fr,fs,fm].forEach(el=>el?.addEventListener('input',applyFilters));
 [fp,fr,fs,fm].forEach(el=>el?.addEventListener('change',applyFilters));
 document.getElementById('reset-history-filters')?.addEventListener('click',()=>{{search.value='';fp.value='';fr.value='';fs.value='';fm.value='';applyFilters();}});
 rows().forEach(r=>r.querySelector('.history-check')?.addEventListener('change',updateDelete));
+prevBtn?.addEventListener('click',()=>{{if(currentPage>1){{currentPage-=1;renderPage();}}}});
+nextBtn?.addEventListener('click',()=>{{const totalPages=Math.max(1, Math.ceil(filteredRows().length / PAGE_SIZE)); if(currentPage<totalPages){{currentPage+=1;renderPage();}}}});
 sortHistory(1,'datetime');
 </script>"""
     return _layout(title="History", body=body, active="history")
