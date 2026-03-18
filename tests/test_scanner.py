@@ -530,18 +530,56 @@ def test_delta_with_baseline():
     # Write a baseline CSV (scan 1)
     baseline = d / "AI_Scan_Report_PROJ_my-repo_20250101_120000.csv"
     with open(baseline, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["finding_id"])
+        writer = csv.DictWriter(f, fieldnames=["finding_id", "repo", "file", "line"])
         writer.writeheader()
         for finding in findings_scan1:
-            writer.writerow({"finding_id": finding["finding_id"]})
+            writer.writerow({
+                "finding_id": finding["finding_id"],
+                "repo": "my-repo",
+                "file": "app.py",
+                "line": "8",
+            })
 
     meta = build_delta_meta(findings_scan2, str(d), "PROJ", "my-repo")
     assert meta["has_baseline"] is True
     assert meta["new_count"] == 1,       f"Expected 1 new, got {meta['new_count']}"
     assert meta["fixed_count"] == 1,     f"Expected 1 fixed, got {meta['fixed_count']}"
     assert meta["unchanged_count"] == 1, f"Expected 1 unchanged, got {meta['unchanged_count']}"
+    assert meta["existing_count"] == 1
     assert "ccc" in meta["new_hashes"],  "ccc should be in new_hashes"
     assert "bbb" not in meta["new_hashes"], "bbb is unchanged, not new"
+    assert meta["fixed_findings"][0]["finding_id"] == "aaa"
+    assert meta["fixed_findings"][0]["file"] == "app.py"
+
+
+def test_csv_reporter_writes_stable_finding_id_for_baselines():
+    import csv
+    from reports.csv_report import CSVReporter
+
+    d = Path(tempfile.mkdtemp())
+    reporter = CSVReporter(output_dir=str(d), scan_id="scan1")
+    csv_path = Path(reporter.write_csv([{
+        "_hash": "hash-123",
+        "delta_status": "new",
+        "repo": "repo1",
+        "provider_or_lib": "openai",
+        "capability": "Text generation",
+        "policy_status": "REVIEW",
+        "risk": "medium",
+        "severity": 3,
+        "file": "app.py",
+        "line": 9,
+        "snippet": "client.responses.create(...)",
+        "owner": "alice",
+        "last_seen": "20260318_100000",
+        "remediation": "Review use",
+    }]))
+
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+
+    assert rows[0]["finding_id"] == "hash-123"
+    assert rows[0]["delta_status"] == "new"
 
 
 # ── History persistence (_save_history_record) ────────────────────
@@ -800,6 +838,17 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "csv_name": "scan.csv",
         }
     }
+    session.delta = {
+        "has_baseline": True,
+        "baseline_file": "AI_Scan_Report_COGI_repo1_20260317_140000.csv",
+        "new_count": 1,
+        "existing_count": 1,
+        "unchanged_count": 1,
+        "fixed_count": 1,
+        "fixed_findings": [
+            {"finding_id": "fixed-1", "repo": "repo1", "file": "old.py", "line": "12"},
+        ],
+    }
     session.findings = [
         {
             "_hash": "hash-0",
@@ -812,6 +861,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "policy_status": "critical",
             "description": "Unsuppressed finding",
             "snippet": "client = OpenAI(api_key=token)",
+            "delta_status": "new",
         },
         {
             "_hash": "hash-1",
@@ -828,6 +878,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
             "triage_by": "analyst",
             "triage_at": "2026-03-17T15:40:00Z",
             "triage_note": "",
+            "delta_status": "existing",
         }
     ]
     session.suppressed_findings = [
@@ -876,6 +927,11 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert html.index("Phase Timeline") < html.index("Open HTML Report")
     assert "Download CSV File" in html
     assert "Download Logs" in html
+    assert "Baseline" in html
+    assert "Compared to AI_Scan_Report_COGI_repo1_20260317_140000.csv" in html
+    assert "old.py:12" in html
+    assert "New" in html
+    assert "Existing" in html
 
 
 def test_scan_session_log_normalizes_blank_lines():

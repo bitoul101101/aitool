@@ -69,6 +69,7 @@ class ScanSession:
 
     @staticmethod
     def _finding_detail(finding: dict) -> dict:
+        delta_status = str(finding.get("delta_status", "") or "")
         return {
             "hash": finding.get("_hash", ""),
             "repo": finding.get("repo", ""),
@@ -88,7 +89,8 @@ class ScanSession:
             "reason": finding.get("triage_note", finding.get("suppressed_reason", "")),
             "marked_by": finding.get("triage_by", finding.get("suppressed_by", "")),
             "marked_at": finding.get("triage_at", finding.get("suppressed_at", "")),
-            "delta_status": finding.get("delta_status", ""),
+            "delta_status": delta_status,
+            "delta_label": delta_status.replace("_", " ").title() if delta_status else "",
         }
 
     def log(self, msg: str, level: str = "info") -> None:
@@ -325,8 +327,10 @@ class ScanJobService:
         def _serialise_delta(delta: dict) -> dict:
             return {
                 **delta,
+                "existing_count": delta.get("existing_count", delta.get("unchanged_count", 0)),
                 "new_hashes": sorted(delta.get("new_hashes", set())),
                 "fixed_hashes": sorted(delta.get("fixed_hashes", set())),
+                "fixed_findings": list(delta.get("fixed_findings", [])),
             }
 
         if not repo_slugs:
@@ -335,8 +339,10 @@ class ScanJobService:
                 "new_count": len(findings),
                 "fixed_count": 0,
                 "unchanged_count": 0,
+                "existing_count": 0,
                 "new_hashes": {f.get("_hash", "") for f in findings},
                 "fixed_hashes": set(),
+                "fixed_findings": [],
             })
 
         if len(repo_slugs) == 1:
@@ -349,7 +355,9 @@ class ScanJobService:
         new_count = 0
         fixed_count = 0
         unchanged_count = 0
+        existing_count = 0
         has_baseline = False
+        fixed_findings: list[dict] = []
 
         for slug in repo_slugs:
             repo_findings = [f for f in findings if f.get("repo") == slug]
@@ -359,8 +367,10 @@ class ScanJobService:
             new_count += repo_delta.get("new_count", 0)
             fixed_count += repo_delta.get("fixed_count", 0)
             unchanged_count += repo_delta.get("unchanged_count", 0)
+            existing_count += repo_delta.get("existing_count", repo_delta.get("unchanged_count", 0))
             new_hashes.update(repo_delta.get("new_hashes", set()))
             fixed_hashes.update(repo_delta.get("fixed_hashes", set()))
+            fixed_findings.extend(repo_delta.get("fixed_findings", []))
 
         return _serialise_delta({
             "has_baseline": has_baseline,
@@ -368,8 +378,10 @@ class ScanJobService:
             "new_count": new_count,
             "fixed_count": fixed_count,
             "unchanged_count": unchanged_count,
+            "existing_count": existing_count,
             "new_hashes": new_hashes,
             "fixed_hashes": fixed_hashes,
+            "fixed_findings": fixed_findings,
         })
 
     def _upsert_job_record(self, record: dict) -> None:
@@ -813,7 +825,15 @@ class ScanJobService:
         )
         new_hashes = session.delta.get("new_hashes", set())
         for finding in final:
-            finding["delta_status"] = "new" if finding.get("_hash", "") in new_hashes else "unchanged"
+            finding["delta_status"] = "new" if finding.get("_hash", "") in new_hashes else "existing"
+        if session.delta.get("has_baseline"):
+            log(
+                "Baseline compare: "
+                f"{session.delta.get('new_count', 0)} new, "
+                f"{session.delta.get('existing_count', session.delta.get('unchanged_count', 0))} existing, "
+                f"{session.delta.get('fixed_count', 0)} fixed since last scan",
+                "dim",
+            )
         log(f"Total findings (deduped): {len(final)}", "hd")
 
         log("\nGenerating reports...", "dim")

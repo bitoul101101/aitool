@@ -164,8 +164,15 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .triage-form button{padding:3px 6px;font-size:10px;width:100%}
 .mitigate-section h3,.suppressed-section h3{margin:0 0 8px;font-size:15px}
 .mitigate-wrap,.suppressed-wrap{max-height:220px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
-.report-actions{display:grid;gap:8px;margin:12px 0 0}
-button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
+  .report-actions{display:grid;gap:8px;margin:12px 0 0}
+  .baseline-summary{display:grid;gap:8px}
+  .baseline-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .baseline-stat{padding:10px 12px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8}
+  .baseline-stat strong{display:block;font-size:20px;line-height:1.1}
+  .baseline-label{display:block;font-size:11px;color:#705333;text-transform:uppercase;letter-spacing:.04em}
+  .baseline-fixed-list{margin:0;padding-left:18px;font-size:12px;color:#4b331b}
+  .baseline-fixed-list li{margin:0 0 6px}
+  button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(4,170px) auto auto;gap:8px;align-items:end;position:sticky;top:0;background:#fffaf4;padding-bottom:10px;z-index:3}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
@@ -374,7 +381,7 @@ def render_scan_page(
             "<tr>"
             f"<td>{finding_summary(detail)}</td>"
             f'<td><div class="finding-meta"><div>{_esc(detail.get("capability", ""))}</div>'
-            f'<div class="finding-sub">{_esc(detail.get("delta_status", ""))}</div></div></td>'
+            f'<div class="finding-sub">{_esc(detail.get("delta_label", detail.get("delta_status", "")))}</div></div></td>'
             f"<td>{triage_actions(detail)}</td>"
             "</tr>"
         )
@@ -451,6 +458,28 @@ def render_scan_page(
     state_icon_class = "running" if running else "done" if state == "done" else "stopped" if state == "stopped" else ""
     state_text = "Running" if running else "Done" if state == "done" else "Stopped" if state == "stopped" else "Ready"
     report = status.get("report") or {}
+    delta = status.get("delta") or {}
+    fixed_findings = list(delta.get("fixed_findings") or [])[:8]
+    baseline_html = ""
+    if scan_complete and delta.get("has_baseline"):
+        fixed_list = "".join(
+            f'<li><strong>{_esc(item.get("repo") or item.get("provider_or_lib") or "Finding")}</strong> '
+            f'<span class="muted">{_esc(item.get("file", ""))}{":" + _esc(item.get("line", "")) if item.get("line") else ""}</span></li>'
+            for item in fixed_findings
+        ) or '<li>No fixed findings.</li>'
+        baseline_html = f"""
+    <section class="card">
+      <h2 style="margin:0 0 8px;font-size:16px">Baseline</h2>
+      <div class="baseline-summary" id="baseline-summary">
+        <div class="baseline-grid">
+          <div class="baseline-stat"><span class="baseline-label">New</span><strong id="baseline-new-count">{_esc(delta.get("new_count", 0))}</strong></div>
+          <div class="baseline-stat"><span class="baseline-label">Existing</span><strong id="baseline-existing-count">{_esc(delta.get("existing_count", delta.get("unchanged_count", 0)))}</strong></div>
+          <div class="baseline-stat"><span class="baseline-label">Fixed</span><strong id="baseline-fixed-count">{_esc(delta.get("fixed_count", 0))}</strong></div>
+        </div>
+        <div class="muted" id="baseline-source">Compared to {_esc(delta.get("baseline_file", "previous scan"))}</div>
+        <ul class="baseline-fixed-list" id="baseline-fixed-list">{fixed_list}</ul>
+      </div>
+    </section>"""
     scan_id = status.get("scan_id", "")
     report_actions = ""
     if scan_complete and all_findings:
@@ -552,6 +581,7 @@ def render_scan_page(
       <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
+    {baseline_html}
     {"<section class=\"card\"><h2 style=\"margin:0 0 8px;font-size:16px\">Reports</h2>" + report_actions + "</section>" if report_actions else ""}
   </aside>
 </section>
@@ -626,6 +656,7 @@ filterRepos();
   const mitigateBody=document.getElementById('mitigate-findings-body');
   const suppressedBody=document.getElementById('suppressed-findings-body');
   const timelineEl=document.getElementById('phase-timeline');
+  const baselineSummary=document.getElementById('baseline-summary');
   if(!logEl) return;
   function esc(value){{
     return String(value ?? '').replace(/[&<>\"']/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[ch]));
@@ -667,15 +698,41 @@ filterRepos();
       + snippetBlock(item)
       + `</div>`;
   }}
+  function baselineList(items){{
+    if(!items || !items.length) return '<li>No fixed findings.</li>';
+    return items.slice(0,8).map(item => {{
+      const repo=esc(item.repo || item.provider_or_lib || 'Finding');
+      const line=item.line ? `:${{esc(item.line)}}` : '';
+      return `<li><strong>${{repo}}</strong> <span class="muted">${{esc(item.file || '')}}${{line}}</span></li>`;
+    }}).join('');
+  }}
+  function renderBaseline(data){{
+    const delta=data.delta||{{}};
+    if(!baselineSummary) return;
+    if(!delta.has_baseline){{
+      baselineSummary.closest('.card')?.remove();
+      return;
+    }}
+    const newEl=document.getElementById('baseline-new-count');
+    const existingEl=document.getElementById('baseline-existing-count');
+    const fixedEl=document.getElementById('baseline-fixed-count');
+    const sourceEl=document.getElementById('baseline-source');
+    const listEl=document.getElementById('baseline-fixed-list');
+    if(newEl) newEl.textContent=String(delta.new_count || 0);
+    if(existingEl) existingEl.textContent=String(delta.existing_count ?? delta.unchanged_count ?? 0);
+    if(fixedEl) fixedEl.textContent=String(delta.fixed_count || 0);
+    if(sourceEl) sourceEl.textContent=`Compared to ${{delta.baseline_file || 'previous scan'}}`;
+    if(listEl) listEl.innerHTML=baselineList(delta.fixed_findings || []);
+  }}
   function renderFindingRows(items){{
     const rows=(items||[]).filter(item => !item.triage_status || (item.triage_status !== 'reviewed' && item.triage_status !== 'accepted_risk'));
     if(!rows.length) return '<tr><td colspan="3">No current findings.</td></tr>';
     return rows.slice(0,20).map(item => {{
-      return `<tr>`
-        + `<td>${{findingSummary(item)}}</td>`
-        + `<td><div class="finding-meta"><div>${{esc(item.capability||'')}}</div><div class="finding-sub">${{esc(item.delta_status||'')}}</div></div></td>`
-        + `<td>${{triageActions(item, false)}}</td>`
-        + `</tr>`;
+        return `<tr>`
+          + `<td>${{findingSummary(item)}}</td>`
+          + `<td><div class="finding-meta"><div>${{esc(item.capability||'')}}</div><div class="finding-sub">${{esc(item.delta_label || item.delta_status || '')}}</div></div></td>`
+          + `<td>${{triageActions(item, false)}}</td>`
+          + `</tr>`;
     }}).join('');
   }}
   function renderMitigateRows(items){{
@@ -752,6 +809,7 @@ filterRepos();
           if(mitigateBody) mitigateBody.innerHTML=renderMitigateRows(data.finding_details||[]);
           if(suppressedBody) suppressedBody.innerHTML=renderSuppressedRows([...(data.finding_details||[]).filter(item => item.triage_status === 'accepted_risk'), ...(data.suppressed_details||[])]);
       if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[]);
+      renderBaseline(data);
       reportActions(data);
       if(state==='running') return;
       clearInterval(timer);

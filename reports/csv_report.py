@@ -9,6 +9,7 @@ from typing import List, Dict, Any
 
 
 EXPORT_COLUMNS = [
+    "finding_id", "delta_status",
     "repo", "ai_category", "provider_or_lib",
     "capability", "policy_status", "risk", "severity",
     "file", "line", "snippet", "owner", "last_seen", "remediation",
@@ -29,6 +30,8 @@ class CSVReporter:
             for finding in findings:
                 # Sanitize snippet for CSV
                 row = dict(finding)
+                row["finding_id"] = row.get("finding_id") or row.get("_hash", "")
+                row["delta_status"] = row.get("delta_status", "")
                 row["snippet"] = _sanitize(row.get("snippet", ""))
                 writer.writerow(row)
         return str(path)
