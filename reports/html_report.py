@@ -517,14 +517,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 }
 
 /* body: meta + stats side by side */
-.hdr-body{display:flex;align-items:stretch;gap:0;}
+.hdr-body{display:flex;align-items:flex-start;gap:10px;padding:0 16px 14px;}
 
 /* ── Left: scan context ── */
 .hdr-meta{
-  flex:1;min-width:0;padding:10px 22px;
+  flex:1;min-width:0;padding:10px 16px;
   display:grid;grid-template-columns:auto 1fr;
   column-gap:14px;row-gap:4px;align-content:start;
-  border-right:1px solid rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;
+  background:rgba(255,255,255,.04);
 }
 .hdr-meta-key{
   font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
@@ -549,10 +551,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 
 /* ── Right: stat list mirrors the left metadata layout ── */
 .hdr-stats{
-  flex-shrink:0;width:360px;
-  padding:10px 22px;
+  flex-shrink:0;width:320px;
+  padding:10px 16px;
   display:grid;grid-template-columns:auto 1fr;
   column-gap:14px;row-gap:4px;align-content:start;
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;
+  background:rgba(255,255,255,.04);
 }
 .hdr-meta-sub{
   display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.62);

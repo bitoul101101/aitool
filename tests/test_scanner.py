@@ -1499,8 +1499,8 @@ def test_results_page_is_server_rendered():
     assert 'Download Logs' in html
     assert 'href="/scan/20260318_140208?tab=activity"' in html
     assert 'href="/scan/20260318_140208?tab=results"' in html
-    assert '<h2>Results</h2>' in html
-    assert "Review the completed scan and download the generated artifacts." in html
+    assert '<h2>Results</h2>' not in html
+    assert "Review the completed scan and download the generated artifacts." not in html
     assert 'repo1' not in html
 
 

@@ -212,15 +212,16 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .icon-link img{display:block;width:34px;height:34px}
 .empty-state{padding:18px;border:1px dashed #d8b995;border-radius:12px;background:#fcf6ee;color:#5d3b15}
 .filters-row{margin-bottom:12px}
-.results-shell{display:grid;gap:14px}
-.results-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
-.results-title h2{margin:0 0 4px;font-size:22px}
-.results-title p{margin:0;color:#705333}
+.results-shell{display:grid;gap:8px}
+.results-toolbar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
 .results-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .subnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .subnav a{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#efe1cf;color:#5d3b15;text-decoration:none;font-size:12px;font-weight:700}
 .subnav a.active{background:#6d3514;color:#fff}
 .subnav a.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
+.workspace-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin-bottom:10px}
+.workspace-header .subnav{margin-bottom:0;justify-self:start}
+.workspace-header h2{margin:0;font-size:16px;text-align:center}
 .results-frame{width:100%;min-height:calc(100vh - 220px);border:1px solid #d8b995;border-radius:14px;background:#fff}
 @media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}.inventory-grid-wide{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}}
@@ -662,11 +663,12 @@ def render_scan_page(
     running_view = f"""
 <section class="running-shell">
   <section class="card activity-panel">
-    {workspace_tabs}
-    <div>
-      <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
-      <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
+    <div class="workspace-header">
+      {workspace_tabs}
+      <h2>Activity Log</h2>
+      <div></div>
     </div>
+    <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
   </section>
   <aside class="stack">
     <section class="card scan-sidebar-head">
@@ -844,12 +846,8 @@ def render_results_page(
 {_flash(notice, error)}
 <section class="results-shell">
   <section class="card">
-    {workspace_tabs}
     <div class="results-toolbar">
-      <div class="results-title">
-        <h2>Results</h2>
-        <p>Review the completed scan and download the generated artifacts.</p>
-      </div>
+      {workspace_tabs}
       <div class="results-actions">
         {''.join(toolbar_actions)}
       </div>
