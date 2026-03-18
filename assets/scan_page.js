@@ -11,7 +11,6 @@
   const timelineEl = document.getElementById("phase-timeline");
   const baselineSummary = document.getElementById("baseline-summary");
   const hardwareSummary = document.getElementById("hardware-summary");
-  const llmSummary = document.getElementById("llm-summary");
   const stopBtn = document.getElementById("stop-scan-btn");
 
   if (
@@ -22,8 +21,7 @@
     !logEl &&
     !timelineEl &&
     !baselineSummary &&
-    !hardwareSummary &&
-    !llmSummary
+    !hardwareSummary
   ) {
     return;
   }
@@ -227,41 +225,6 @@
     }
   }
 
-  function renderLlmStats(data) {
-    if (!llmSummary) {
-      return;
-    }
-    const llm = data.llm_stats || {};
-    const modelEl = document.getElementById("llm-model");
-    const elapsedEl = document.getElementById("llm-phase-elapsed");
-    const lastBatchEl = document.getElementById("llm-last-batch");
-    const avgBatchEl = document.getElementById("llm-avg-batch");
-    const avgPerFindingEl = document.getElementById("llm-avg-per-finding");
-    const throughputEl = document.getElementById("llm-throughput");
-    const failedEl = document.getElementById("llm-failed-batches");
-    if (modelEl) {
-      modelEl.textContent = String(llm.model || "Unavailable");
-    }
-    if (elapsedEl) {
-      elapsedEl.textContent = String(llm.phase_elapsed || "—");
-    }
-    if (lastBatchEl) {
-      lastBatchEl.textContent = String(llm.last_batch || "—");
-    }
-    if (avgBatchEl) {
-      avgBatchEl.textContent = String(llm.avg_batch || "—");
-    }
-    if (avgPerFindingEl) {
-      avgPerFindingEl.textContent = String(llm.avg_per_finding || "—");
-    }
-    if (throughputEl) {
-      throughputEl.textContent = String(llm.throughput || "—");
-    }
-    if (failedEl) {
-      failedEl.textContent = String(llm.failed_batches || "0");
-    }
-  }
-
   function updateSelectionStatus(data) {
     if (!startScanBtn && !runningNotice) {
       return;
@@ -294,7 +257,6 @@
     }
     renderBaseline(data);
     renderHardware(data);
-    renderLlmStats(data);
     if (stopBtn) {
       stopBtn.disabled = state !== "running";
     }

@@ -144,9 +144,6 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .hardware-grid{display:grid;grid-template-columns:1fr;gap:6px}
 .hardware-stat{padding:6px 8px;border:1px solid #ead4ba;border-radius:10px;background:#fffdf8;min-width:0}
 .hardware-stat strong{display:block;font-size:12px;line-height:1.15;overflow-wrap:anywhere}
-.llm-grid{display:grid;grid-template-columns:1fr;gap:6px}
-.llm-stat{padding:6px 8px;border:1px solid #ead4ba;border-radius:10px;background:#fffdf8;min-width:0}
-.llm-stat strong{display:block;font-size:12px;line-height:1.2;overflow-wrap:anywhere}
 .findings-panel,.mitigate-section,.suppressed-section{margin-top:12px;padding:12px;border:2px solid #cda274;border-radius:14px;background:#fffdf8}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .finding-table-wrap table,.mitigate-wrap table,.suppressed-wrap table{font-size:12px}
@@ -549,7 +546,6 @@ def render_scan_page(
     delta = status.get("delta") or {}
     inventory = status.get("inventory") or {}
     hardware = status.get("hardware") or {}
-    llm_stats = status.get("llm_stats") or {}
     fixed_findings = list(delta.get("fixed_findings") or [])[:8]
     baseline_html = ""
     if scan_complete and delta.get("has_baseline"):
@@ -623,21 +619,6 @@ def render_scan_page(
         </div>
       </div>
     </section>"""
-    llm_html = f"""
-    <section class="card" id="llm-card">
-      <h2 style="margin:0 0 8px;font-size:15px">LLM Stats</h2>
-      <div class="baseline-summary" id="llm-summary">
-        <div class="llm-grid">
-          <div class="llm-stat"><span class="baseline-label">Model</span><strong id="llm-model">{_esc(llm_stats.get("model", "Unavailable"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">LLM Phase Elapsed</span><strong id="llm-phase-elapsed">{_esc(llm_stats.get("phase_elapsed", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Last Batch</span><strong id="llm-last-batch">{_esc(llm_stats.get("last_batch", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Average Batch</span><strong id="llm-avg-batch">{_esc(llm_stats.get("avg_batch", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Average / Finding</span><strong id="llm-avg-per-finding">{_esc(llm_stats.get("avg_per_finding", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Throughput</span><strong id="llm-throughput">{_esc(llm_stats.get("throughput", "—"))}</strong></div>
-          <div class="llm-stat"><span class="baseline-label">Failed Batches</span><strong id="llm-failed-batches">{_esc(llm_stats.get("failed_batches", "0"))}</strong></div>
-        </div>
-      </div>
-    </section>"""
     new_scan_button = ""
     if scan_complete:
         project_q = f"?project={quote(selected_project)}&new=1" if selected_project else "?new=1"
@@ -696,7 +677,6 @@ def render_scan_page(
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
     {hardware_html}
-    {llm_html}
     {baseline_html}
     {inventory_html}
   </aside>

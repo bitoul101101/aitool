@@ -1167,20 +1167,12 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
     assert "Hardware Stats" in html
-    assert "LLM Stats" in html
+    assert "LLM Stats" not in html
     assert html.index("Phase Timeline") < html.index("Hardware Stats")
-    assert html.index("Hardware Stats") < html.index("LLM Stats")
     assert 'href="/scan/20260317_154037?tab=results"' in html
     assert 'href="/scan/20260317_154037?tab=activity"' in html
     assert 'id="hardware-gpu"' in html
     assert 'id="hardware-disk-io"' in html
-    assert 'id="llm-model"' in html
-    assert 'id="llm-phase-elapsed"' in html
-    assert 'id="llm-last-batch"' in html
-    assert 'id="llm-avg-batch"' in html
-    assert 'id="llm-avg-per-finding"' in html
-    assert 'id="llm-throughput"' in html
-    assert 'id="llm-failed-batches"' in html
     assert '<div class="workspace-header">' in html
     assert html.index("Activity Log") < html.index('id="new-scan-btn"')
     assert "Results Actions" not in html
@@ -1205,7 +1197,7 @@ def test_scan_page_asset_redirects_only_after_running_to_done_transition():
     assert "let previousScanState = null;" in script
     assert 'const justFinished = previousScanState === "running" && state === "done";' in script
     assert "!redirectedToResults && justFinished" in script
-    assert "function renderLlmStats(data)" in script
+    assert "function renderLlmStats(data)" not in script
 
 
 def test_llm_stats_are_derived_from_log_entries():
