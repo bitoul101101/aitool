@@ -1,7 +1,8 @@
 """
-main_web.py — AI Security & Compliance Scanner (Web UI)
-Launches the web UI server at http://127.0.0.1:5757 and keeps the process alive.
-All scan logic, report generation, and the SPA are in app_server.py.
+main_web.py - AI Security & Compliance Scanner (Web UI)
+Launches the local web application server at http://127.0.0.1:5757 and keeps the process alive.
+The web UI is server-rendered from app_server.py and the services it imports.
+This file is only the desktop-friendly launcher and shutdown wrapper.
 """
 import sys
 import time
