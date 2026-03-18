@@ -1069,6 +1069,19 @@ def test_help_page_can_hide_scan_results_navigation():
     assert 'href="/scan">Scan Results</a>' not in html
 
 
+def test_has_scan_results_depends_on_current_session_only():
+    import app_server as srv
+
+    original_session = srv._session
+    try:
+        srv._session = srv.ScanSession()
+        assert srv._has_scan_results() is False
+        srv._session.scan_id = "20260318_120000"
+        assert srv._has_scan_results() is True
+    finally:
+        srv._session = original_session
+
+
 def test_llm_fallback_parsing_does_not_emit_low_signal_operator_logs():
     from scanner import llm_reviewer as reviewer
 

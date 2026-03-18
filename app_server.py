@@ -454,7 +454,7 @@ def _is_connected() -> bool:
 
 
 def _has_scan_results() -> bool:
-    return bool(_session.scan_id or _history_records_for_user())
+    return bool(_session.scan_id)
 
 
 def _current_session_history_record() -> dict | None:
