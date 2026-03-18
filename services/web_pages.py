@@ -124,9 +124,6 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .repo-row span{display:block}
 .running-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;align-items:start}
 .scan-sidebar-head{display:grid;gap:8px}
-.scan-status{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.scan-status strong{font-size:16px}
-.scan-status .muted{font-size:13px}
 .scan-actions{display:flex;gap:8px;flex-wrap:wrap}
 .scan-actions .warn,.scan-actions .btn{padding:7px 10px;font-size:12px}
 .state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
@@ -672,10 +669,6 @@ def render_scan_page(
   </section>
   <aside class="stack">
     <section class="card scan-sidebar-head">
-      <div class="scan-status">
-        <strong>Scan</strong>
-        <div id="scan-state-text" class="muted">{_esc(state_text)}</div>
-      </div>
       <div class="scan-actions">{stop_button if running else ""}{new_scan_button}</div>
     </section>
     <section class="card timeline-card">

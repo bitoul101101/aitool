@@ -516,12 +516,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   color:rgba(255,255,255,.68);
 }
 
-/* body: meta + stats side by side */
-.hdr-body{display:flex;align-items:flex-start;gap:10px;padding:0 16px 14px;}
+/* body: unified details block */
+.hdr-body{padding:0 16px 14px;}
 
-/* ── Left: scan context ── */
 .hdr-meta{
-  flex:1;min-width:0;padding:10px 16px;
+  width:100%;min-width:0;padding:10px 16px;
   display:grid;grid-template-columns:auto 1fr;
   column-gap:14px;row-gap:4px;align-content:start;
   border:1px solid rgba(255,255,255,.1);
@@ -560,11 +559,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   background:rgba(255,255,255,.04);
 }
 .hdr-meta-sub{
-  display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.62);
-  margin-top:2px;white-space:normal;
-}
-.hdr-stats .hdr-meta-sub{
-  display:inline;margin-left:8px;margin-top:0;white-space:nowrap;
+  display:inline;font-size:10px;font-weight:400;color:rgba(255,255,255,.62);
+  margin-left:8px;white-space:nowrap;
 }
 .hdr-meta-val.s-warn { color:#ffcc80; }
 .hdr-meta-val.s-crit { color:#ef9a9a; }
@@ -981,8 +977,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
     </div>
   </div>
   <div class="hdr-body">
-    <div class="hdr-meta">{meta_rows}</div>
-    <div class="hdr-stats">{stats_html}</div>
+    <div class="hdr-meta">{meta_rows}{stats_html}</div>
   </div>
 </div>"""
 
