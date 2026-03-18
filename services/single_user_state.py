@@ -47,7 +47,7 @@ def load_single_user_config(path: str) -> SingleUserConfig:
 class SingleUserState:
     config: SingleUserConfig
     client: Any | None = None
-    connected_owner: str = "Unknown"
+    connected_owner: str = "User"
     projects_cache: list[dict] = field(default_factory=list)
     repos_cache: dict[str, list[dict]] = field(default_factory=dict)
 
@@ -69,7 +69,7 @@ class SingleUserState:
         return self.ctx.can_access_project(project_key)
 
     def connect(self, client: Any, owner: str, projects: list[dict]) -> list[dict]:
-        owner = (owner or "Unknown").strip() or "Unknown"
+        owner = (owner or "User").strip() or "User"
         expected = self.config.expected_bitbucket_owner
         if expected and owner != expected:
             raise PermissionError(

@@ -2537,6 +2537,27 @@ def test_build_git_auth_env_uses_header_not_url():
     assert env["GIT_CONFIG_VALUE_0"] == f"Authorization: Basic {expected}"
 
 
+def test_bitbucket_owner_fallbacks_use_user_label():
+    from requests import RequestException
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient("https://bitbucket.example", token="pat-123")
+    with patch.object(client, "_get", side_effect=RequestException("offline")):
+        assert client.get_pat_owner() == "User"
+        assert client.get_repo_owner("COGI", "repo1") == "User"
+
+    state = SingleUserState(
+        SingleUserConfig(
+            name="Demo User",
+            expected_bitbucket_owner="",
+            ctx=UserContext(username="Demo User", roles=(ROLE_VIEWER,), allowed_projects=("*",)),
+        )
+    )
+    assert state.connected_owner == "User"
+    state.connect(client=object(), owner="", projects=[])
+    assert state.connected_owner == "User"
+
+
 def test_bitbucket_client_uses_ca_bundle_for_tls_verification():
     from scanner.bitbucket import BitbucketClient
 

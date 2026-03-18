@@ -148,7 +148,7 @@ class BitbucketClient:
         Return the display name of the user who owns the PAT.
         Uses the Bitbucket Server /rest/api/1.0/application-properties
         and /rest/api/1.0/users/~/profile endpoints.
-        Falls back to 'Unknown' if the endpoint is unavailable.
+        Falls back to 'User' if the endpoint is unavailable.
         """
         try:
             # Bitbucket Server: current user info
@@ -156,7 +156,7 @@ class BitbucketClient:
             return (data.get("displayName")
                     or data.get("name")
                     or data.get("slug")
-                    or "Unknown")
+                    or "User")
         except (RequestException, ValueError, TypeError):
             pass
         try:
@@ -166,7 +166,7 @@ class BitbucketClient:
                 return data
         except (RequestException, ValueError, TypeError):
             pass
-        return "Unknown"
+        return "User"
 
     def list_repos(self, project_key: str) -> List[dict]:
         """List all repos in a Bitbucket Server project."""
@@ -237,7 +237,7 @@ class BitbucketClient:
     def get_repo_owner(self, project_key: str, repo_slug: str) -> str:
         """
         Return the display name / slug of the repo's last-modifier or project lead
-        as surfaced by Bitbucket Server.  Falls back to 'Unknown'.
+        as surfaced by Bitbucket Server.  Falls back to 'User'.
         """
         try:
             # Try repo-level: check the most recent commit author via commits API
@@ -262,7 +262,7 @@ class BitbucketClient:
                 return name
         except (RequestException, ValueError, TypeError):
             pass
-        return "Unknown"
+        return "User"
 
     def get_repo_size(self, project_key: str, repo_slug: str) -> Optional[int]:
         """
