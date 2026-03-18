@@ -668,7 +668,7 @@ def render_scan_page(
 
 
 def render_history_page(*, history: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
-    projects = sorted({str(rec.get("project_key", rec.get("project", ""))) for rec in history if rec.get("project_key") or rec.get("project")})
+    projects = sorted({str(rec.get("project_key", "")) for rec in history if rec.get("project_key")})
     repos = sorted({", ".join(rec.get("repo_slugs", rec.get("repos", []))) for rec in history if rec.get("repo_slugs") or rec.get("repos")})
     statuses = sorted({str(rec.get("state", "")) for rec in history if rec.get("state")})
     models = sorted({str(rec.get("llm_model", "")) for rec in history if rec.get("llm_model")})
@@ -678,7 +678,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
 
     rows = []
     for rec in history:
-        project = rec.get("project_key", rec.get("project", ""))
+        project = rec.get("project_key", "")
         repo_label = ", ".join(rec.get("repo_slugs", rec.get("repos", [])))
         date_text, time_text, ts = _fmt_dt(rec.get("started_at_utc", ""))
         state = str(rec.get("state", ""))

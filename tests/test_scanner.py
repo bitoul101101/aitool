@@ -688,7 +688,8 @@ def test_save_history_record_creates_file():
         assert len(records) == 1
         r = records[0]
         assert r["scan_id"]    == "20250315_120000"
-        assert r["project"]    == "TEST"
+        assert r["project_key"] == "TEST"
+        assert "project" not in r
         assert r["total"]      == 2
         assert r["sev"]["critical"] == 1
         assert r["sev"]["high"]     == 1
@@ -1151,6 +1152,59 @@ def test_has_scan_results_depends_on_current_session_only():
         assert srv._has_scan_results() is True
     finally:
         srv._session = original_session
+
+
+def test_history_records_are_normalized_to_project_key():
+    from services.scan_jobs import ScanJobPaths, ScanJobService
+
+    temp_root = Path(tempfile.mkdtemp())
+    service = ScanJobService(
+        app_version="test",
+        paths=ScanJobPaths(
+            output_dir=str(temp_root / "output"),
+            temp_dir=str(temp_root / "tmp"),
+            policy_file=str(temp_root / "policy.json"),
+            owner_map_file=str(temp_root / "owner_map.json"),
+            suppressions_file=str(temp_root / "suppressions.json"),
+            history_file=str(temp_root / "scan_history.json"),
+            log_dir=str(temp_root / "logs"),
+            db_file=str(temp_root / "scan_jobs.db"),
+        ),
+        load_policy=lambda _: {},
+        load_owner_map=lambda _: {},
+        policy_version=lambda _: "test",
+        utc_now_iso=lambda: "2026-03-18T10:00:00Z",
+        git_head_commit=lambda _: "",
+        ollama_ping=lambda _: False,
+    )
+
+    legacy_record = {"scan_id": "20260318_100000", "project": "COGI", "state": "done"}
+
+    with service._connect() as conn:
+        conn.execute(
+            "INSERT INTO scan_jobs(scan_id, state, updated_at, record_json) VALUES (?, ?, ?, ?)",
+            ("20260318_100000", "done", 1.0, json.dumps(legacy_record)),
+        )
+        conn.commit()
+
+    records = service.load_history()
+
+    assert records[0]["project_key"] == "COGI"
+    assert "project" not in records[0]
+
+
+def test_history_access_uses_project_key_only():
+    from services.report_access import history_records_for_context
+
+    ctx = UserContext(username="u", roles=[ROLE_VIEWER], allowed_projects=["COGI"])
+    history = [
+        {"scan_id": "1", "project_key": "COGI"},
+        {"scan_id": "2", "project_key": "NOPE"},
+    ]
+
+    visible = history_records_for_context(history, ctx)
+
+    assert [record["scan_id"] for record in visible] == ["1"]
 
 
 def test_llm_fallback_parsing_does_not_emit_low_signal_operator_logs():

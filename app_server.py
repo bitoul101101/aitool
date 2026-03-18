@@ -1110,7 +1110,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         repo_label = ", ".join(record.get("repo_slugs", record.get("repos", [])))
         html = render_results_page(
             scan_id=record.get("scan_id", scan_id),
-            project_key=record.get("project_key", record.get("project", "")),
+            project_key=record.get("project_key", ""),
             repo_label=repo_label,
             state=record.get("state", "done"),
             html_name=html_name,

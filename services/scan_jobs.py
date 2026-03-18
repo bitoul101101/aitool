@@ -315,7 +315,7 @@ class ScanJobService:
             "scan_id": session.scan_id,
             "date": session.scan_id[:8],
             "time": session.scan_id[9:] if len(session.scan_id) > 8 else "",
-            "project": session.project_key,
+            "project_key": session.project_key,
             "repos": session.repo_slugs,
             "operator": session.operator,
             "state": session.state,
@@ -466,8 +466,16 @@ class ScanJobService:
             except Exception:
                 continue
             if isinstance(record, dict) and record.get("scan_id"):
-                records.append(record)
+                records.append(self._normalize_history_record(record))
         return records
+
+    @staticmethod
+    def _normalize_history_record(record: dict) -> dict:
+        normalized = dict(record)
+        project_key = str(normalized.get("project_key", "") or normalized.get("project", "") or "")
+        normalized["project_key"] = project_key
+        normalized.pop("project", None)
+        return normalized
 
     def _read_legacy_history(self) -> list:
         try:
@@ -507,7 +515,7 @@ class ScanJobService:
                         str(record.get("scan_id", "")),
                         str(record.get("state", "unknown")),
                         time.time(),
-                        json.dumps(record, ensure_ascii=False),
+                        json.dumps(self._normalize_history_record(record), ensure_ascii=False),
                     )
                     for record in legacy_records
                     if isinstance(record, dict) and record.get("scan_id")

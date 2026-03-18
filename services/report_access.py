@@ -8,7 +8,7 @@ from services.access_control import UserContext
 def history_records_for_context(history: list[dict], ctx: UserContext) -> list[dict]:
     return [
         record for record in history
-        if ctx.can_access_project(str(record.get("project", "")))
+        if ctx.can_access_project(str(record.get("project_key", "")))
     ]
 
 
