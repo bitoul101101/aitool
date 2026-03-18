@@ -958,7 +958,8 @@ def test_scan_page_selection_view_stays_pre_scan():
     assert "Start Scan" in html
     assert 'id="start-scan-btn" disabled' in html
     assert "New Scan" in html
-    assert "Scan Results" in html
+    assert "AI Inventory" in html
+    assert "History" in html
     assert "repo1" in html
     assert "Current Findings" not in html
     assert 'src="/assets/scan_page.js"' in html
@@ -1084,6 +1085,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
         llm_models=["m1"],
         log_text="line 1\nline 2",
         phase_timeline=[("scan", "00:02")],
+        scan_id="20260317_154037",
     ).decode("utf-8")
 
     assert "Current Findings" not in html
@@ -1096,7 +1098,8 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert html.index("Phase Timeline") < html.index("Hardware Usage")
     assert "Download CSV File" in html
     assert "Download Logs" in html
-    assert 'href="/results/20260317_154037"' in html
+    assert 'href="/scan/20260317_154037?tab=results"' in html
+    assert 'href="/scan/20260317_154037?tab=activity"' in html
     assert "Baseline" in html
     assert 'id="inventory-summary"' not in html
     assert "Compared to AI_Scan_Report_COGI_repo1_20260317_140000.csv" in html
@@ -1475,8 +1478,9 @@ def test_results_page_is_server_rendered():
     assert 'Open Raw HTML' in html
     assert 'Download CSV File' in html
     assert 'Download Logs' in html
-    assert 'Back to Scan' in html
-    assert '<h2>Scan Results</h2>' in html
+    assert 'href="/scan/20260318_140208?tab=activity"' in html
+    assert 'href="/scan/20260318_140208?tab=results"' in html
+    assert '<h2>Results</h2>' in html
     assert "Review the completed scan and download the generated artifacts." in html
     assert 'repo1' not in html
 
@@ -1503,6 +1507,7 @@ def test_render_results_page_resolves_current_session_report():
         class DummyHandler:
             def __init__(self):
                 self.sent = None
+                self.redirected = None
 
             def _send(self, status, ct, body):
                 self.sent = (status, ct, body)
@@ -1510,13 +1515,14 @@ def test_render_results_page_resolves_current_session_report():
             def _err(self, status, msg):
                 raise AssertionError(f"{status}: {msg}")
 
+            def _redirect(self, location):
+                self.redirected = location
+
         handler = DummyHandler()
         with patch.object(srv, "_require_role", return_value=False):
             srv._Handler._render_results_page(handler, "20260318_150000")
 
-        html = handler.sent[2].decode("utf-8")
-        assert 'src="/reports/current.html"' in html
-        assert "<h2>Scan Results</h2>" in html
+        assert handler.redirected == "/scan/20260318_150000?tab=results"
     finally:
         srv._session = orig_session
 

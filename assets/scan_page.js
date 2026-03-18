@@ -212,9 +212,9 @@
     const report = data.report || {};
     const state = String(data.state || "").toLowerCase();
     const actions = [];
-    if (state === "done" || state === "stopped") {
+      if (state === "done" || state === "stopped") {
       if (report.html_name && data.scan_id) {
-        actions.push('<a class="btn" id="open-results-page" href="/results/' + encodeURIComponent(data.scan_id) + '">Open Results</a>');
+        actions.push('<a class="btn" id="open-results-page" href="/scan/' + encodeURIComponent(data.scan_id) + '?tab=results">Open Results</a>');
       }
       if (report.html_name) {
         actions.push('<a class="btn alt" id="open-html-report" href="/reports/' + encodeURIComponent(report.html_name) + '" target="_blank">Open HTML Report</a>');
@@ -300,7 +300,7 @@
     if (!redirectedToResults && justFinished && data.scan_id && data.report && data.report.html_name) {
       redirectedToResults = true;
       window.setTimeout(function () {
-        window.location.assign("/results/" + encodeURIComponent(data.scan_id));
+        window.location.assign("/scan/" + encodeURIComponent(data.scan_id) + "?tab=results");
       }, 900);
     }
     previousScanState = state;

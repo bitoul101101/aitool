@@ -209,6 +209,9 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .results-title h2{margin:0 0 4px;font-size:22px}
 .results-title p{margin:0;color:#705333}
 .results-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.subnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.subnav a{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#efe1cf;color:#5d3b15;text-decoration:none;font-size:12px;font-weight:700}
+.subnav a.active{background:#6d3514;color:#fff}
 .results-frame{width:100%;min-height:calc(100vh - 220px);border:1px solid #d8b995;border-radius:14px;background:#fff}
 @media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}.inventory-grid-wide{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -230,6 +233,16 @@ def _csrf_field(csrf_token: str = "") -> str:
     return f'<input type="hidden" name="csrf_token" value="{_esc(csrf_token)}">' if csrf_token else ""
 
 
+def _scan_workspace_tabs(scan_id: str, active_tab: str = "activity") -> str:
+    safe_scan_id = _esc(scan_id)
+    return (
+        '<nav class="subnav" aria-label="Scan workspace">'
+        + f'<a class="{"active" if active_tab == "activity" else ""}" href="/scan/{safe_scan_id}?tab=activity">Activity</a>'
+        + f'<a class="{"active" if active_tab == "results" else ""}" href="/scan/{safe_scan_id}?tab=results">Results</a>'
+        + "</nav>"
+    )
+
+
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
@@ -237,7 +250,6 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
         nav = (
             '<div class="header-nav">'
             + f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
-            + (f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan Results</a>' if show_scan_results else "")
             + f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
             + f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
             + f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
@@ -307,6 +319,9 @@ def render_scan_page(
     log_text: str,
     phase_timeline: list[tuple[str, str]],
     force_selection: bool = False,
+    scan_id: str = "",
+    workspace_tab: str = "activity",
+    include_live_script: bool = True,
     show_scan_results: bool = True,
     csrf_token: str = "",
     notice: str = "",
@@ -597,7 +612,7 @@ def render_scan_page(
         log_url = f"/api/history/log/{_esc(scan_id)}" if scan_id else ""
         buttons = []
         if html_name and scan_id:
-            buttons.append(f'<a class="btn" id="open-results-page" href="/results/{_esc(scan_id)}">Open Results</a>')
+            buttons.append(f'<a class="btn" id="open-results-page" href="/scan/{_esc(scan_id)}?tab=results">Open Results</a>')
         if html_name:
             buttons.append(f'<a class="btn alt" id="open-html-report" href="/reports/{_esc(html_name)}" target="_blank">Open HTML Report</a>')
         if csv_name:
@@ -646,9 +661,11 @@ def render_scan_page(
   </section>
 </section>
 <form method="post" action="/scan/stop" id="stop-form">{_csrf_field(csrf_token)}</form>"""
+    workspace_tabs = _scan_workspace_tabs(scan_id, workspace_tab) if scan_id else ""
     running_view = f"""
 <section class="running-shell">
   <section class="card activity-panel">
+    {workspace_tabs}
     <div>
       <h2 style="margin:0 0 8px;font-size:16px">Activity Log</h2>
       <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
@@ -678,8 +695,9 @@ def render_scan_page(
 <section class="scan-shell">
   {running_view if (not force_selection and (running or state in ("done", "stopped") and log_text)) else selection_view}
 </section>
-<script src="/assets/scan_page.js" defer></script>"""
-    return _layout(title="Scan", body=body, active="new_scan" if force_selection else "scan", show_scan_results=show_scan_results, csrf_token=csrf_token)
+{'<script src="/assets/scan_page.js" defer></script>' if include_live_script else ''}"""
+    nav_active = "" if scan_id else "new_scan"
+    return _layout(title="Scan", body=body, active=nav_active, show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
 def render_history_page(*, history: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
@@ -695,6 +713,10 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
     for rec in history:
         project = rec.get("project_key", "")
         repo_label = ", ".join(rec.get("repo_slugs", rec.get("repos", [])))
+        scan_id = str(rec.get("scan_id", "") or "")
+        repo_cell = _esc(repo_label)
+        if scan_id:
+            repo_cell = f'<a href="/scan/{_esc(scan_id)}?tab=activity">{_esc(repo_label)}</a>'
         date_text, time_text, ts = _fmt_dt(rec.get("started_at_utc", ""))
         state = str(rec.get("state", ""))
         status_class = {"running": "status-running", "done": "status-done", "stopped": "status-stopped"}.get(state.lower(), "")
@@ -712,7 +734,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             f'<td><input type="checkbox" class="history-check" name="scan_ids" value="{_esc(rec.get("scan_id",""))}"></td>'
             f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
             f'<td>{_esc(project)}</td>'
-            f'<td>{_esc(repo_label)}</td>'
+            f'<td>{repo_cell}</td>'
             f'<td>{_esc(total_findings)}</td>'
             f'<td>{_esc(delta_new)}</td>'
             f'<td>{_esc(delta_existing)}</td>'
@@ -818,6 +840,7 @@ def render_results_page(
     notice: str = "",
     error: str = "",
 ) -> bytes:
+    workspace_tabs = _scan_workspace_tabs(scan_id, "results")
     toolbar_actions = []
     if html_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
@@ -829,20 +852,20 @@ def render_results_page(
 {_flash(notice, error)}
 <section class="results-shell">
   <section class="card">
+    {workspace_tabs}
     <div class="results-toolbar">
       <div class="results-title">
-        <h2>Scan Results</h2>
+        <h2>Results</h2>
         <p>Review the completed scan and download the generated artifacts.</p>
       </div>
       <div class="results-actions">
-        <a class="btn ghost" href="/scan">Back to Scan</a>
         {''.join(toolbar_actions)}
       </div>
     </div>
   </section>
-  <iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Scan Results"></iframe>
+  <iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Detailed Report"></iframe>
 </section>"""
-    return _layout(title="Results", body=body, active="scan", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="Results", body=body, active="", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
 def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
@@ -1077,7 +1100,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
       <thead><tr><th>Page</th><th>What It Is For</th></tr></thead>
       <tbody>
         <tr><td>New Scan</td><td>Select project, repositories, and LLM model for a new run.</td></tr>
-        <tr><td>Scan Results</td><td>Monitor the live activity log, phase timeline, findings sections, and report download buttons for the active or last run.</td></tr>
+        <tr><td>Scan Workspace</td><td>Open a specific scan and switch between the live activity view and the finished detailed report.</td></tr>
         <tr><td>AI Inventory</td><td>Review the latest known AI usage profile per repository, including providers, models, and usage patterns.</td></tr>
         <tr><td>History</td><td>Search, filter, sort, and open results from previous scans.</td></tr>
         <tr><td>Settings</td><td>Configure output directory and LLM connection settings.</td></tr>

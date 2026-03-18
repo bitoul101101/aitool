@@ -9,7 +9,7 @@ Routes
 ──────
 GET  /                → scan page (HTML)
 GET  /scan            → scan page (HTML)
-GET  /results/<id>    → finished results page (HTML)
+GET  /results/<id>    → compatibility redirect to /scan/<id>?tab=results
 GET  /history         → history page (HTML)
 GET  /settings        → settings page (HTML)
 GET  /help            → help page (HTML)
@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import queue
+import re
 import secrets
 import shutil
 import threading
@@ -42,7 +43,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from dateutil import tz
 
 # ── Project imports ───────────────────────────────────────────────────────────
@@ -590,6 +591,28 @@ def _report_record_for_scan(scan_id: str) -> dict | None:
     return _find_history_record_by_scan_id(scan_id)
 
 
+def _scan_record_for_id(scan_id: str) -> dict | None:
+    with _state_lock:
+        if _session.scan_id == scan_id:
+            current_report = (_session.report_paths or {}).get("__all__", {})
+            return {
+                "scan_id": _session.scan_id,
+                "project_key": _session.project_key,
+                "repo_slugs": list(_session.repo_slugs),
+                "state": _session.state,
+                "started_at_utc": _session.started_at_utc,
+                "completed_at_utc": _session.completed_at_utc,
+                "duration_s": _session.scan_duration_s,
+                "reports": {"__all__": dict(current_report)},
+                "delta": dict(_session.delta or {}),
+                "inventory": dict(_session.inventory or {}),
+                "finding_total": len(_session.findings),
+                "suppressed_total": len(_session.suppressed_findings),
+                "log_file": f"{scan_id}.txt" if scan_id else "",
+            }
+    return _find_history_record_by_scan_id(scan_id)
+
+
 def _triage_by_hash() -> Dict[str, dict]:
     return triage_by_hash(SUPPRESSIONS_FILE)
 
@@ -667,6 +690,33 @@ def _format_log_entry(entry: dict) -> str:
     if not msg:
         return ""
     return f"[{stamp}] {msg}"
+
+
+def _parse_log_text_entries(log_text: str) -> list[dict]:
+    entries: list[dict] = []
+    if not log_text:
+        return entries
+    time_re = re.compile(r"^\[(\d{2}):(\d{2}):(\d{2})\]\s*(.*)$")
+    day_offset = 0
+    previous_ts: float | None = None
+    for raw_line in str(log_text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = time_re.match(line)
+        if not match:
+            entries.append({"ts": previous_ts or 0.0, "msg": line})
+            continue
+        hours, minutes, seconds = (int(match.group(i)) for i in range(1, 4))
+        message = match.group(4).strip()
+        seconds_of_day = hours * 3600 + minutes * 60 + seconds
+        ts = float(seconds_of_day + day_offset)
+        if previous_ts is not None and ts < previous_ts:
+            day_offset += 86400
+            ts = float(seconds_of_day + day_offset)
+        previous_ts = ts
+        entries.append({"ts": ts, "msg": message})
+    return entries
 
 
 def _phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
@@ -1048,13 +1098,26 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return self._redirect("/login")
             if self._require_browser_session():
                 return
-            self._render_scan_page()
+            qs = parse_qs(parsed.query)
+            fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
+            with _state_lock:
+                current_scan_id = _session.scan_id
+            if fresh_scan or not current_scan_id:
+                self._render_scan_page()
+            else:
+                self._redirect("/scan/" + quote(current_scan_id) + "?tab=activity")
+        elif p.startswith("/scan/"):
+            if not _is_connected():
+                return self._redirect("/login")
+            if self._require_browser_session():
+                return
+            self._render_scan_workspace_page(p[6:])
         elif p.startswith("/results/"):
             if not _is_connected():
                 return self._redirect("/login")
             if self._require_browser_session():
                 return
-            self._render_results_page(p[9:])
+            self._redirect("/scan/" + quote(Path(p[9:]).name) + "?tab=results")
         elif p == "/history":
             if not _is_connected():
                 return self._redirect("/login")
@@ -1280,6 +1343,94 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         )
         self._send(200, "text/html; charset=utf-8", html)
 
+    def _render_scan_workspace_page(self, scan_id: str, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        safe_scan_id = Path(scan_id).name
+        qs = parse_qs(urlparse(self.path).query)
+        tab = (qs.get("tab", ["activity"])[0] or "activity").strip().lower()
+        if tab not in {"activity", "results"}:
+            tab = "activity"
+        record = _scan_record_for_id(safe_scan_id)
+        if not record:
+            return self._err(404, "Scan results not found")
+        project_key = str(record.get("project_key", "") or "")
+        if project_key and _require_project_access(self, project_key):
+            return
+        repo_slugs = list(record.get("repo_slugs", record.get("repos", [])) or [])
+        report = (record.get("reports") or {}).get("__all__", {})
+
+        with _state_lock:
+            is_current = _session.scan_id == safe_scan_id
+            if is_current:
+                session_log_lines = list(_session.log_lines[-500:])
+                status = _session.to_status() if _is_connected() else {}
+                status["hardware"] = _hardware_snapshot(_session) if _is_connected() else {}
+                session_state = _session.state
+            else:
+                session_log_lines = []
+                status = {}
+                session_state = str(record.get("state", "") or "")
+
+        if is_current:
+            log_text = _format_log_text(session_log_lines)
+            phase_timeline = _phase_timeline(session_log_lines, session_state)
+        else:
+            log_text = _get_log_text(safe_scan_id)
+            parsed_entries = _parse_log_text_entries(log_text)
+            phase_timeline = _phase_timeline(parsed_entries, session_state)
+            status = {
+                "scan_id": safe_scan_id,
+                "state": session_state,
+                "report": report,
+                "delta": record.get("delta") or {},
+                "inventory": record.get("inventory") or {},
+                "hardware": {},
+                "total": int(record.get("total", record.get("finding_total", 0)) or 0),
+                "suppressed_total": int(record.get("suppressed_total", 0) or 0),
+            }
+
+        if tab == "results":
+            html_name = report.get("html_name", "")
+            if not html_name:
+                return self._err(404, "HTML report not found for this scan")
+            repo_label = ", ".join(repo_slugs)
+            html = render_results_page(
+                scan_id=safe_scan_id,
+                project_key=project_key,
+                repo_label=repo_label,
+                state=session_state or str(record.get("state", "done")),
+                html_name=html_name,
+                csv_name=report.get("csv_name", ""),
+                log_url=f"/api/history/log/{safe_scan_id}",
+                started_at_utc=str(record.get("started_at_utc", "") or ""),
+                show_scan_results=_has_scan_results(),
+                csrf_token=_current_csrf_token(),
+                notice=notice or (qs.get("notice", [""])[0] or ""),
+                error=error or (qs.get("error", [""])[0] or ""),
+            )
+        else:
+            html = render_scan_page(
+                projects=filter_projects(_operator_state.projects_cache, _operator_state.ctx),
+                selected_project=project_key,
+                repos=[],
+                selected_repos=repo_slugs,
+                status=status,
+                llm_cfg=load_llm_config(),
+                llm_models=_ollama_snapshot(load_llm_config().get("base_url", "http://localhost:11434"), refresh=False).get("models", []),
+                log_text=log_text,
+                phase_timeline=phase_timeline,
+                force_selection=False,
+                scan_id=safe_scan_id,
+                workspace_tab="activity",
+                include_live_script=is_current,
+                show_scan_results=_has_scan_results(),
+                csrf_token=_current_csrf_token(),
+                notice=notice or (qs.get("notice", [""])[0] or ""),
+                error=error or (qs.get("error", [""])[0] or ""),
+            )
+        self._send(200, "text/html; charset=utf-8", html)
+
     def _render_history_page(self, *, notice: str = "", error: str = ""):
         if _require_role(self, ROLE_VIEWER):
             return
@@ -1294,31 +1445,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self._send(200, "text/html; charset=utf-8", html)
 
     def _render_results_page(self, scan_id: str, *, notice: str = "", error: str = ""):
-        if _require_role(self, ROLE_VIEWER):
-            return
-        record = _report_record_for_scan(Path(scan_id).name)
-        if not record:
-            return self._err(404, "Scan results not found")
-        report = (record.get("reports") or {}).get("__all__", {})
-        html_name = report.get("html_name", "")
-        if not html_name:
-            return self._err(404, "HTML report not found for this scan")
-        repo_label = ", ".join(record.get("repo_slugs", record.get("repos", [])))
-        html = render_results_page(
-            scan_id=record.get("scan_id", scan_id),
-            project_key=record.get("project_key", ""),
-            repo_label=repo_label,
-            state=record.get("state", "done"),
-            html_name=html_name,
-            csv_name=report.get("csv_name", ""),
-            log_url=f"/api/history/log/{record.get('scan_id', scan_id)}",
-            started_at_utc=record.get("started_at_utc", ""),
-            show_scan_results=_has_scan_results(),
-            csrf_token=_current_csrf_token(),
-            notice=notice,
-            error=error,
-        )
-        self._send(200, "text/html; charset=utf-8", html)
+        self._redirect("/scan/" + quote(Path(scan_id).name) + "?tab=results")
 
     def _render_inventory_page(self, *, notice: str = "", error: str = ""):
         if _require_role(self, ROLE_VIEWER):
@@ -1418,7 +1545,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except (ValueError, PermissionError, RuntimeError) as e:
             return self._render_scan_page(error=str(e), selected_repos=repo_slugs)
         threading.Thread(target=_run_scan, args=(new_session,), daemon=True).start()
-        self._redirect(_with_query("/scan", project=project_key, notice="Scan started"))
+        self._redirect(_with_query(f"/scan/{new_session.scan_id}", tab="activity", notice="Scan started"))
 
     def _page_scan_stop(self):
         if _require_role(self, ROLE_SCANNER):
@@ -1426,7 +1553,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         with _state_lock:
             current_session = _session
         stop_scan(current_session=current_session, stop_scan_fn=_stop_active_scan, audit_event=_audit_event)
-        self._redirect(_with_query("/scan", notice="Stop requested"))
+        target = f"/scan/{current_session.scan_id}" if current_session.scan_id else "/scan"
+        extra = {"tab": "activity"} if current_session.scan_id else {"new": "1"}
+        self._redirect(_with_query(target, notice="Stop requested", **extra))
 
     def _page_history_delete(self, body: dict):
         if _require_role(self, ROLE_ADMIN):
@@ -1493,7 +1622,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_scan_page(error=str(e))
-        self._redirect(_with_query("/scan", notice="Finding triage updated"))
+        with _state_lock:
+            current_scan_id = _session.scan_id
+        target = f"/scan/{current_scan_id}" if current_scan_id else "/scan"
+        extra = {"tab": "activity"} if current_scan_id else {"new": "1"}
+        self._redirect(_with_query(target, notice="Finding triage updated", **extra))
 
     def _page_finding_reset(self, body: dict):
         if _require_role(self, ROLE_TRIAGE):
@@ -1509,7 +1642,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_scan_page(error=str(e))
-        self._redirect(_with_query("/scan", notice="Finding triage reset"))
+        with _state_lock:
+            current_scan_id = _session.scan_id
+        target = f"/scan/{current_scan_id}" if current_scan_id else "/scan"
+        extra = {"tab": "activity"} if current_scan_id else {"new": "1"}
+        self._redirect(_with_query(target, notice="Finding triage reset", **extra))
 
     # ── API handlers ──────────────────────────────────────────────────────────
 
