@@ -37,7 +37,8 @@ class BitbucketClient:
 
     def __init__(self, base_url: str, token: str = None,
                  username: str = None, password: str = None,
-                 verify_ssl: bool = True, verbose: bool = False,
+                 verify_ssl: bool = True, ca_bundle: str = "",
+                 verbose: bool = False,
                  min_request_interval: float = _DEFAULT_MIN_INTERVAL,
                  max_retries: int = _DEFAULT_MAX_RETRIES,
                  retry_after_fallback: float = _DEFAULT_RETRY_AFTER,
@@ -48,6 +49,8 @@ class BitbucketClient:
         self.password = password
         self.verbose  = verbose
         self.is_cloud = "bitbucket.org" in base_url
+        self.verify_ssl = bool(verify_ssl)
+        self.ca_bundle = str(ca_bundle or "").strip()
 
         self._min_interval    = min_request_interval
         self._max_retries     = max_retries
@@ -57,8 +60,8 @@ class BitbucketClient:
         self._throttle_lock   = threading.Lock()      # guards _last_req_time
 
         self.session = requests.Session()
-        self.session.verify = verify_ssl
-        if not verify_ssl:
+        self.session.verify = self.ca_bundle if self.verify_ssl and self.ca_bundle else self.verify_ssl
+        if not self.verify_ssl:
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         if token:
@@ -318,7 +321,8 @@ def _git_config_env(key: str, value: str) -> dict[str, str]:
 def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
                   branch: str = None, verbose: bool = False,
                   stop_event=None, proc_holder: list = None,
-                  proc_lock=None, git_env: dict | None = None) -> None:
+                  proc_lock=None, git_env: dict | None = None,
+                  verify_ssl: bool = True, ca_bundle: str | None = None) -> None:
     """
     Shallow clone a repo to dest.
     If branch is given, clones that specific branch (use for the default/main branch).
@@ -339,21 +343,29 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
     if dest.exists():
         shutil.rmtree(dest)
 
-    cmd = ["git", "clone", "--depth", str(depth), "--single-branch", "--no-tags",
-           "-c", "http.sslVerify=false",
-           "-c", "filter.lfs.smudge=cat",
-           "-c", "filter.lfs.process=cat",
-           "-c", "filter.lfs.required=false",
-           "-c", "lfs.fetchexclude=*",
-           "-c", "core.longpaths=true"]   # Windows MAX_PATH (260 chars) workaround
-    if branch:
-        cmd += ["--branch", branch]
-    cmd += [clone_url, str(dest)]
+    def _clone_cmd(target_branch: str | None) -> list[str]:
+        cmd = ["git", "clone", "--depth", str(depth), "--single-branch", "--no-tags",
+               "-c", "filter.lfs.smudge=cat",
+               "-c", "filter.lfs.process=cat",
+               "-c", "filter.lfs.required=false",
+               "-c", "lfs.fetchexclude=*",
+               "-c", "core.longpaths=true"]   # Windows MAX_PATH (260 chars) workaround
+        if not verify_ssl:
+            cmd += ["-c", "http.sslVerify=false"]
+        if target_branch:
+            cmd += ["--branch", target_branch]
+        cmd += [clone_url, str(dest)]
+        return cmd
+
+    cmd = _clone_cmd(branch)
 
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"]  = "0"
-    env["GIT_SSL_NO_VERIFY"]    = "1"
     env["GIT_LFS_SKIP_SMUDGE"]  = "1"   # skip LFS blob downloads entirely
+    if not verify_ssl:
+        env["GIT_SSL_NO_VERIFY"] = "1"
+    elif ca_bundle:
+        env["GIT_SSL_CAINFO"] = str(ca_bundle)
     if git_env:
         env.update(git_env)
 
@@ -403,14 +415,7 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
                        "remote ref does not exist" in stderr_text.lower()):
             if dest.exists():
                 shutil.rmtree(dest)
-            cmd_retry = ["git", "clone", "--depth", str(depth), "--single-branch", "--no-tags",
-                         "-c", "http.sslVerify=false",
-                         "-c", "filter.lfs.smudge=cat",
-                         "-c", "filter.lfs.process=cat",
-                         "-c", "filter.lfs.required=false",
-                         "-c", "lfs.fetchexclude=*",
-                         "-c", "core.longpaths=true",
-                         clone_url, str(dest)]
+            cmd_retry = _clone_cmd(None)
             proc2 = subprocess.Popen(
                 cmd_retry,
                 stdout=subprocess.PIPE if not verbose else None,

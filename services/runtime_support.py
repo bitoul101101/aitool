@@ -15,6 +15,10 @@ DEFAULT_LLM_CONFIG = {
     "base_url": "http://localhost:11434",
     "model": "qwen2.5-coder:7b-instruct",
 }
+DEFAULT_TLS_CONFIG = {
+    "verify_ssl": True,
+    "ca_bundle": "",
+}
 
 _OLLAMA_CACHE_TTL_S = 30
 _OLLAMA_CACHE_LOCK = threading.RLock()
@@ -35,6 +39,27 @@ def load_llm_config(path: str) -> dict:
 def save_llm_config(path: str, cfg: dict) -> None:
     """Persist LLM settings to JSON file."""
     Path(path).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+
+def load_tls_config(path: str) -> dict:
+    """Load Bitbucket TLS settings from JSON file, falling back to defaults."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        cfg = dict(DEFAULT_TLS_CONFIG)
+        cfg["verify_ssl"] = bool(data.get("verify_ssl", cfg["verify_ssl"]))
+        cfg["ca_bundle"] = str(data.get("ca_bundle", "") or "").strip()
+        return cfg
+    except (FileNotFoundError, OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError, TypeError):
+        return dict(DEFAULT_TLS_CONFIG)
+
+
+def save_tls_config(path: str, cfg: dict) -> None:
+    """Persist Bitbucket TLS settings to JSON file."""
+    payload = {
+        "verify_ssl": bool(cfg.get("verify_ssl", True)),
+        "ca_bundle": str(cfg.get("ca_bundle", "") or "").strip(),
+    }
+    Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def ollama_ping(base_url: str, *, timeout: int = 4) -> bool:

@@ -19,6 +19,7 @@ def connect_operator(
     *,
     body: dict,
     bitbucket_url: str,
+    tls_config: dict,
     operator_state,
     audit_event: Callable[..., None],
 ) -> dict:
@@ -30,7 +31,13 @@ def connect_operator(
     if not token:
         raise ValueError("Token required")
 
-    client = BitbucketClient(base_url=bitbucket_url, token=token, verify_ssl=False, verbose=False)
+    client = BitbucketClient(
+        base_url=bitbucket_url,
+        token=token,
+        verify_ssl=bool(tls_config.get("verify_ssl", True)),
+        ca_bundle=str(tls_config.get("ca_bundle", "") or "").strip(),
+        verbose=False,
+    )
     owner = client.get_pat_owner()
     projects = client.list_projects()
     visible_projects = operator_state.connect(client, owner, projects)

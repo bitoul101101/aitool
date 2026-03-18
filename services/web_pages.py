@@ -975,7 +975,7 @@ sortInventory(0,'datetime');
     return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
-def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, tls_cfg: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     body = f"""
 {_flash(notice, error)}
 <section class="card" style="max-width:760px">
@@ -983,6 +983,8 @@ def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, 
   <form method="post" action="/settings/save" class="stack">
     {_csrf_field(csrf_token)}
     <div><label>Bitbucket URL</label><input type="text" value="{_esc(bitbucket_url)}" disabled></div>
+    <div><label>Bitbucket CA Bundle</label><input type="text" name="bitbucket_ca_bundle" value="{_esc(tls_cfg.get('ca_bundle',''))}" placeholder="Path to corporate root CA PEM/CRT file"></div>
+    <label class="checkline"><input type="checkbox" name="bitbucket_verify_ssl" value="true"{" checked" if tls_cfg.get("verify_ssl", True) else ""}><span>Verify Bitbucket TLS certificates</span></label>
     <div><label>Output Directory</label><input type="text" name="output_dir" value="{_esc(output_dir)}"></div>
     <div><label>LLM URL</label><input type="text" name="llm_url" value="{_esc(llm_cfg.get('base_url',''))}"></div>
     <div><label>LLM Model</label><input type="text" name="llm_model" value="{_esc(llm_cfg.get('model',''))}"></div>

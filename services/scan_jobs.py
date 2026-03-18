@@ -778,6 +778,8 @@ class ScanJobService:
                     proc_holder=session.proc_holder,
                     proc_lock=session.proc_lock,
                     git_env=git_env,
+                    verify_ssl=bool(getattr(client, "verify_ssl", True)),
+                    ca_bundle=str(getattr(client, "ca_bundle", "") or ""),
                 )
                 meta["commit"] = self._git_head_commit(clone_dir)
             except RuntimeError as exc:

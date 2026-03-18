@@ -90,12 +90,15 @@ from services.web_pages import (
 )
 from services.runtime_support import (
     DEFAULT_LLM_CONFIG,
+    DEFAULT_TLS_CONFIG,
     ensure_ollama_running,
     load_llm_config as load_llm_config_file,
+    load_tls_config as load_tls_config_file,
     ollama_list_models,
     ollama_ping,
     ollama_snapshot,
     save_llm_config as save_llm_config_file,
+    save_tls_config as save_tls_config_file,
 )
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -138,9 +141,11 @@ def _default_state_dir() -> Path:
 STATE_DIR = _default_state_dir()
 SUPPRESSIONS_FILE = str(STATE_DIR / "ai_scanner_suppressions.json")
 LLM_CFG_FILE  = str(STATE_DIR / "ai_scanner_llm_config.json")
+TLS_CFG_FILE  = str(STATE_DIR / "ai_scanner_tls_config.json")
 ACCESS_FILE   = str(STATE_DIR / "access_control.json")
 _LEGACY_SUPPRESSIONS_FILE = _BASE_DIR / "ai_scanner_suppressions.json"
 _LEGACY_LLM_CFG_FILE = _BASE_DIR / "ai_scanner_llm_config.json"
+_LEGACY_TLS_CFG_FILE = _BASE_DIR / "ai_scanner_tls_config.json"
 _LEGACY_ACCESS_FILE = _BASE_DIR / "access_control.json"
 
 
@@ -156,6 +161,7 @@ def _prepare_runtime_file(target: Path, *, legacy: Path | None = None, default_j
 
 
 _prepare_runtime_file(Path(LLM_CFG_FILE), legacy=_LEGACY_LLM_CFG_FILE, default_json=DEFAULT_LLM_CONFIG)
+_prepare_runtime_file(Path(TLS_CFG_FILE), legacy=_LEGACY_TLS_CFG_FILE, default_json=DEFAULT_TLS_CONFIG)
 _prepare_runtime_file(Path(SUPPRESSIONS_FILE), legacy=_LEGACY_SUPPRESSIONS_FILE, default_json={"version": 2, "triage": []})
 _prepare_runtime_file(Path(ACCESS_FILE), legacy=_LEGACY_ACCESS_FILE)
 
@@ -179,6 +185,12 @@ def load_llm_config() -> dict:
 
 def save_llm_config(cfg: dict) -> None:
     save_llm_config_file(LLM_CFG_FILE, cfg)
+
+def load_tls_config() -> dict:
+    return load_tls_config_file(TLS_CFG_FILE)
+
+def save_tls_config(cfg: dict) -> None:
+    save_tls_config_file(TLS_CFG_FILE, cfg)
 
 
 def _utc_now_iso() -> str:
@@ -397,6 +409,20 @@ def _queue_session_cookie(handler, session_id: str) -> None:
 def _save_history_record(session, findings):
     _sync_scan_service_paths()
     _scan_service.save_history_record(session, findings)
+
+
+def _apply_tls_settings_to_connected_client(tls_cfg: dict) -> None:
+    client = _operator_state.client
+    if not client:
+        return
+    verify_ssl = bool(tls_cfg.get("verify_ssl", True))
+    ca_bundle = str(tls_cfg.get("ca_bundle", "") or "").strip()
+    client.verify_ssl = verify_ssl
+    client.ca_bundle = ca_bundle
+    client.session.verify = ca_bundle if verify_ssl and ca_bundle else verify_ssl
+    if not verify_ssl:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def _load_history() -> list:
@@ -697,6 +723,8 @@ def _phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
 _settings_service = SettingsService(
     load_llm_config=load_llm_config,
     save_llm_config=save_llm_config,
+    load_tls_config=load_tls_config,
+    save_tls_config=save_tls_config,
     ensure_ollama_running=_ollama_ensure_running,
     list_ollama_models=_ollama_list_models,
     audit_event=_audit_event,
@@ -942,6 +970,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return
             self._json({
                 "bitbucket_url": BITBUCKET_URL,
+                "tls": load_tls_config(),
                 "output_dir":    str(Path(OUTPUT_DIR).resolve()),
                 "llm":           load_llm_config(),
             })
@@ -1147,6 +1176,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             bitbucket_url=BITBUCKET_URL,
             output_dir=str(Path(OUTPUT_DIR).resolve()),
             llm_cfg=load_llm_config(),
+            tls_cfg=load_tls_config(),
             csrf_token=_current_csrf_token(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
@@ -1171,6 +1201,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             connect_operator(
                 body=body,
                 bitbucket_url=BITBUCKET_URL,
+                tls_config=load_tls_config(),
                 operator_state=_operator_state,
                 audit_event=_audit_event,
             )
@@ -1258,6 +1289,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             llm_url = body.get("llm_url", "").strip()
             llm_model = body.get("llm_model", "").strip()
             output_dir = body.get("output_dir", "").strip()
+            bitbucket_verify_ssl = bool(body.get("bitbucket_verify_ssl"))
+            bitbucket_ca_bundle = body.get("bitbucket_ca_bundle", "").strip()
+            tls_result = _settings_service.save_tls_settings(
+                verify_ssl=bitbucket_verify_ssl,
+                ca_bundle=bitbucket_ca_bundle,
+            )
+            _apply_tls_settings_to_connected_client(tls_result)
             if llm_url or llm_model:
                 _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
             if output_dir:
@@ -1313,6 +1351,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             response = connect_operator(
                 body=body,
                 bitbucket_url=BITBUCKET_URL,
+                tls_config=load_tls_config(),
                 operator_state=_operator_state,
                 audit_event=_audit_event,
             )
@@ -1487,6 +1526,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         llm_url    = body.get("llm_url", "").strip()
         llm_model  = body.get("llm_model", "").strip()
         output_dir = body.get("output_dir", "").strip()
+        bitbucket_verify_ssl = bool(body.get("bitbucket_verify_ssl"))
+        bitbucket_ca_bundle = body.get("bitbucket_ca_bundle", "").strip()
+        try:
+            tls_result = _settings_service.save_tls_settings(
+                verify_ssl=bitbucket_verify_ssl,
+                ca_bundle=bitbucket_ca_bundle,
+            )
+            _apply_tls_settings_to_connected_client(tls_result)
+        except Exception as e:
+            return self._err(400, str(e))
         if llm_url and llm_model:
             _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
         if output_dir:
@@ -1500,8 +1549,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 )
             except Exception as e:
                 return self._err(400, str(e))
+            result.update({
+                "verify_ssl": tls_result["verify_ssl"],
+                "ca_bundle": tls_result["ca_bundle"],
+            })
             return self._json(result)
-        self._json({"ok": True, "output_dir": str(Path(OUTPUT_DIR).resolve())})
+        self._json({
+            "ok": True,
+            "output_dir": str(Path(OUTPUT_DIR).resolve()),
+            "verify_ssl": tls_result["verify_ssl"],
+            "ca_bundle": tls_result["ca_bundle"],
+        })
 
     def _api_history_delete(self, body: dict):
         """Delete one or more history records plus their associated files."""

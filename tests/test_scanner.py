@@ -1518,10 +1518,14 @@ def test_settings_page_is_server_rendered():
         bitbucket_url=srv.BITBUCKET_URL,
         output_dir=srv.OUTPUT_DIR,
         llm_cfg={"base_url": "http://localhost:11434", "model": "m"},
+        tls_cfg={"verify_ssl": True, "ca_bundle": "C:\\corp-ca.pem"},
     ).decode("utf-8")
 
     assert 'action="/settings/save"' in html
     assert srv.BITBUCKET_URL in html
+    assert 'name="bitbucket_ca_bundle"' in html
+    assert 'value="C:\\corp-ca.pem"' in html
+    assert 'name="bitbucket_verify_ssl"' in html
 
 
 def test_help_page_is_server_rendered():
@@ -2223,6 +2227,59 @@ def test_build_git_auth_env_uses_header_not_url():
     expected = base64.b64encode(b"alice:pat-123").decode("ascii")
     assert env["GIT_CONFIG_KEY_0"] == "http.extraHeader"
     assert env["GIT_CONFIG_VALUE_0"] == f"Authorization: Basic {expected}"
+
+
+def test_bitbucket_client_uses_ca_bundle_for_tls_verification():
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient(
+        "https://bitbucket.example",
+        token="pat-123",
+        verify_ssl=True,
+        ca_bundle="C:\\corp-ca.pem",
+    )
+
+    assert client.verify_ssl is True
+    assert client.ca_bundle == "C:\\corp-ca.pem"
+    assert client.session.verify == "C:\\corp-ca.pem"
+
+
+def test_shallow_clone_sets_git_cainfo_when_ca_bundle_is_provided():
+    from scanner.bitbucket import shallow_clone
+
+    captured = {}
+
+    class FakeProc:
+        def __init__(self):
+            self.returncode = 0
+            self.stdout = None
+            self.stderr = None
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def kill(self):
+            return None
+
+    def fake_popen(cmd, stdout=None, stderr=None, text=None, env=None):
+        captured["cmd"] = cmd
+        captured["env"] = env
+        return FakeProc()
+
+    d = Path(tempfile.mkdtemp())
+    dest = d / "clone-target"
+
+    with patch("scanner.bitbucket.subprocess.Popen", side_effect=fake_popen):
+        shallow_clone(
+            "https://example.invalid/repo.git",
+            dest,
+            verify_ssl=True,
+            ca_bundle="C:\\corp-ca.pem",
+        )
+
+    assert "http.sslVerify=false" not in " ".join(captured["cmd"])
+    assert captured["env"]["GIT_SSL_CAINFO"] == "C:\\corp-ca.pem"
+    assert "GIT_SSL_NO_VERIFY" not in captured["env"]
 
 
 def test_load_history_merges_sqlite_and_legacy_records():
