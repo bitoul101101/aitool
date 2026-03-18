@@ -3209,6 +3209,106 @@ def test_run_scan_with_no_repos_completes_cleanly():
     assert any(msg["msg"] == "  No findings - no report generated." for msg in session.log_lines)
     assert all(ord(ch) < 128 for entry in session.log_lines for ch in entry["msg"])
 
+
+def test_run_scan_logs_structured_metadata_fetch_errors():
+    import app_server as srv
+    from requests import RequestException
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_client = srv._operator_state.client
+    try:
+        srv.OUTPUT_DIR = str(d / "output")
+        session = srv.ScanSession()
+        session.scan_id = "20250316_020202"
+        session.project_key = "COGI"
+        session.repo_slugs = ["repo1"]
+        session.total = 1
+        session.state = "running"
+
+        fake_client = MagicMock()
+        fake_client.build_git_auth_env.return_value = {}
+        fake_client.get_default_branch.side_effect = RequestException("bitbucket unavailable")
+        srv._operator_state.client = fake_client
+
+        def _fake_clone(_url, dest, **_kwargs):
+            Path(dest).mkdir(parents=True, exist_ok=True)
+
+        with patch.object(srv, "_ollama_ping", return_value=False), \
+             patch.object(srv, "_save_history_record", lambda session, findings: None), \
+             patch.object(srv._scan_service, "_git_head_commit", return_value="abc123"), \
+             patch("scanner.bitbucket.shallow_clone", side_effect=_fake_clone), \
+             patch("scanner.bitbucket.cleanup_clone", return_value=None), \
+             patch("services.scan_jobs.AIUsageDetector.scan", return_value=[]):
+            srv._run_scan(session)
+
+        assert any("[META_FETCH] repo1: bitbucket unavailable" in entry["msg"] for entry in session.log_lines)
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv._operator_state.client = orig_client
+
+
+def test_run_scan_logs_structured_report_generation_errors():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_client = srv._operator_state.client
+    try:
+        srv.OUTPUT_DIR = str(d / "output")
+        session = srv.ScanSession()
+        session.scan_id = "20250316_030303"
+        session.project_key = "COGI"
+        session.repo_slugs = ["repo1"]
+        session.total = 1
+        session.state = "running"
+
+        fake_client = MagicMock()
+        fake_client.build_git_auth_env.return_value = {}
+        fake_client.get_default_branch.return_value = "main"
+        fake_client.get_repo_owner.return_value = "Owner"
+        fake_client.get_clone_url.return_value = "https://example.invalid/repo1.git"
+        srv._operator_state.client = fake_client
+
+        finding = {
+            **make_finding(),
+            "repo": "repo1",
+            "file": "app.py",
+            "line": 10,
+            "_hash": "hash-report",
+            "severity": 2,
+            "severity_label": "High",
+            "risk": "High",
+            "context": "production",
+            "product_house": "",
+            "match": "import openai",
+            "description": "Test finding",
+            "last_seen": "20250316_030303",
+            "is_notebook": False,
+        }
+
+        def _fake_clone(_url, dest, **_kwargs):
+            dest_path = Path(dest)
+            dest_path.mkdir(parents=True, exist_ok=True)
+            (dest_path / "app.py").write_text("import openai\n", encoding="utf-8")
+
+        with patch.object(srv, "_ollama_ping", return_value=False), \
+             patch.object(srv, "_save_history_record", lambda session, findings: None), \
+             patch.object(srv._scan_service, "_git_head_commit", return_value="abc123"), \
+             patch("scanner.bitbucket.shallow_clone", side_effect=_fake_clone), \
+             patch("scanner.bitbucket.cleanup_clone", return_value=None), \
+             patch("services.scan_jobs.AIUsageDetector.scan", return_value=[finding]), \
+             patch("services.scan_jobs.SecurityAnalyzer.analyze", side_effect=lambda self, rows: rows), \
+             patch("services.scan_jobs.Aggregator.process", return_value=[finding]), \
+             patch("services.scan_jobs.CSVReporter.write_csv", return_value=str(d / "output" / "report.csv")), \
+             patch("services.scan_jobs.HTMLReporter.write", side_effect=OSError("disk full")):
+            srv._run_scan(session)
+
+        assert any("[REPORT_GEN] error: disk full" in entry["msg"] for entry in session.log_lines)
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv._operator_state.client = orig_client
+
 if __name__ == "__main__":
     tests = [
         # Original tests

@@ -4,6 +4,7 @@ import json
 import os
 import queue
 import sqlite3
+import subprocess
 import threading
 import time
 from collections import Counter
@@ -13,6 +14,9 @@ from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+import urllib.error
+
+from requests import RequestException
 
 from aggregator.aggregator import Aggregator
 from analyzer.security import SecurityAnalyzer
@@ -28,6 +32,35 @@ from scanner.suppressions import (
     list_triage,
 )
 from services.inventory import build_inventory
+
+
+EXPECTED_LLM_ERRORS = (
+    urllib.error.HTTPError,
+    urllib.error.URLError,
+    JSONDecodeError,
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+)
+
+EXPECTED_REPORT_ERRORS = (
+    urllib.error.HTTPError,
+    urllib.error.URLError,
+    JSONDecodeError,
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+)
+
+EXPECTED_METADATA_ERRORS = (
+    RequestException,
+    OSError,
+    ValueError,
+    TypeError,
+    KeyError,
+)
 
 
 class ScanSession:
@@ -735,10 +768,10 @@ class ScanJobService:
                 if info.get("quantization"):
                     parts.append(info["quantization"])
                 log(f"LLM      : {' | '.join(parts)}", "dim")
-            except Exception:
+            except EXPECTED_LLM_ERRORS as exc:
                 with session.state_lock:
                     session.llm_model_info = {"name": session.llm_model}
-                log(f"LLM      : {session.llm_model}", "dim")
+                log(f"LLM      : {session.llm_model}  [LLM_INFO_FALLBACK: {exc}]", "dim")
 
         log("=" * 58, "dim")
 
@@ -756,8 +789,8 @@ class ScanJobService:
                 per_branch[slug] = branch or "default"
                 repo_meta[slug] = {"branch": branch, "owner": owner, "url": url}
                 log(f"  {slug}  branch:{branch or '?'}  owner:{owner}", "dim")
-            except Exception as exc:
-                log(f"  {slug}  metadata error: {exc}", "err")
+            except EXPECTED_METADATA_ERRORS as exc:
+                log(f"  [META_FETCH] {slug}: {exc}", "err")
                 repo_meta[slug] = {"branch": None, "owner": "User", "url": ""}
 
         log("=" * 58, "dim")
@@ -770,8 +803,9 @@ class ScanJobService:
             workers = compute_worker_count(
                 param_sz, vram_gb=vram_gb, repo_count=len(session.repo_slugs)
             )
-        except Exception:
+        except EXPECTED_LLM_ERRORS as exc:
             workers = 4
+            log(f"  [WORKER_PLAN] fallback=4 reason={exc}", "dim")
 
         log(f"Starting parallel scan (workers={workers})...", "info")
 
@@ -801,7 +835,7 @@ class ScanJobService:
                 meta["commit"] = self._git_head_commit(clone_dir)
             except RuntimeError as exc:
                 return slug, None, owner, 0, f"clone failed: {exc}"
-            except Exception as exc:
+            except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
                 return slug, None, owner, 0, f"clone error: {exc}"
 
             if stop.is_set():
@@ -850,11 +884,11 @@ class ScanJobService:
                         analyzed = reviewer.review(analyzed, file_contents)
                         analyzed = analyzer.refresh_scores(analyzed)
                         log(f"  [LLM] Review stage complete -> {len(analyzed)} finding(s)", "dim")
-                    except Exception as exc:
-                        log(f"  [LLM] Review skipped: {exc}", "dim")
+                    except EXPECTED_LLM_ERRORS as exc:
+                        log(f"  [LLM_REVIEW] skipped: {exc}", "dim")
 
                 return slug, analyzed, owner, pre_llm_count, None
-            except Exception as exc:
+            except (OSError, ValueError, TypeError, KeyError, JSONDecodeError) as exc:
                 return slug, None, owner, 0, f"scan error: {exc}"
             finally:
                 cleanup_clone(clone_dir)
@@ -1091,8 +1125,8 @@ class ScanJobService:
                 with session.state_lock:
                     session.report_paths = dict(report_paths)
                 log(f"  OK Report: {Path(html_path).name}", "ok")
-            except Exception as exc:
-                log(f"  Report error: {exc}", "err")
+            except EXPECTED_REPORT_ERRORS as exc:
+                log(f"  [REPORT_GEN] error: {exc}", "err")
 
         with session.state_lock:
             session.scan_duration_s = int(time.time() - t_start)
