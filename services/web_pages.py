@@ -135,7 +135,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
 .timeline-row.total-row,.timeline .timeline-row:last-child{margin-top:8px;padding-top:12px;border-top:2px solid #cfae8a;border-radius:0 0 10px 10px}
 .timeline-name{text-transform:capitalize}
-.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:calc(100vh - 290px);max-height:430px;min-height:250px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.terminal{background:#18120d;color:#f5debe;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:calc(100vh - 220px);max-height:none;min-height:320px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
 .timeline-card{padding:8px 10px}

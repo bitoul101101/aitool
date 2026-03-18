@@ -520,14 +520,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 .hdr-body{
   display:grid;
   grid-template-columns:minmax(0,2fr) minmax(280px,1fr);
-  gap:8px;
-  padding:0 10px 8px;
+  gap:6px;
+  padding:0 8px 6px;
 }
 
 .hdr-meta{
-  width:100%;min-width:0;padding:6px 10px;
+  width:100%;min-width:0;padding:5px 8px;
   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:6px 10px;
+  gap:4px 8px;
   align-items:start;
   border:1px solid rgba(255,255,255,.1);
   border-radius:10px;
@@ -537,8 +537,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   min-width:0;
   display:grid;
   grid-template-columns:auto 1fr;
-  column-gap:10px;row-gap:1px;align-content:start;
-  padding:4px 6px;
+  column-gap:8px;row-gap:0;align-content:start;
+  padding:3px 5px;
   border-radius:10px;
   background:rgba(255,255,255,.03);
 }
@@ -565,9 +565,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 
 .hdr-stats{
   width:100%;
-  padding:6px 10px;
+  padding:5px 8px;
   display:grid;grid-template-columns:1fr;
-  gap:6px;
+  gap:4px;
   align-content:start;
   border:1px solid rgba(255,255,255,.1);
   border-radius:10px;
@@ -583,9 +583,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 .hdr-meta-val.s-blue { color:#90caf9; }
 @media (max-width:980px){
   .hdr-body{grid-template-columns:1fr;}
+  .inventory-layout{grid-template-columns:1fr;}
 }
 @media (max-width:720px){
   .hdr-meta{grid-template-columns:1fr;}
+  .inventory-grid{grid-template-columns:1fr;}
 }
 
 /* ── KPI bar ── */
@@ -698,12 +700,15 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
 .detail-panel li{margin-bottom:3px;}
 .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
-.inventory-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:14px}
-.inventory-card{padding:12px 14px;border:1px solid var(--bdr);border-radius:12px;background:var(--card)}
+.inventory-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.9fr) minmax(0,1.2fr);gap:12px;align-items:start}
+.inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.inventory-card{padding:10px 12px;border:1px solid var(--bdr);border-radius:12px;background:var(--card)}
 .inventory-card strong{display:block;font-size:22px;line-height:1.1}
 .inventory-list{display:flex;gap:6px;flex-wrap:wrap}
 .inventory-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid var(--bdr);color:#5f3f1c;font-size:11px;font-weight:700}
-.inventory-repo{padding:10px 12px;border:1px solid var(--bdr);border-radius:12px;background:var(--card);margin-bottom:10px}
+.inventory-stack{display:grid;gap:12px}
+.inventory-repos{display:grid;gap:8px;max-height:340px;overflow:auto}
+.inventory-repo{padding:9px 11px;border:1px solid var(--bdr);border-radius:12px;background:var(--card);margin-bottom:0}
 .inventory-repo-meta{font-size:12px;color:var(--dim);margin-top:4px}
 .detail-panel pre{
   display:inline-block;min-width:200px;max-width:100%;
@@ -1575,23 +1580,29 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
         )
         return f"""<section id="inventory">
 <h2>🧭 AI Inventory</h2>
-<div class="inventory-grid">
-  <div class="inventory-card"><div class="muted">Repos Using AI</div><strong>{inventory.get("repos_using_ai_count", 0)} / {inventory.get("repos_total", 0)}</strong></div>
-  <div class="inventory-card"><div class="muted">Providers</div><strong>{inventory.get("provider_count", 0)}</strong></div>
-  <div class="inventory-card"><div class="muted">Models</div><strong>{inventory.get("model_count", 0)}</strong></div>
-  <div class="inventory-card"><div class="muted">Embeddings / Vector DB</div><strong>{inventory.get("embeddings_vector_db_repos", 0)}</strong></div>
-  <div class="inventory-card"><div class="muted">Prompt Handling</div><strong>{inventory.get("prompt_handling_repos", 0)}</strong></div>
-  <div class="inventory-card"><div class="muted">Model Serving / Agent Use</div><strong>{inventory.get("model_serving_repos", 0)} / {inventory.get("agent_tool_use_repos", 0)}</strong></div>
-</div>
-<div class="card" style="margin-bottom:14px">
-  <h3>Providers</h3>
-  <div class="inventory-list">{provider_chips}</div>
-  <h3 style="margin-top:14px">Models</h3>
-  <div class="inventory-list">{model_chips}</div>
-</div>
-<div class="card">
-  <h3>Repository Profiles</h3>
-  {repo_cards or "<p class='muted'>No repository profiles available.</p>"}
+<div class="inventory-layout">
+  <div class="inventory-grid">
+    <div class="inventory-card"><div class="muted">Repos Using AI</div><strong>{inventory.get("repos_using_ai_count", 0)} / {inventory.get("repos_total", 0)}</strong></div>
+    <div class="inventory-card"><div class="muted">Providers</div><strong>{inventory.get("provider_count", 0)}</strong></div>
+    <div class="inventory-card"><div class="muted">Models</div><strong>{inventory.get("model_count", 0)}</strong></div>
+    <div class="inventory-card"><div class="muted">Embeddings / Vector DB</div><strong>{inventory.get("embeddings_vector_db_repos", 0)}</strong></div>
+    <div class="inventory-card"><div class="muted">Prompt Handling</div><strong>{inventory.get("prompt_handling_repos", 0)}</strong></div>
+    <div class="inventory-card"><div class="muted">Model Serving / Agent Use</div><strong>{inventory.get("model_serving_repos", 0)} / {inventory.get("agent_tool_use_repos", 0)}</strong></div>
+  </div>
+  <div class="card inventory-stack" style="margin-bottom:0">
+    <div>
+      <h3>Providers</h3>
+      <div class="inventory-list">{provider_chips}</div>
+    </div>
+    <div>
+      <h3>Models</h3>
+      <div class="inventory-list">{model_chips}</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <h3>Repository Profiles</h3>
+    <div class="inventory-repos">{repo_cards or "<p class='muted'>No repository profiles available.</p>"}</div>
+  </div>
 </div>
 </section>"""
 
