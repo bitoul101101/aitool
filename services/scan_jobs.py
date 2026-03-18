@@ -444,6 +444,22 @@ class ScanJobService:
                 )
             conn.commit()
 
+    def _load_db_history_records(self) -> list[dict]:
+        self._ensure_db()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT record_json FROM scan_jobs ORDER BY updated_at ASC, scan_id ASC"
+            ).fetchall()
+        records: list[dict] = []
+        for row in rows:
+            try:
+                record = json.loads(row["record_json"])
+            except Exception:
+                continue
+            if isinstance(record, dict) and record.get("scan_id"):
+                records.append(record)
+        return records
+
     def _read_legacy_history(self) -> list:
         try:
             path = Path(self.paths.history_file)
@@ -453,11 +469,49 @@ class ScanJobService:
         except Exception:
             return []
 
-    def _write_legacy_history(self, record: dict) -> None:
-        history = [r for r in self._read_legacy_history() if r.get("scan_id") != record["scan_id"]]
-        history.append(record)
-        history = history[-500:]
+    def _db_history_count(self) -> int:
+        self._ensure_db()
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM scan_jobs").fetchone()
+        return int(row["count"] if row is not None else 0)
+
+    def _migrate_legacy_history_if_needed(self) -> None:
+        if not self.paths.history_file:
+            return
+        if self._db_history_count() > 0:
+            return
+        legacy_records = self._read_legacy_history()
+        if not legacy_records:
+            return
+        with self._connect() as conn:
+            conn.executemany(
+                """
+                INSERT INTO scan_jobs(scan_id, state, updated_at, record_json)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(scan_id) DO UPDATE SET
+                    state=excluded.state,
+                    updated_at=excluded.updated_at,
+                    record_json=excluded.record_json
+                """,
+                [
+                    (
+                        str(record.get("scan_id", "")),
+                        str(record.get("state", "unknown")),
+                        time.time(),
+                        json.dumps(record, ensure_ascii=False),
+                    )
+                    for record in legacy_records
+                    if isinstance(record, dict) and record.get("scan_id")
+                ],
+            )
+            conn.commit()
+
+    def _sync_legacy_history_export(self) -> None:
+        if not self.paths.history_file:
+            return
+        history = self._load_db_history_records()[-500:]
         tmp_path = self.paths.history_file + ".tmp"
+        Path(self.paths.history_file).parent.mkdir(parents=True, exist_ok=True)
         with open(tmp_path, "w", encoding="utf-8") as fh:
             json.dump(history, fh, indent=2)
         os.replace(tmp_path, self.paths.history_file)
@@ -475,25 +529,12 @@ class ScanJobService:
         )
 
     def load_history(self) -> list:
-        records_by_scan_id: dict[str, dict] = {
-            str(record.get("scan_id")): record
-            for record in self._read_legacy_history()
-            if record.get("scan_id")
-        }
+        self._migrate_legacy_history_if_needed()
         try:
-            self._ensure_db()
-            with self._connect() as conn:
-                rows = conn.execute(
-                    "SELECT record_json FROM scan_jobs ORDER BY updated_at ASC, scan_id ASC"
-                ).fetchall()
-            for row in rows:
-                record = json.loads(row["record_json"])
-                scan_id = str(record.get("scan_id") or "")
-                if scan_id:
-                    records_by_scan_id[scan_id] = record
+            records = self._load_db_history_records()
         except Exception:
-            pass
-        return sorted(records_by_scan_id.values(), key=self._history_sort_key)
+            records = []
+        return sorted(records, key=self._history_sort_key)
 
     def get_log_text(self, scan_id: str) -> str:
         try:
@@ -520,6 +561,7 @@ class ScanJobService:
     def delete_history(self, scan_ids: list[str]) -> None:
         if not scan_ids:
             return
+        self._migrate_legacy_history_if_needed()
         try:
             with self._connect() as conn:
                 conn.executemany(
@@ -533,12 +575,10 @@ class ScanJobService:
                 conn.commit()
         except Exception:
             pass
-        history = [r for r in self._read_legacy_history() if r.get("scan_id") not in set(scan_ids)]
-        tmp_path = self.paths.history_file + ".tmp"
-        Path(self.paths.history_file).parent.mkdir(parents=True, exist_ok=True)
-        with open(tmp_path, "w", encoding="utf-8") as fh:
-            json.dump(history, fh, indent=2)
-        os.replace(tmp_path, self.paths.history_file)
+        try:
+            self._sync_legacy_history_export()
+        except Exception:
+            pass
 
     def cleanup_stale_temp_clones(self) -> None:
         from scanner.bitbucket import cleanup_clone
@@ -557,6 +597,7 @@ class ScanJobService:
 
     def save_history_record(self, session: ScanSession, findings: list) -> None:
         try:
+            self._migrate_legacy_history_if_needed()
             Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
             Path(self.paths.log_dir).mkdir(parents=True, exist_ok=True)
             log_path = Path(self.paths.log_dir) / f"{session.scan_id}.txt"
@@ -574,7 +615,7 @@ class ScanJobService:
                 record = self._build_record(session, findings, log_file=str(log_path) if log_path else "")
             self._upsert_job_record(record)
             self._replace_scan_logs(session.scan_id, log_lines if 'log_lines' in locals() else [])
-            self._write_legacy_history(record)
+            self._sync_legacy_history_export()
         except Exception as exc:
             print(f"[WARN] Could not save history: {exc}")
 

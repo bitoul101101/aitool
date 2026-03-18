@@ -1,3 +1,6 @@
+# Reproducible install:
+#   python -m pip install -r requirements.txt -c constraints.txt
+
 # Core (required)
 requests>=2.28.0
 
