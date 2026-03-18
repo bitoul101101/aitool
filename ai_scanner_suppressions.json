@@ -56,8 +56,8 @@
       "file": "system-config-tool.py",
       "capability": "SQL Generation Risk",
       "repo": "cogi-base-system",
-      "status": "accepted_risk",
-      "note": "fggfg",
+      "status": "reviewed",
+      "note": "hhnhn",
       "marked_by": "Unknown",
       "marked_at": "2026-03-18"
     },
@@ -66,8 +66,8 @@
       "file": "system-config-tool.py",
       "capability": "SQL Generation Risk",
       "repo": "cogi-base-system",
-      "status": "reviewed",
-      "note": "fgfgsd",
+      "status": "accepted_risk",
+      "note": "gggg",
       "marked_by": "Unknown",
       "marked_at": "2026-03-18"
     }

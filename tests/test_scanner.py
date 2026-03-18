@@ -1085,6 +1085,37 @@ def test_scan_page_can_force_new_scan_selection_after_completion():
     assert 'value="repo1" checked' in html
 
 
+def test_phase_timeline_hides_total_until_scan_finishes():
+    import app_server as srv
+
+    running_html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}],
+        selected_repos=["repo1"],
+        status={"state": "running", "finding_details": [], "suppressed_details": []},
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["m1"],
+        log_text="line 1",
+        phase_timeline=[("init", "00:02"), ("total", "00:20")],
+    ).decode("utf-8")
+
+    done_html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}],
+        selected_repos=["repo1"],
+        status={"state": "done", "finding_details": [], "suppressed_details": []},
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["m1"],
+        log_text="line 1",
+        phase_timeline=[("init", "00:02"), ("total", "00:20")],
+    ).decode("utf-8")
+
+    assert 'class="timeline-name">total<' not in running_html.lower()
+    assert 'class="timeline-name">total<' in done_html.lower()
+
+
 def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():
     import app_server as srv
 

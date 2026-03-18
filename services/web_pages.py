@@ -465,6 +465,7 @@ def render_scan_page(
         f'<strong>{_esc(item.get("duration","—"))}</strong>'
         f"</div>"
         for item in normalized_timeline
+        if scan_complete or str(item.get("name", "")).lower() != "total"
     ) or '<div class="muted">Timeline will appear after the scan starts.</div>'
     stop_button = (
         '<button type="button" id="stop-scan-btn" class="warn" onclick="document.getElementById(\'stop-form\').submit()">Stop Scan</button>'
@@ -785,9 +786,13 @@ filterRepos();
         + `<td>${{triageActions(item, true)}}</td>`
         + `</tr>`;
     }}).join('');
-  }}
-  function timelineRows(items){{
+  function timelineRows(items, scanState){{
     if(!items || !items.length) return '<div class="muted">Timeline will appear after the scan starts.</div>';
+    const finished=['done','stopped','error'].includes(String(scanState||'').toLowerCase());
+    return items
+      .filter(item => finished || String(item.name || '').toLowerCase() !== 'total')
+      .map(item=>`<div class="timeline-row${{String(item.name||'').toLowerCase()==='total' ? ' total-row' : ''}}"><span class="state-icon ${{item.state||'pending'}}"></span><span class="timeline-name">${{item.name||''}}</span><strong>${{item.duration||'???'}}</strong></div>`).join('');
+  }}
     return items.map(item=>`<div class="timeline-row"><span class="state-icon ${{item.state||'pending'}}"></span><span class="timeline-name">${{item.name||''}}</span><strong>${{item.duration||'—'}}</strong></div>`).join('');
   }}
   function reportActions(data){{
@@ -835,7 +840,7 @@ filterRepos();
           if(findingsBody) findingsBody.innerHTML=renderFindingRows(data.finding_details||[]);
           if(mitigateBody) mitigateBody.innerHTML=renderMitigateRows(data.finding_details||[]);
           if(suppressedBody) suppressedBody.innerHTML=renderSuppressedRows([...(data.finding_details||[]).filter(item => item.triage_status === 'accepted_risk'), ...(data.suppressed_details||[])]);
-      if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[]);
+      if(timelineEl) timelineEl.innerHTML=timelineRows(data.phase_timeline||[], state);
       renderBaseline(data);
       reportActions(data);
       if(state==='running') return;
