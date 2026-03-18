@@ -232,8 +232,7 @@
     if (llmOutcomesEl) {
       llmOutcomesEl.textContent =
         String(llm.dismissed || 0) + " / " +
-        String(llm.downgraded || 0) + " / " +
-        String(llm.reinstated || 0);
+        String(llm.downgraded || 0);
     }
   }
 

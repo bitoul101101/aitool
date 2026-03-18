@@ -618,7 +618,7 @@ def render_scan_page(
           <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">Findings Reviewed / Skipped</span><strong id="perf-reviewed-skipped">{_esc(llm_stats.get("reviewed", 0))} / {_esc(llm_stats.get("skipped", 0))}</strong></div>
-          <div class="hardware-stat"><span class="baseline-label">Dismissed / Downgraded / Reinstated</span><strong id="perf-llm-outcomes">{_esc(llm_stats.get("dismissed", 0))} / {_esc(llm_stats.get("downgraded", 0))} / {_esc(llm_stats.get("reinstated", 0))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">Dismissed / Downgraded</span><strong id="perf-llm-outcomes">{_esc(llm_stats.get("dismissed", 0))} / {_esc(llm_stats.get("downgraded", 0))}</strong></div>
         </div>
       </div>
     </section>"""

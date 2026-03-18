@@ -20,6 +20,17 @@ import webbrowser
 from pathlib import Path
 
 
+def _allowed_origin(origin: str, port: int) -> str | None:
+    value = (origin or "").strip()
+    if not value:
+        return None
+    allowed = {
+        f"http://127.0.0.1:{port}",
+        f"http://localhost:{port}",
+    }
+    return value if value in allowed else None
+
+
 # ── Server ────────────────────────────────────────────────────────────────────
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -47,6 +58,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         """CORS pre-flight — browser may send this before POST /ollama."""
+        if not self._origin_ok():
+            self.send_response(403)
+            self.end_headers()
+            return
         self.send_response(204)
         self._cors()
         self.end_headers()
@@ -61,6 +76,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(self.html_bytes)
 
     def _proxy_ollama(self):
+        if not self._origin_ok():
+            err = json.dumps({"error": "origin not allowed"}).encode()
+            self.send_response(403)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(err)
+            return
         length  = int(self.headers.get("Content-Length", 0))
         body    = self.rfile.read(length)
         target  = self.ollama_base.rstrip("/") + "/api/generate"
@@ -98,8 +120,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(404)
         self.end_headers()
 
+    def _origin_ok(self) -> bool:
+        origin = self.headers.get("Origin", "")
+        port = int(self.server.server_address[1])
+        return _allowed_origin(origin, port) is not None
+
     def _cors(self):
-        self.send_header("Access-Control-Allow-Origin",  "*")
+        origin = _allowed_origin(self.headers.get("Origin", ""), int(self.server.server_address[1]))
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 

@@ -1227,7 +1227,6 @@ def test_llm_stats_are_derived_from_log_entries():
     assert stats["skipped"] == 3
     assert stats["dismissed"] == 1
     assert stats["downgraded"] == 1
-    assert stats["reinstated"] == 1
     assert stats["failed_batches"] == "0"
 
 
@@ -2476,6 +2475,16 @@ def test_html_report_header_excludes_triage_summary_stats():
     assert "Reviewed" not in html
     assert "Accepted Risk" not in html
     assert "Suppressed" not in html
+
+
+def test_report_server_allows_only_its_local_origin():
+    from reports.report_server import _allowed_origin
+
+    assert _allowed_origin("http://127.0.0.1:8123", 8123) == "http://127.0.0.1:8123"
+    assert _allowed_origin("http://localhost:8123", 8123) == "http://localhost:8123"
+    assert _allowed_origin("http://127.0.0.1:5757", 8123) is None
+    assert _allowed_origin("https://evil.example", 8123) is None
+    assert _allowed_origin("", 8123) is None
 
 
 def test_cleanup_stale_temp_clones_removes_leftovers():
