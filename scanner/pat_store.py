@@ -24,7 +24,6 @@ Public API
     backend_name() -> str          — human-readable backend description
 """
 
-import sys
 import os
 
 _SERVICE  = "ai_scanner_cognyte"
@@ -43,6 +42,24 @@ def _get_keyring():
         return None
 
 
+def _allow_insecure_fallback() -> bool:
+    return os.environ.get("AI_SCANNER_ALLOW_INSECURE_PAT_FALLBACK", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _backend_type_name() -> str:
+    kr = _get_keyring()
+    if kr is None:
+        return "missing"
+    try:
+        return type(kr.get_keyring()).__name__
+    except Exception:
+        return "unknown"
+
+
+def requires_persistent_backend() -> bool:
+    return not _allow_insecure_fallback()
+
+
 def save_pat(token: str) -> bool:
     """
     Persist `token` in the OS credential store.
@@ -53,11 +70,21 @@ def save_pat(token: str) -> bool:
 
     kr = _get_keyring()
     if kr is None:
+        if requires_persistent_backend():
+            raise RuntimeError("Persistent credential storage is unavailable: keyring is not installed.")
         return False
     try:
         kr.set_password(_SERVICE, _USERNAME, token)
+        if requires_persistent_backend() and not is_available():
+            raise RuntimeError(
+                f"Persistent credential storage is required, but the active backend is '{backend_name()}'."
+            )
         return True
     except Exception:
+        if requires_persistent_backend():
+            raise RuntimeError(
+                f"Persistent credential storage is required, but saving to '{backend_name()}' failed."
+            )
         return False
 
 

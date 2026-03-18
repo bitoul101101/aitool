@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Callable
 
 from scanner.bitbucket import BitbucketClient
-from scanner.pat_store import delete_pat, load_pat, save_pat
+from scanner.pat_store import backend_name, delete_pat, load_pat, save_pat
 from scanner.suppressions import (
     TRIAGE_ACCEPTED_RISK,
     TRIAGE_FALSE_POSITIVE,
@@ -35,7 +35,14 @@ def connect_operator(
     projects = client.list_projects()
     visible_projects = operator_state.connect(client, owner, projects)
     if remember:
-        save_pat(token)
+        try:
+            persisted = save_pat(token)
+        except RuntimeError as exc:
+            raise ValueError(str(exc)) from exc
+        if not persisted:
+            raise ValueError(
+                f"Could not persist the PAT with the active credential backend ({backend_name()})."
+            )
     else:
         delete_pat()
     audit_event(

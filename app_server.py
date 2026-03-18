@@ -88,6 +88,7 @@ from services.web_pages import (
     render_settings_page,
 )
 from services.runtime_support import (
+    DEFAULT_LLM_CONFIG,
     ensure_ollama_running,
     load_llm_config as load_llm_config_file,
     ollama_list_models,
@@ -102,9 +103,6 @@ _BASE_DIR     = Path(__file__).parent          # always relative to script
 OUTPUT_DIR    = str(_BASE_DIR / "output")      # mutable at runtime via settings
 POLICY_FILE   = str(_BASE_DIR / "policy.json")
 OWNER_MAP_FILE = str(_BASE_DIR / "owner_map.json")
-SUPPRESSIONS_FILE = str(_BASE_DIR / "ai_scanner_suppressions.json")
-LLM_CFG_FILE  = str(_BASE_DIR / "ai_scanner_llm_config.json")
-ACCESS_FILE   = str(_BASE_DIR / "access_control.json")
 APP_PORT      = 5757   # fixed port for the app (report servers use random ports)
 APP_VERSION   = "19.1"
 ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
@@ -120,6 +118,45 @@ def _default_temp_dir(os_name: Optional[str] = None,
 
 
 TEMP_DIR      = str(_default_temp_dir())
+
+
+def _default_state_dir() -> Path:
+    override = os.environ.get("AI_SCANNER_STATE_DIR", "").strip()
+    if override:
+        return Path(override).expanduser()
+    if os.name == "nt":
+        base = (
+            os.environ.get("LOCALAPPDATA")
+            or os.environ.get("APPDATA")
+            or str(Path.home() / "AppData" / "Local")
+        )
+        return Path(base) / "AI Scanner"
+    return Path.home() / ".config" / "ai_scanner"
+
+
+STATE_DIR = _default_state_dir()
+SUPPRESSIONS_FILE = str(STATE_DIR / "ai_scanner_suppressions.json")
+LLM_CFG_FILE  = str(STATE_DIR / "ai_scanner_llm_config.json")
+ACCESS_FILE   = str(STATE_DIR / "access_control.json")
+_LEGACY_SUPPRESSIONS_FILE = _BASE_DIR / "ai_scanner_suppressions.json"
+_LEGACY_LLM_CFG_FILE = _BASE_DIR / "ai_scanner_llm_config.json"
+_LEGACY_ACCESS_FILE = _BASE_DIR / "access_control.json"
+
+
+def _prepare_runtime_file(target: Path, *, legacy: Path | None = None, default_json: dict | None = None) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        return
+    if legacy and legacy.exists():
+        target.write_bytes(legacy.read_bytes())
+        return
+    if default_json is not None:
+        target.write_text(json.dumps(default_json, indent=2), encoding="utf-8")
+
+
+_prepare_runtime_file(Path(LLM_CFG_FILE), legacy=_LEGACY_LLM_CFG_FILE, default_json=DEFAULT_LLM_CONFIG)
+_prepare_runtime_file(Path(SUPPRESSIONS_FILE), legacy=_LEGACY_SUPPRESSIONS_FILE, default_json={"version": 2, "triage": []})
+_prepare_runtime_file(Path(ACCESS_FILE), legacy=_LEGACY_ACCESS_FILE)
 
 
 # ── Utility helpers (lifted from main.py) ─────────────────────────────────────
