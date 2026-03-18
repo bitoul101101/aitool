@@ -64,6 +64,7 @@ from services.access_control import (
     ROLE_VIEWER,
     filter_projects,
 )
+from services.active_scan_state import ActiveScanStore
 from services.audit_log import AuditLogService
 from services.api_actions import (
     connect_operator,
@@ -73,7 +74,7 @@ from services.api_actions import (
     stop_scan,
     triage_finding,
 )
-from services.browser_sessions import BrowserSessionStore, parse_cookie_header
+from services.browser_sessions import BrowserSessionStore
 from services.report_access import (
     find_history_record_by_report_name,
     find_history_record_by_scan_id,
@@ -284,10 +285,10 @@ def _ollama_ensure_running(base_url: str) -> dict:
 
 # ── Global app state ──────────────────────────────────────────────────────────
 
-_session: ScanSession = ScanSession()
 _operator_state = SingleUserState(load_single_user_config(ACCESS_FILE))
-_state_lock = threading.RLock()
-_session.state_lock = _state_lock
+_active_scan_store = ActiveScanStore()
+_state_lock = _active_scan_store.lock
+_session: ScanSession = _active_scan_store.current()
 _app_exit_event = threading.Event()
 _server_instance: Optional[http.server.ThreadingHTTPServer] = None
 _browser_session_store = BrowserSessionStore()
@@ -295,43 +296,23 @@ _browser_sessions = _browser_session_store.sessions
 
 
 def _current_session() -> ScanSession:
-    with _state_lock:
-        return _session
+    global _session
+    if _session is not _active_scan_store.current():
+        _active_scan_store.replace(_session)
+    return _active_scan_store.current()
 
 
 def _replace_current_session(session: ScanSession) -> ScanSession:
     global _session
-    session.state_lock = _state_lock
-    with _state_lock:
-        _session = session
-        return _session
+    _session = _active_scan_store.replace(session)
+    return _session
 
 
 def _current_session_snapshot(*, include_status: bool = False, log_limit: int | None = None) -> dict[str, Any]:
-    with _state_lock:
-        session = _session
-        log_lines = list(session.log_lines[-log_limit:]) if log_limit else list(session.log_lines)
-        data = {
-            "session": session,
-            "scan_id": session.scan_id,
-            "project_key": session.project_key,
-            "repo_slugs": list(session.repo_slugs),
-            "state": session.state,
-            "started_at_utc": session.started_at_utc,
-            "completed_at_utc": session.completed_at_utc,
-            "scan_duration_s": session.scan_duration_s,
-            "llm_model": session.llm_model,
-            "llm_model_info": dict(session.llm_model_info or {}),
-            "log_lines": log_lines,
-            "report_paths": dict(session.report_paths or {}),
-            "delta": dict(session.delta or {}),
-            "inventory": dict(session.inventory or {}),
-            "findings": list(session.findings),
-            "suppressed_findings": list(session.suppressed_findings),
-        }
-        if include_status:
-            data["status"] = session.to_status()
-        return data
+    global _session
+    if _session is not _active_scan_store.current():
+        _active_scan_store.replace(_session)
+    return _active_scan_store.snapshot(include_status=include_status, log_limit=log_limit)
 
 
 # ── Scan job service ─────────────────────────────────────────────────────────

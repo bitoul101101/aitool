@@ -23,6 +23,7 @@ def test_login_page_is_server_rendered_and_does_not_embed_saved_pat():
     assert 'action="/login"' in html
     assert 'name="csrf_token" value="csrf-demo"' in html
     assert 'href="/assets/main.css"' in html
+    assert 'src="/assets/layout.js"' in html
     assert "<style>" not in html
 
 

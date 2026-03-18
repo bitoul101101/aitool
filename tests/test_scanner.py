@@ -1681,6 +1681,29 @@ def test_asset_route_serves_main_css():
     assert b".header-nav" in handler.payload[2]
 
 
+def test_asset_route_serves_layout_js():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/assets/layout.js"
+
+        def __init__(self):
+            self.payload = None
+
+        def _send(self, status, content_type, body):
+            self.payload = (status, content_type, body)
+
+        def _404(self):
+            self.payload = ("404", None, None)
+
+    handler = DummyHandler()
+    srv._Handler.do_GET(handler)
+
+    assert handler.payload[0] == 200
+    assert handler.payload[1] == "application/javascript; charset=utf-8"
+    assert b"history.replaceState" in handler.payload[2]
+
+
 def test_scan_workspace_results_page_handles_missing_report():
     import app_server as srv
 
