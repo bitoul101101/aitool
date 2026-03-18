@@ -820,11 +820,13 @@ def test_login_page_is_server_rendered_and_does_not_embed_saved_pat():
         html = srv.render_login_page(
             bitbucket_url=srv.BITBUCKET_URL,
             has_saved_pat=True,
+            csrf_token="csrf-demo",
         ).decode("utf-8")
 
     assert "secret-token-123" not in html
     assert "Saved token available: Yes" in html
     assert 'action="/login"' in html
+    assert 'name="csrf_token" value="csrf-demo"' in html
 
 
 def test_login_redirects_to_new_scan_view():
@@ -833,6 +835,7 @@ def test_login_redirects_to_new_scan_view():
     class DummyHandler:
         def __init__(self):
             self.location = None
+            self._response_cookies = []
 
         def _redirect(self, location: str):
             self.location = location
@@ -845,6 +848,67 @@ def test_login_redirects_to_new_scan_view():
         srv._Handler._page_connect(handler, {"token": "demo-token"})
 
     assert handler.location == "/scan?new=1&notice=Connected+to+Bitbucket"
+    assert any(cookie.startswith("ai_scanner_session=") for cookie in handler._response_cookies)
+
+
+def test_do_post_rejects_missing_csrf_for_mutating_routes():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.path = "/scan/stop"
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
+            self.error = None
+
+        def _read_body(self):
+            return {}
+
+        def _err(self, status: int, msg: str):
+            self.error = (status, msg)
+
+        def _404(self):
+            raise AssertionError("route should not fall through")
+
+    original_session = srv._browser_session_id
+    original_csrf = srv._browser_csrf_token
+    try:
+        srv._browser_session_id = "valid-session"
+        srv._browser_csrf_token = "expected-csrf"
+        handler = DummyHandler()
+        srv._Handler.do_POST(handler)
+        assert handler.error == (403, "CSRF validation failed")
+    finally:
+        srv._browser_session_id = original_session
+        srv._browser_csrf_token = original_csrf
+
+
+def test_do_get_protected_page_requires_browser_session():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.path = "/scan"
+            self.headers = {}
+            self.redirect = None
+
+        def _require_browser_session(self):
+            return srv._Handler._require_browser_session(self)
+
+        def _redirect(self, location: str):
+            self.redirect = location
+
+        def _render_login_page(self, *, notice: str = "", error: str = ""):
+            raise AssertionError("scan page should redirect instead of rendering login")
+
+    original_session = srv._browser_session_id
+    try:
+        srv._browser_session_id = "valid-session"
+        handler = DummyHandler()
+        with patch.object(srv, "_is_connected", return_value=True):
+            srv._Handler.do_GET(handler)
+        assert handler.redirect == "/login"
+    finally:
+        srv._browser_session_id = original_session
 
 
 def test_scan_page_selection_view_stays_pre_scan():

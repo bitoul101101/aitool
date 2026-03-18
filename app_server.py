@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import queue
+import secrets
 import threading
 import tempfile
 import time
@@ -251,6 +252,8 @@ _state_lock = threading.RLock()
 _session.state_lock = _state_lock
 _app_exit_event = threading.Event()
 _server_instance: Optional[http.server.ThreadingHTTPServer] = None
+_browser_session_id = ""
+_browser_csrf_token = ""
 
 
 # ── Scan job service ─────────────────────────────────────────────────────────
@@ -329,6 +332,66 @@ def _require_project_access(handler, project_key: str):
         handler._err(403, f"project access denied: {project_key}")
         return True
     return False
+
+
+def _parse_cookie_header(cookie_header: str) -> dict[str, str]:
+    cookies: dict[str, str] = {}
+    for chunk in (cookie_header or "").split(";"):
+        if "=" not in chunk:
+            continue
+        name, value = chunk.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if name:
+            cookies[name] = value
+    return cookies
+
+
+def _issue_browser_session() -> tuple[str, str]:
+    global _browser_session_id, _browser_csrf_token
+    with _state_lock:
+        _browser_session_id = secrets.token_urlsafe(24)
+        _browser_csrf_token = secrets.token_urlsafe(24)
+        return _browser_session_id, _browser_csrf_token
+
+
+def _current_csrf_token() -> str:
+    with _state_lock:
+        return _browser_csrf_token
+
+
+def _browser_cookie_value(handler) -> str:
+    headers = getattr(handler, "headers", {}) or {}
+    if hasattr(headers, "get"):
+        raw = headers.get("Cookie", "") or ""
+    else:
+        raw = ""
+    return _parse_cookie_header(raw).get("ai_scanner_session", "")
+
+
+def _has_valid_browser_session(handler) -> bool:
+    with _state_lock:
+        expected = _browser_session_id
+    if not expected:
+        return False
+    return _browser_cookie_value(handler) == expected
+
+
+def _csrf_matches(handler, body: dict) -> bool:
+    if not _has_valid_browser_session(handler):
+        return False
+    token = ""
+    if isinstance(body, dict):
+        token = str(body.get("csrf_token", "") or "")
+    with _state_lock:
+        expected = _browser_csrf_token
+    return bool(expected) and token == expected
+
+
+def _queue_session_cookie(handler, session_id: str) -> None:
+    handler._response_cookies = [
+        f"ai_scanner_session={session_id}; Path=/; HttpOnly; SameSite=Strict"
+    ]
 
 
 def _save_history_record(session, findings):
@@ -772,6 +835,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args): pass   # silence access log
 
+    def _require_browser_session(self):
+        if not _has_valid_browser_session(self):
+            self._redirect("/login")
+            return True
+        return False
+
     # ── Routing ───────────────────────────────────────────────────────────────
 
     def do_GET(self):
@@ -784,26 +853,38 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif p == "/scan":
             if not _is_connected():
                 return self._redirect("/login")
+            if self._require_browser_session():
+                return
             self._render_scan_page()
         elif p.startswith("/results/"):
             if not _is_connected():
                 return self._redirect("/login")
+            if self._require_browser_session():
+                return
             self._render_results_page(p[9:])
         elif p == "/history":
             if not _is_connected():
                 return self._redirect("/login")
+            if self._require_browser_session():
+                return
             self._render_history_page()
         elif p == "/inventory":
             if not _is_connected():
                 return self._redirect("/login")
+            if self._require_browser_session():
+                return
             self._render_inventory_page()
         elif p == "/settings":
             if not _is_connected():
                 return self._redirect("/login")
+            if self._require_browser_session():
+                return
             self._render_settings_page()
         elif p == "/help":
             if not _is_connected():
                 return self._redirect("/login")
+            if self._require_browser_session():
+                return
             self._render_help_page()
         elif p == "/assets/scan_page.js":
             asset_path = ASSETS_DIR / "scan_page.js"
@@ -894,6 +975,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         p = urlparse(self.path).path
         body = self._read_body()
+        exempt_paths = {"/login", "/connect", "/api/connect"}
+        csrf_exempt_paths = exempt_paths | {"/api/ollama", "/ollama"}
+        if p not in exempt_paths:
+            if not _has_valid_browser_session(self):
+                return self._err(401, "Authentication required")
+            if p not in csrf_exempt_paths and not _csrf_matches(self, body):
+                return self._err(403, "CSRF validation failed")
         if p in ("/login", "/connect"):
             return self._page_connect(body)
         elif p == "/app/exit":
@@ -951,6 +1039,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         html = render_login_page(
             bitbucket_url=BITBUCKET_URL,
             has_saved_pat=bool(load_pat()),
+            csrf_token=_current_csrf_token(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
@@ -989,6 +1078,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             phase_timeline=_phase_timeline(session_log_lines, session_state),
             force_selection=fresh_scan,
             show_scan_results=_has_scan_results(),
+            csrf_token=_current_csrf_token(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
@@ -1000,6 +1090,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         html = render_history_page(
             history=list(reversed(_history_records_for_user())),
+            csrf_token=_current_csrf_token(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1027,6 +1118,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             log_url=f"/api/history/log/{record.get('scan_id', scan_id)}",
             started_at_utc=record.get("started_at_utc", ""),
             show_scan_results=_has_scan_results(),
+            csrf_token=_current_csrf_token(),
             notice=notice,
             error=error,
         )
@@ -1040,6 +1132,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         html = render_inventory_page(
             repo_inventory=repo_inventory,
             summary=summary,
+            csrf_token=_current_csrf_token(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1054,6 +1147,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             bitbucket_url=BITBUCKET_URL,
             output_dir=str(Path(OUTPUT_DIR).resolve()),
             llm_cfg=load_llm_config(),
+            csrf_token=_current_csrf_token(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1065,6 +1159,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         qs = parse_qs(urlparse(self.path).query)
         html = render_help_page(
+            csrf_token=_current_csrf_token(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
@@ -1081,6 +1176,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_login_page(error=str(e))
+        session_id, _csrf = _issue_browser_session()
+        _queue_session_cookie(self, session_id)
         self._redirect(_with_query("/scan", new="1", notice="Connected to Bitbucket"))
 
     def _page_app_exit(self):
@@ -1213,12 +1310,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _api_connect(self, body: dict):
         try:
-            self._json(connect_operator(
+            response = connect_operator(
                 body=body,
                 bitbucket_url=BITBUCKET_URL,
                 operator_state=_operator_state,
                 audit_event=_audit_event,
-            ))
+            )
+            session_id, csrf_token = _issue_browser_session()
+            _queue_session_cookie(self, session_id)
+            payload = dict(response)
+            payload["csrf_token"] = csrf_token
+            self._json(payload)
         except ValueError as e:
             self._err(400, str(e))
         except Exception as e:
@@ -1509,20 +1611,31 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(status)
             self.send_header("Content-Type", ct)
             self.send_header("Content-Length", str(len(body)))
+            for cookie in getattr(self, "_response_cookies", []) or []:
+                self.send_header("Set-Cookie", cookie)
             self._cors()
             self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
             return
+        finally:
+            self._response_cookies = []
 
     def _redirect(self, location: str):
         body = b""
-        self.send_response(303)
-        self.send_header("Location", location)
-        self.send_header("Content-Length", "0")
-        self._cors()
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(303)
+            self.send_header("Location", location)
+            self.send_header("Content-Length", "0")
+            for cookie in getattr(self, "_response_cookies", []) or []:
+                self.send_header("Set-Cookie", cookie)
+            self._cors()
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+            return
+        finally:
+            self._response_cookies = []
 
     def _404(self):
         self.send_response(404)

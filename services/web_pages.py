@@ -226,7 +226,11 @@ def _flash(notice: str = "", error: str = "") -> str:
     return f'<div class="toast-wrap">{"".join(items)}</div>' if items else ""
 
 
-def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True) -> bytes:
+def _csrf_field(csrf_token: str = "") -> str:
+    return f'<input type="hidden" name="csrf_token" value="{_esc(csrf_token)}">' if csrf_token else ""
+
+
+def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
     if show_nav:
@@ -240,7 +244,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
             + f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
             + '</div>'
             + '<div class="header-actions">'
-            + '<form class="exit-form" method="post" action="/app/exit"><button type="submit" class="warn">Exit</button></form>'
+            + f'<form class="exit-form" method="post" action="/app/exit">{_csrf_field(csrf_token)}<button type="submit" class="warn">Exit</button></form>'
             + "</div>"
         )
     html = f"""<!DOCTYPE html>
@@ -270,13 +274,14 @@ setTimeout(()=>document.querySelectorAll('.toast').forEach(el=>el.remove()),5000
     return html.encode("utf-8")
 
 
-def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = "", error: str = "") -> bytes:
+def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = "", error: str = "", csrf_token: str = "") -> bytes:
     body = f"""
 {_flash(notice, error)}
 <section class="card login-shell">
   <h2 class="login-title">Login to Bitbucket</h2>
   <p class="muted" style="margin:10px 0 0;text-align:center">Scan Bitbucket repositories to detect AI usage, insecure AI patterns, and policy-relevant findings.</p>
   <form method="post" action="/login" class="login-grid" style="margin-top:18px">
+    {_csrf_field(csrf_token)}
     <div>
       <label>Personal Access Token</label>
       <input type="password" name="token" value="">
@@ -287,7 +292,7 @@ def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = 
     <div class="login-actions"><button type="submit">Login</button></div>
   </form>
 </section>"""
-    return _layout(title="Login", body=body, show_nav=False)
+    return _layout(title="Login", body=body, show_nav=False, csrf_token=csrf_token)
 
 
 def render_scan_page(
@@ -303,6 +308,7 @@ def render_scan_page(
     phase_timeline: list[tuple[str, str]],
     force_selection: bool = False,
     show_scan_results: bool = True,
+    csrf_token: str = "",
     notice: str = "",
     error: str = "",
 ) -> bytes:
@@ -348,6 +354,7 @@ def render_scan_page(
             return ""
         reset_form = (
             f'<form class="triage-form inline-only" method="post" action="/findings/reset">'
+            f'{_csrf_field(csrf_token)}'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<button type="submit" class="ghost">Reset</button>'
             "</form>"
@@ -359,6 +366,7 @@ def render_scan_page(
             return f'<div class="triage-actions">{reset_form}</div>'
         reviewed_form = (
             f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
+            f'{_csrf_field(csrf_token)}'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="reviewed">'
             '<input type="hidden" name="note" value="">'
@@ -367,6 +375,7 @@ def render_scan_page(
         )
         accepted_form = (
             f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
+            f'{_csrf_field(csrf_token)}'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="accepted_risk">'
             '<input type="hidden" name="note" value="">'
@@ -375,6 +384,7 @@ def render_scan_page(
         )
         suppress_form = (
             f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
+            f'{_csrf_field(csrf_token)}'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="false_positive">'
             '<input type="hidden" name="note" value="">'
@@ -601,6 +611,7 @@ def render_scan_page(
   </aside>
   <section class="card repo-panel">
     <form method="post" action="/scan/start" class="stack" id="new-scan-form">
+      {_csrf_field(csrf_token)}
       <input type="hidden" name="project_key" value="{_esc(selected_project)}">
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
@@ -620,7 +631,7 @@ def render_scan_page(
     </form>
   </section>
 </section>
-<form method="post" action="/scan/stop" id="stop-form"></form>"""
+<form method="post" action="/scan/stop" id="stop-form">{_csrf_field(csrf_token)}</form>"""
     running_view = f"""
 <section class="running-shell">
   <section class="card activity-panel">
@@ -646,17 +657,17 @@ def render_scan_page(
     {f'<section class="card" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Reports</h2>{report_actions}</section>' if report_actions else '<section class="card hidden" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Reports</h2><div class="report-actions" id="report-actions"></div></section>'}
   </aside>
 </section>
-<form method="post" action="/scan/stop" id="stop-form"></form>"""
+<form method="post" action="/scan/stop" id="stop-form">{_csrf_field(csrf_token)}</form>"""
     body = f"""
 {_flash(notice, error)}
 <section class="scan-shell">
   {running_view if (not force_selection and (running or state in ("done", "stopped") and log_text)) else selection_view}
 </section>
 <script src="/assets/scan_page.js" defer></script>"""
-    return _layout(title="Scan", body=body, active="new_scan" if force_selection else "scan", show_scan_results=show_scan_results)
+    return _layout(title="Scan", body=body, active="new_scan" if force_selection else "scan", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
-def render_history_page(*, history: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
+def render_history_page(*, history: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     projects = sorted({str(rec.get("project_key", rec.get("project", ""))) for rec in history if rec.get("project_key") or rec.get("project")})
     repos = sorted({", ".join(rec.get("repo_slugs", rec.get("repos", []))) for rec in history if rec.get("repo_slugs") or rec.get("repos")})
     statuses = sorted({str(rec.get("state", "")) for rec in history if rec.get("state")})
@@ -702,6 +713,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
 {_flash(notice, error)}
 <section class="card">
   <form method="post" action="/history/delete" id="history-form">
+    {_csrf_field(csrf_token)}
     <div class="history-toolbar filters-row">
       <input type="search" id="history-search" placeholder="Search any column">
       <select id="filter-project">{_opts(projects, 'All Projects')}</select>
@@ -773,7 +785,7 @@ prevBtn?.addEventListener('click',()=>{{if(currentPage>1){{currentPage-=1;render
 nextBtn?.addEventListener('click',()=>{{const totalPages=Math.max(1, Math.ceil(filteredRows().length / PAGE_SIZE)); if(currentPage<totalPages){{currentPage+=1;renderPage();}}}});
 sortHistory(1,'datetime');
 </script>"""
-    return _layout(title="History", body=body, active="history", show_scan_results=show_scan_results)
+    return _layout(title="History", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
 def render_results_page(
@@ -787,6 +799,7 @@ def render_results_page(
     log_url: str = "",
     started_at_utc: str = "",
     show_scan_results: bool = True,
+    csrf_token: str = "",
     notice: str = "",
     error: str = "",
 ) -> bytes:
@@ -814,10 +827,10 @@ def render_results_page(
   </section>
   <iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Scan Results"></iframe>
 </section>"""
-    return _layout(title="Results", body=body, active="scan", show_scan_results=show_scan_results)
+    return _layout(title="Results", body=body, active="scan", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
-def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
+def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in repo_inventory if item.get("project_key")})
     providers = sorted({label for item in repo_inventory for label in item.get("provider_labels", []) if label})
     models = sorted({model for item in repo_inventory for model in item.get("models", []) if model})
@@ -959,15 +972,16 @@ document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
 }});
 sortInventory(0,'datetime');
 </script>"""
-    return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results)
+    return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
-def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
+def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     body = f"""
 {_flash(notice, error)}
 <section class="card" style="max-width:760px">
   <h2 style="margin:0 0 12px">Settings</h2>
   <form method="post" action="/settings/save" class="stack">
+    {_csrf_field(csrf_token)}
     <div><label>Bitbucket URL</label><input type="text" value="{_esc(bitbucket_url)}" disabled></div>
     <div><label>Output Directory</label><input type="text" name="output_dir" value="{_esc(output_dir)}"></div>
     <div><label>LLM URL</label><input type="text" name="llm_url" value="{_esc(llm_cfg.get('base_url',''))}"></div>
@@ -975,10 +989,10 @@ def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, 
     <div><button type="submit">Save Settings</button></div>
   </form>
 </section>"""
-    return _layout(title="Settings", body=body, active="settings", show_scan_results=show_scan_results)
+    return _layout(title="Settings", body=body, active="settings", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
-def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
+def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     body = f"""
 {_flash(notice, error)}
 <section class="card stack" style="max-width:1080px">
@@ -1090,4 +1104,4 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
     </ul>
   </section>
 </section>"""
-    return _layout(title="Help", body=body, active="help", show_scan_results=show_scan_results)
+    return _layout(title="Help", body=body, active="help", show_scan_results=show_scan_results, csrf_token=csrf_token)
