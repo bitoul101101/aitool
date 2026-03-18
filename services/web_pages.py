@@ -142,11 +142,11 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-card .timeline{gap:6px}
 .timeline-card .timeline-row{padding:6px 8px;font-size:12px}
 .hardware-grid{display:grid;grid-template-columns:1fr;gap:8px}
-.hardware-stat{padding:10px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
-.hardware-stat strong{display:block;font-size:16px;line-height:1.15;overflow-wrap:anywhere}
+.hardware-stat{padding:8px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
+.hardware-stat strong{display:block;font-size:14px;line-height:1.15;overflow-wrap:anywhere}
 .llm-grid{display:grid;grid-template-columns:1fr;gap:8px}
-.llm-stat{padding:8px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
-.llm-stat strong{display:block;font-size:14px;line-height:1.2;overflow-wrap:anywhere}
+.llm-stat{padding:7px 10px;border:1px solid #ead4ba;border-radius:12px;background:#fffdf8;min-width:0}
+.llm-stat strong{display:block;font-size:13px;line-height:1.2;overflow-wrap:anywhere}
 .findings-panel,.mitigate-section,.suppressed-section{margin-top:12px;padding:12px;border:2px solid #cda274;border-radius:14px;background:#fffdf8}
 .finding-table-wrap{max-height:240px;overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .finding-table-wrap table,.mitigate-wrap table,.suppressed-wrap table{font-size:12px}
@@ -222,6 +222,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .workspace-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin-bottom:10px}
 .workspace-header .subnav{margin-bottom:0;justify-self:start}
 .workspace-header h2{margin:0;font-size:16px;text-align:center}
+.workspace-header .scan-actions{justify-self:end}
 .results-frame{width:100%;min-height:calc(100vh - 220px);border:1px solid #d8b995;border-radius:14px;background:#fff}
 @media (max-width:1220px){.selection-grid,.running-shell{grid-template-columns:1fr}.project-panel,.repo-panel,.activity-panel{min-height:auto}.inventory-grid-wide{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}}
@@ -611,7 +612,7 @@ def render_scan_page(
     inventory_html = ""
     hardware_html = f"""
     <section class="card" id="hardware-card">
-      <h2 style="margin:0 0 8px;font-size:16px">Hardware Usage</h2>
+      <h2 style="margin:0 0 8px;font-size:15px">Hardware Stats</h2>
       <div class="baseline-summary" id="hardware-summary">
         <div class="hardware-grid">
           <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong></div>
@@ -623,7 +624,7 @@ def render_scan_page(
     </section>"""
     llm_html = f"""
     <section class="card" id="llm-card">
-      <h2 style="margin:0 0 8px;font-size:16px">LLM Stats</h2>
+      <h2 style="margin:0 0 8px;font-size:15px">LLM Stats</h2>
       <div class="baseline-summary" id="llm-summary">
         <div class="llm-grid">
           <div class="llm-stat"><span class="baseline-label">Model</span><strong id="llm-model">{_esc(llm_stats.get("model", "Unavailable"))}</strong></div>
@@ -683,14 +684,11 @@ def render_scan_page(
     <div class="workspace-header">
       {workspace_tabs}
       <h2>Activity Log</h2>
-      <div></div>
+      <div class="scan-actions">{stop_button if running else ""}{new_scan_button}</div>
     </div>
     <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
   </section>
   <aside class="stack">
-    <section class="card scan-sidebar-head">
-      <div class="scan-actions">{stop_button if running else ""}{new_scan_button}</div>
-    </section>
     <section class="card timeline-card">
       <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
       <div class="timeline" id="phase-timeline">{timeline_html}</div>

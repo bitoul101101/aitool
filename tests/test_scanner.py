@@ -1107,10 +1107,10 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="mitigate-section">' not in html
     assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
-    assert "Hardware Usage" in html
+    assert "Hardware Stats" in html
     assert "LLM Stats" in html
-    assert html.index("Phase Timeline") < html.index("Hardware Usage")
-    assert html.index("Hardware Usage") < html.index("LLM Stats")
+    assert html.index("Phase Timeline") < html.index("Hardware Stats")
+    assert html.index("Hardware Stats") < html.index("LLM Stats")
     assert 'href="/scan/20260317_154037?tab=results"' in html
     assert 'href="/scan/20260317_154037?tab=activity"' in html
     assert 'id="hardware-gpu"' in html
@@ -1120,6 +1120,8 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'id="llm-reviewed-skipped"' in html
     assert 'id="llm-dismissed-downgraded"' in html
     assert 'id="llm-failed-batches"' in html
+    assert '<div class="workspace-header">' in html
+    assert html.index("Activity Log") < html.index('id="new-scan-btn"')
     assert "Results Actions" not in html
     assert 'id="reports-card"' not in html
     assert 'id="hardware-process"' not in html
