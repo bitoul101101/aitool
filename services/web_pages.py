@@ -219,22 +219,22 @@ def _flash(notice: str = "", error: str = "") -> str:
     return f'<div class="toast-wrap">{"".join(items)}</div>' if items else ""
 
 
-def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True) -> bytes:
+def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True) -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
     if show_nav:
         nav = (
             '<div class="header-nav">'
-            f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
-            f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan Results</a>'
-            f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
-            f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
-            f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
-            f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
-            '</div>'
-            '<div class="header-actions">'
-            '<form class="exit-form" method="post" action="/app/exit"><button type="submit" class="warn">Exit</button></form>'
-            "</div>"
+            + f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
+            + (f'<a class="nav{" active" if active == "scan" else ""}" href="/scan">Scan Results</a>' if show_scan_results else "")
+            + f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
+            + f'<a class="nav{" active" if active == "history" else ""}" href="/history">History</a>'
+            + f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
+            + f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
+            + '</div>'
+            + '<div class="header-actions">'
+            + '<form class="exit-form" method="post" action="/app/exit"><button type="submit" class="warn">Exit</button></form>'
+            + "</div>"
         )
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -295,6 +295,7 @@ def render_scan_page(
     log_text: str,
     phase_timeline: list[tuple[str, str]],
     force_selection: bool = False,
+    show_scan_results: bool = True,
     notice: str = "",
     error: str = "",
 ) -> bytes:
@@ -596,7 +597,7 @@ def render_scan_page(
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
-        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked else ""}>Start Scan</button></div>
+        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked or not selected else ""}>Start Scan</button></div>
       </div>
       <div class="repo-notices">
         <div class="warn-box{" hidden" if not running_notice else ""}" id="running-scan-notice">{_esc(running_notice)}</div>
@@ -685,8 +686,9 @@ function triagePromptSubmit(form, actionLabel){{
 }}
 const repoSearch=document.getElementById('repo-search');
 const repoCount=document.getElementById('repo-selection-count');
+const startScanBtn=document.getElementById('start-scan-btn');
 function repoCheckboxes(){{return Array.from(document.querySelectorAll('.repo-checkbox'));}}
-function updateRepoCount(){{if(repoCount) repoCount.textContent=`${{repoCheckboxes().filter(cb=>cb.checked && cb.closest('.repo-row').style.display!=='none').length}} selected`;}}
+function updateRepoCount(){{const selectedCount=repoCheckboxes().filter(cb=>cb.checked).length;if(repoCount) repoCount.textContent=`${{selectedCount}} selected`; if(startScanBtn && !startScanBtn.dataset.blockedByRun) startScanBtn.disabled=selectedCount===0;}}
 function filterRepos(){{if(!repoSearch) return; const q=(repoSearch.value||'').toLowerCase().trim();document.querySelectorAll('.repo-row').forEach(row=>{{row.style.display=!q || (row.dataset.repoName||'').includes(q)?'flex':'none';}});updateRepoCount();}}
 repoSearch?.addEventListener('input',filterRepos);
 document.getElementById('select-all-repos-btn')?.addEventListener('click',()=>{{repoCheckboxes().forEach(cb=>{{if(cb.closest('.repo-row').style.display!=='none') cb.checked=true;}});updateRepoCount();}});
@@ -716,7 +718,10 @@ filterRepos();
       const res=await fetch('/api/scan/status', {{headers:{{'Accept':'application/json'}}}});
       const data=await res.json();
       const blocked=(data.state||'').toLowerCase()==='running';
-      if(startBtn) startBtn.disabled=blocked;
+      if(startBtn) {{
+        startBtn.dataset.blockedByRun = blocked ? '1' : '';
+        startBtn.disabled=blocked || repoCheckboxes().filter(cb=>cb.checked).length===0;
+      }}
       if(runningNotice) {{
         runningNotice.textContent='A scan is in progress. Wait until it finishes before starting a new scan.';
         runningNotice.classList.toggle('hidden', !blocked);
@@ -726,7 +731,7 @@ filterRepos();
   modelSelect?.addEventListener('change', updateModelWarning);
   updateModelWarning();
   updateStartAvailability();
-  if(startBtn || runningNotice) setInterval(updateStartAvailability, 3000);
+    if(startBtn || runningNotice) setInterval(updateStartAvailability, 3000);
 }})();
 (function() {{
   const logEl=document.getElementById('scan-log');
@@ -1000,10 +1005,10 @@ filterRepos();
   }}, 3000);
 }})();
 </script>"""
-    return _layout(title="Scan", body=body, active="new_scan" if force_selection else "scan")
+    return _layout(title="Scan", body=body, active="new_scan" if force_selection else "scan", show_scan_results=show_scan_results)
 
 
-def render_history_page(*, history: list[dict], notice: str = "", error: str = "") -> bytes:
+def render_history_page(*, history: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
     projects = sorted({str(rec.get("project_key", rec.get("project", ""))) for rec in history if rec.get("project_key") or rec.get("project")})
     repos = sorted({", ".join(rec.get("repo_slugs", rec.get("repos", []))) for rec in history if rec.get("repo_slugs") or rec.get("repos")})
     statuses = sorted({str(rec.get("state", "")) for rec in history if rec.get("state")})
@@ -1120,10 +1125,10 @@ prevBtn?.addEventListener('click',()=>{{if(currentPage>1){{currentPage-=1;render
 nextBtn?.addEventListener('click',()=>{{const totalPages=Math.max(1, Math.ceil(filteredRows().length / PAGE_SIZE)); if(currentPage<totalPages){{currentPage+=1;renderPage();}}}});
 sortHistory(1,'datetime');
 </script>"""
-    return _layout(title="History", body=body, active="history")
+    return _layout(title="History", body=body, active="history", show_scan_results=show_scan_results)
 
 
-def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "") -> bytes:
+def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in repo_inventory if item.get("project_key")})
     providers = sorted({label for item in repo_inventory for label in item.get("provider_labels", []) if label})
     models = sorted({model for item in repo_inventory for model in item.get("models", []) if model})
@@ -1265,10 +1270,10 @@ document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
 }});
 sortInventory(0,'datetime');
 </script>"""
-    return _layout(title="AI Inventory", body=body, active="inventory")
+    return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results)
 
 
-def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, notice: str = "", error: str = "") -> bytes:
+def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
     body = f"""
 {_flash(notice, error)}
 <section class="card" style="max-width:760px">
@@ -1281,10 +1286,10 @@ def render_settings_page(*, bitbucket_url: str, output_dir: str, llm_cfg: dict, 
     <div><button type="submit">Save Settings</button></div>
   </form>
 </section>"""
-    return _layout(title="Settings", body=body, active="settings")
+    return _layout(title="Settings", body=body, active="settings", show_scan_results=show_scan_results)
 
 
-def render_help_page(*, notice: str = "", error: str = "") -> bytes:
+def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bool = True) -> bytes:
     body = f"""
 {_flash(notice, error)}
 <section class="card stack" style="max-width:1080px">
@@ -1396,4 +1401,4 @@ def render_help_page(*, notice: str = "", error: str = "") -> bytes:
     </ul>
   </section>
 </section>"""
-    return _layout(title="Help", body=body, active="help")
+    return _layout(title="Help", body=body, active="help", show_scan_results=show_scan_results)

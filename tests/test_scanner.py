@@ -793,6 +793,26 @@ def test_atomic_history_write():
         srv._invalidate_history_cache()
 
 
+def test_history_normalizes_stale_running_records():
+    import app_server as srv
+
+    stale_record = {
+        "scan_id": "20260317_010101",
+        "project_key": "COGI",
+        "repo_slugs": ["repo1"],
+        "state": "running",
+        "started_at_utc": "2026-03-17T01:01:01Z",
+    }
+    original_session = srv._session
+    try:
+        srv._session = srv.ScanSession()
+        with patch.object(srv, "_load_history", return_value=[stale_record]):
+            history = srv._history_records_for_user()
+        assert history[0]["state"] == "stopped"
+    finally:
+        srv._session = original_session
+
+
 def test_login_page_is_server_rendered_and_does_not_embed_saved_pat():
     import app_server as srv
 
@@ -871,6 +891,7 @@ def test_scan_page_selection_view_stays_pre_scan():
     assert 'id="repo-search"' in html
     assert 'id="llm-model-select"' in html
     assert "Start Scan" in html
+    assert 'id="start-scan-btn" disabled' in html
     assert "New Scan" in html
     assert "Scan Results" in html
     assert "repo1" in html
@@ -1052,6 +1073,16 @@ def test_sse_log_formatter_matches_page_log_format():
 
     assert line.startswith(f"[{expected}]")
     assert line.endswith("Scan complete.")
+
+
+def test_help_page_can_hide_scan_results_navigation():
+    import app_server as srv
+
+    html = srv.render_help_page(show_scan_results=False).decode("utf-8")
+
+    assert "New Scan" in html
+    assert "AI Inventory" in html
+    assert 'href="/scan">Scan Results</a>' not in html
 
 
 def test_llm_fallback_parsing_does_not_emit_low_signal_operator_logs():

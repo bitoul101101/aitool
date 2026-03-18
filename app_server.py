@@ -354,7 +354,12 @@ def _delete_managed_history_file(path_str: str, scan_id: str, artifact: str, *, 
 
 
 def _history_records_for_user() -> list[dict]:
-    records = history_records_for_context(_load_history(), _operator_state.ctx)
+    records = []
+    for record in history_records_for_context(_load_history(), _operator_state.ctx):
+        normalized = dict(record)
+        if str(normalized.get("state", "")).lower() == "running":
+            normalized["state"] = "stopped"
+        records.append(normalized)
     current = _current_session_history_record()
     if current:
         records = [rec for rec in records if rec.get("scan_id") != current.get("scan_id")]
@@ -446,6 +451,10 @@ def _repos_for_project(project_key: str) -> list[dict]:
 
 def _is_connected() -> bool:
     return _operator_state.client is not None
+
+
+def _has_scan_results() -> bool:
+    return bool(_session.scan_id or _history_records_for_user())
 
 
 def _current_session_history_record() -> dict | None:
@@ -867,6 +876,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             log_text=_format_log_text(_session.log_lines[-500:]),
             phase_timeline=_phase_timeline(_session.log_lines, _session.state),
             force_selection=fresh_scan,
+            show_scan_results=_has_scan_results(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
         )
@@ -880,6 +890,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             history=list(reversed(_history_records_for_user())),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
+            show_scan_results=_has_scan_results(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -893,6 +904,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             summary=summary,
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
+            show_scan_results=_has_scan_results(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -906,6 +918,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             llm_cfg=load_llm_config(),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
+            show_scan_results=_has_scan_results(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -916,6 +929,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         html = render_help_page(
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
+            show_scan_results=_has_scan_results(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
