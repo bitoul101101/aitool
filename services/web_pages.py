@@ -515,6 +515,7 @@ def render_scan_page(
     report = status.get("report") or {}
     delta = status.get("delta") or {}
     inventory = status.get("inventory") or {}
+    hardware = status.get("hardware") or {}
     fixed_findings = list(delta.get("fixed_findings") or [])[:8]
     baseline_html = ""
     if scan_complete and delta.get("has_baseline"):
@@ -576,6 +577,19 @@ def render_scan_page(
       </div>
     </section>"""
     inventory_html = ""
+    hardware_html = f"""
+    <section class="card" id="hardware-card">
+      <h2 style="margin:0 0 8px;font-size:16px">Hardware Usage</h2>
+      <div class="baseline-summary" id="hardware-summary">
+        <div class="baseline-grid">
+          <div class="baseline-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong></div>
+          <div class="baseline-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong></div>
+          <div class="baseline-stat"><span class="baseline-label">Process</span><strong id="hardware-process">{_esc(hardware.get("process_memory_text", "Unavailable"))}</strong></div>
+          <div class="baseline-stat"><span class="baseline-label">Workspace</span><strong id="hardware-workspace">{_esc(hardware.get("workspace_text", "0 MB"))}</strong></div>
+        </div>
+        <div class="muted" id="hardware-disk">Free disk in output location: {_esc(hardware.get("disk_free_text", "Unavailable"))}</div>
+      </div>
+    </section>"""
     report_actions = ""
     if scan_complete and all_findings:
         html_name = report.get("html_name", "")
@@ -648,13 +662,14 @@ def render_scan_page(
       </div>
       <div class="scan-actions">{stop_button if running else ""}{new_scan_button}</div>
     </section>
+    {f'<section class="card" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Results Actions</h2>{report_actions}</section>' if report_actions else '<section class="card hidden" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Results Actions</h2><div class="report-actions" id="report-actions"></div></section>'}
     <section class="card">
       <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
+    {hardware_html}
     {baseline_html}
     {inventory_html}
-    {f'<section class="card" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Reports</h2>{report_actions}</section>' if report_actions else '<section class="card hidden" id="reports-card"><h2 style="margin:0 0 8px;font-size:16px">Reports</h2><div class="report-actions" id="report-actions"></div></section>'}
   </aside>
 </section>
 <form method="post" action="/scan/stop" id="stop-form">{_csrf_field(csrf_token)}</form>"""

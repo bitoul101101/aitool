@@ -10,6 +10,7 @@
   const textEl = document.getElementById("scan-state-text");
   const timelineEl = document.getElementById("phase-timeline");
   const baselineSummary = document.getElementById("baseline-summary");
+  const hardwareSummary = document.getElementById("hardware-summary");
   const reportsCard = document.getElementById("reports-card");
   const reportsShell = document.getElementById("report-actions");
   const stopBtn = document.getElementById("stop-scan-btn");
@@ -22,6 +23,7 @@
     !logEl &&
     !timelineEl &&
     !baselineSummary &&
+    !hardwareSummary &&
     !reportsShell
   ) {
     return;
@@ -29,6 +31,7 @@
 
   let submitInFlight = false;
   let redirectedToResults = false;
+  let previousScanState = null;
   let replaceInitialLog = Boolean(logEl && logEl.textContent.trim());
   let stream = null;
 
@@ -227,6 +230,33 @@
     reportsCard.classList.toggle("hidden", actions.length === 0);
   }
 
+  function renderHardware(data) {
+    if (!hardwareSummary) {
+      return;
+    }
+    const hardware = data.hardware || {};
+    const cpuEl = document.getElementById("hardware-cpu");
+    const ramEl = document.getElementById("hardware-ram");
+    const processEl = document.getElementById("hardware-process");
+    const workspaceEl = document.getElementById("hardware-workspace");
+    const diskEl = document.getElementById("hardware-disk");
+    if (cpuEl) {
+      cpuEl.textContent = String(hardware.cpu_percent || "Sampling...");
+    }
+    if (ramEl) {
+      ramEl.textContent = String(hardware.ram_text || "Unavailable");
+    }
+    if (processEl) {
+      processEl.textContent = String(hardware.process_memory_text || "Unavailable");
+    }
+    if (workspaceEl) {
+      workspaceEl.textContent = String(hardware.workspace_text || "0 MB");
+    }
+    if (diskEl) {
+      diskEl.textContent = "Free disk in output location: " + String(hardware.disk_free_text || "Unavailable");
+    }
+  }
+
   function updateSelectionStatus(data) {
     if (!startScanBtn && !runningNotice) {
       return;
@@ -249,6 +279,8 @@
   }
 
   function updateRunningStatus(data) {
+    const state = String(data.state || "").toLowerCase();
+    const justFinished = previousScanState === "running" && state === "done";
     if (textEl) {
       textEl.textContent = titleCaseState(data.state);
     }
@@ -256,21 +288,22 @@
       timelineEl.innerHTML = timelineRows(data.phase_timeline || [], data.state || "");
     }
     renderBaseline(data);
+    renderHardware(data);
     renderReports(data);
     if (stopBtn) {
-      stopBtn.disabled = String(data.state || "").toLowerCase() !== "running";
+      stopBtn.disabled = state !== "running";
     }
-    const state = String(data.state || "").toLowerCase();
     if (state !== "running" && stream) {
       stream.close();
       stream = null;
     }
-    if (!redirectedToResults && state === "done" && data.scan_id && data.report && data.report.html_name) {
+    if (!redirectedToResults && justFinished && data.scan_id && data.report && data.report.html_name) {
       redirectedToResults = true;
       window.setTimeout(function () {
         window.location.assign("/results/" + encodeURIComponent(data.scan_id));
       }, 900);
     }
+    previousScanState = state;
   }
 
   function startLogStream() {

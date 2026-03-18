@@ -33,6 +33,7 @@ import json
 import os
 import queue
 import secrets
+import shutil
 import threading
 import tempfile
 import time
@@ -110,6 +111,9 @@ OWNER_MAP_FILE = str(_BASE_DIR / "owner_map.json")
 APP_PORT      = 5757   # fixed port for the app (report servers use random ports)
 APP_VERSION   = "19.1"
 ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
+_RESOURCE_LOCK = threading.RLock()
+_CPU_TIMES_PREV: tuple[int, int, int] | None = None
+_WORKSPACE_USAGE_CACHE = {"scan_id": "", "ts": 0.0, "mb": 0.0}
 
 
 def _default_temp_dir(os_name: Optional[str] = None,
@@ -720,6 +724,167 @@ def _phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
     return timeline
 
 
+def _format_mb(value_mb: float) -> str:
+    if value_mb <= 0:
+        return "0 MB"
+    if value_mb >= 1024:
+        return f"{value_mb / 1024:.1f} GB"
+    return f"{int(round(value_mb))} MB"
+
+
+def _format_percent(value: float) -> str:
+    return f"{max(0.0, min(100.0, value)):.0f}%"
+
+
+def _system_cpu_percent() -> float | None:
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+
+        class FILETIME(ctypes.Structure):
+            _fields_ = [("dwLowDateTime", ctypes.c_uint32), ("dwHighDateTime", ctypes.c_uint32)]
+
+        idle = FILETIME()
+        kernel = FILETIME()
+        user = FILETIME()
+        if not ctypes.windll.kernel32.GetSystemTimes(
+            ctypes.byref(idle),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        ):
+            return None
+        idle_total = (idle.dwHighDateTime << 32) | idle.dwLowDateTime
+        kernel_total = (kernel.dwHighDateTime << 32) | kernel.dwLowDateTime
+        user_total = (user.dwHighDateTime << 32) | user.dwLowDateTime
+        with _RESOURCE_LOCK:
+            global _CPU_TIMES_PREV
+            previous = _CPU_TIMES_PREV
+            _CPU_TIMES_PREV = (idle_total, kernel_total, user_total)
+        if previous is None:
+            return None
+        prev_idle, prev_kernel, prev_user = previous
+        idle_delta = idle_total - prev_idle
+        kernel_delta = kernel_total - prev_kernel
+        user_delta = user_total - prev_user
+        total_delta = kernel_delta + user_delta
+        if total_delta <= 0:
+            return None
+        return max(0.0, min(100.0, (1.0 - (idle_delta / total_delta)) * 100.0))
+    except Exception:
+        return None
+
+
+def _memory_snapshot() -> tuple[float | None, float | None]:
+    if os.name != "nt":
+        return None, None
+    try:
+        import ctypes
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_uint32),
+                ("dwMemoryLoad", ctypes.c_uint32),
+                ("ullTotalPhys", ctypes.c_uint64),
+                ("ullAvailPhys", ctypes.c_uint64),
+                ("ullTotalPageFile", ctypes.c_uint64),
+                ("ullAvailPageFile", ctypes.c_uint64),
+                ("ullTotalVirtual", ctypes.c_uint64),
+                ("ullAvailVirtual", ctypes.c_uint64),
+                ("ullAvailExtendedVirtual", ctypes.c_uint64),
+            ]
+
+        status = MEMORYSTATUSEX()
+        status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return None, None
+        used_mb = (status.ullTotalPhys - status.ullAvailPhys) / (1024 * 1024)
+        total_mb = status.ullTotalPhys / (1024 * 1024)
+        return used_mb, total_mb
+    except Exception:
+        return None, None
+
+
+def _process_memory_mb() -> float | None:
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+
+        class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_uint32),
+                ("PageFaultCount", ctypes.c_uint32),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = PROCESS_MEMORY_COUNTERS()
+        counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+        proc = ctypes.windll.kernel32.GetCurrentProcess()
+        if not ctypes.windll.psapi.GetProcessMemoryInfo(proc, ctypes.byref(counters), counters.cb):
+            return None
+        return counters.WorkingSetSize / (1024 * 1024)
+    except Exception:
+        return None
+
+
+def _workspace_size_mb(scan_id: str) -> float:
+    if not scan_id:
+        return 0.0
+    now = time.time()
+    with _RESOURCE_LOCK:
+        if _WORKSPACE_USAGE_CACHE["scan_id"] == scan_id and (now - float(_WORKSPACE_USAGE_CACHE["ts"])) < 5.0:
+            return float(_WORKSPACE_USAGE_CACHE["mb"])
+    total_bytes = 0
+    workspace = Path(TEMP_DIR) / f"scan_{scan_id}"
+    try:
+        if workspace.exists():
+            for path in workspace.rglob("*"):
+                if path.is_file():
+                    try:
+                        total_bytes += path.stat().st_size
+                    except OSError:
+                        continue
+    except OSError:
+        total_bytes = 0
+    total_mb = total_bytes / (1024 * 1024)
+    with _RESOURCE_LOCK:
+        _WORKSPACE_USAGE_CACHE["scan_id"] = scan_id
+        _WORKSPACE_USAGE_CACHE["ts"] = now
+        _WORKSPACE_USAGE_CACHE["mb"] = total_mb
+    return total_mb
+
+
+def _hardware_snapshot(session: ScanSession | None) -> dict:
+    scan_id = session.scan_id if session else ""
+    cpu = _system_cpu_percent()
+    ram_used_mb, ram_total_mb = _memory_snapshot()
+    proc_mb = _process_memory_mb()
+    workspace_mb = _workspace_size_mb(scan_id)
+    disk_free_gb = 0.0
+    try:
+        disk_free_gb = shutil.disk_usage(OUTPUT_DIR).free / (1024 ** 3)
+    except OSError:
+        disk_free_gb = 0.0
+    ram_text = "Unavailable"
+    if ram_used_mb is not None and ram_total_mb:
+        ram_text = f"{_format_mb(ram_used_mb)} / {_format_mb(ram_total_mb)}"
+    return {
+        "cpu_percent": _format_percent(cpu) if cpu is not None else "Sampling...",
+        "ram_text": ram_text,
+        "process_memory_text": _format_mb(proc_mb or 0.0) if proc_mb is not None else "Unavailable",
+        "workspace_text": _format_mb(workspace_mb),
+        "disk_free_text": f"{disk_free_gb:.1f} GB" if disk_free_gb else "Unavailable",
+    }
+
+
 _settings_service = SettingsService(
     load_llm_config=load_llm_config,
     save_llm_config=save_llm_config,
@@ -948,6 +1113,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             status = session.to_status()
             status["phase_timeline"] = _phase_timeline(log_lines, state)
             status["log_url"] = f"/api/history/log/{scan_id}" if scan_id else ""
+            status["hardware"] = _hardware_snapshot(session)
             self._json(status)
         elif p == "/api/history":
             if _require_role(self, ROLE_VIEWER):
@@ -1084,6 +1250,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             session_log_lines = list(_session.log_lines[-500:])
             session_state = _session.state
             status = _session.to_status() if _is_connected() else {}
+            status["hardware"] = _hardware_snapshot(_session) if _is_connected() else {}
         project_key = (qs.get("project", [""])[0] or session_project_key or "").strip()
         fresh_scan = (qs.get("new", [""])[0] or "").lower() in {"1", "true", "yes"}
         if project_key and _require_project_access(self, project_key):

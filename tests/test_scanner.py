@@ -1091,7 +1091,9 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="mitigate-section">' not in html
     assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
-    assert html.index("Phase Timeline") < html.index("Open HTML Report")
+    assert "Results Actions" in html
+    assert "Hardware Usage" in html
+    assert html.index("Phase Timeline") < html.index("Hardware Usage")
     assert "Download CSV File" in html
     assert "Download Logs" in html
     assert 'href="/results/20260317_154037"' in html
@@ -1104,6 +1106,14 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'src="/assets/scan_page.js"' in html
     assert "findingsBody" not in html
     assert "repairTimer" not in html
+
+
+def test_scan_page_asset_redirects_only_after_running_to_done_transition():
+    script = Path("C:/aitool/assets/scan_page.js").read_text(encoding="utf-8")
+
+    assert "let previousScanState = null;" in script
+    assert 'const justFinished = previousScanState === "running" && state === "done";' in script
+    assert "!redirectedToResults && justFinished" in script
 
 
 def test_scan_session_log_normalizes_blank_lines():
