@@ -810,6 +810,10 @@ def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm
         model_text = " | ".join(model_parts)
 
     reviewed = 0
+    skipped = 0
+    dismissed = 0
+    downgraded = 0
+    reinstated = 0
     failed_batches = 0
     batch_markers: list[tuple[int, int, float]] = []
     llm_start: float | None = None
@@ -817,6 +821,10 @@ def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm
 
     reviewing_re = re.compile(r"\[LLM\]\s+Reviewing\s+(\d+)\s+finding\(s\).*?(?:\((\d+)\s+skipped)", re.IGNORECASE)
     batch_re = re.compile(r"\[LLM\]\s+Batch\s+(\d+)/(\d+)", re.IGNORECASE)
+    done_re = re.compile(
+        r"\[LLM\]\s+Done.*?dismissed:(\d+).*?reinstated:(\d+).*?downgraded:(\d+)",
+        re.IGNORECASE,
+    )
 
     for entry in entries:
         msg = str(entry.get("msg", "") or "").strip()
@@ -832,9 +840,15 @@ def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm
         match = reviewing_re.search(msg)
         if match:
             reviewed += int(match.group(1) or 0)
+            skipped += int(match.group(2) or 0)
         match = batch_re.search(msg)
         if match:
             batch_markers.append((int(match.group(1) or 0), int(match.group(2) or 0), ts))
+        match = done_re.search(msg)
+        if match:
+            dismissed = int(match.group(1) or 0)
+            reinstated = int(match.group(2) or 0)
+            downgraded = int(match.group(3) or 0)
         if "[LLM] Batch" in msg and "failed" in msg.lower():
             failed_batches += 1
 
@@ -862,6 +876,11 @@ def _llm_stats(entries: list[dict], *, state: str = "", llm_model: str = "", llm
         "avg_batch": _format_seconds_compact(avg_batch),
         "avg_per_finding": _format_seconds_compact(avg_per_finding),
         "throughput": f"{throughput:.1f} findings/min" if throughput is not None else "—",
+        "reviewed": reviewed,
+        "skipped": skipped,
+        "dismissed": dismissed,
+        "downgraded": downgraded,
+        "reinstated": reinstated,
         "failed_batches": str(failed_batches),
     }
 

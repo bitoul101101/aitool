@@ -546,6 +546,7 @@ def render_scan_page(
     delta = status.get("delta") or {}
     inventory = status.get("inventory") or {}
     hardware = status.get("hardware") or {}
+    llm_stats = status.get("llm_stats") or {}
     fixed_findings = list(delta.get("fixed_findings") or [])[:8]
     baseline_html = ""
     if scan_complete and delta.get("has_baseline"):
@@ -609,13 +610,15 @@ def render_scan_page(
     inventory_html = ""
     hardware_html = f"""
     <section class="card" id="hardware-card">
-      <h2 style="margin:0 0 8px;font-size:15px">Hardware Stats</h2>
+      <h2 style="margin:0 0 8px;font-size:15px">Performance</h2>
       <div class="baseline-summary" id="hardware-summary">
         <div class="hardware-grid">
           <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">Findings Reviewed / Skipped</span><strong id="perf-reviewed-skipped">{_esc(llm_stats.get("reviewed", 0))} / {_esc(llm_stats.get("skipped", 0))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">Dismissed / Downgraded / Reinstated</span><strong id="perf-llm-outcomes">{_esc(llm_stats.get("dismissed", 0))} / {_esc(llm_stats.get("downgraded", 0))} / {_esc(llm_stats.get("reinstated", 0))}</strong></div>
         </div>
       </div>
     </section>"""

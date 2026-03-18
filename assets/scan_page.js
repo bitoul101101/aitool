@@ -207,10 +207,13 @@
       return;
     }
     const hardware = data.hardware || {};
+    const llm = data.llm_stats || {};
     const cpuEl = document.getElementById("hardware-cpu");
     const ramEl = document.getElementById("hardware-ram");
     const gpuEl = document.getElementById("hardware-gpu");
     const diskIoEl = document.getElementById("hardware-disk-io");
+    const reviewedSkippedEl = document.getElementById("perf-reviewed-skipped");
+    const llmOutcomesEl = document.getElementById("perf-llm-outcomes");
     if (cpuEl) {
       cpuEl.textContent = String(hardware.cpu_percent || "Sampling...");
     }
@@ -222,6 +225,15 @@
     }
     if (diskIoEl) {
       diskIoEl.textContent = String(hardware.disk_io_text || "Sampling...");
+    }
+    if (reviewedSkippedEl) {
+      reviewedSkippedEl.textContent = String(llm.reviewed || 0) + " / " + String(llm.skipped || 0);
+    }
+    if (llmOutcomesEl) {
+      llmOutcomesEl.textContent =
+        String(llm.dismissed || 0) + " / " +
+        String(llm.downgraded || 0) + " / " +
+        String(llm.reinstated || 0);
     }
   }
 

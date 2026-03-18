@@ -1166,13 +1166,15 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="mitigate-section">' not in html
     assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
-    assert "Hardware Stats" in html
+    assert "Performance" in html
     assert "LLM Stats" not in html
-    assert html.index("Phase Timeline") < html.index("Hardware Stats")
+    assert html.index("Phase Timeline") < html.index("Performance")
     assert 'href="/scan/20260317_154037?tab=results"' in html
     assert 'href="/scan/20260317_154037?tab=activity"' in html
     assert 'id="hardware-gpu"' in html
     assert 'id="hardware-disk-io"' in html
+    assert 'id="perf-reviewed-skipped"' in html
+    assert 'id="perf-llm-outcomes"' in html
     assert '<div class="workspace-header">' in html
     assert html.index("Activity Log") < html.index('id="new-scan-btn"')
     assert "Results Actions" not in html
@@ -1221,6 +1223,11 @@ def test_llm_stats_are_derived_from_log_entries():
     assert stats["avg_batch"] == "4.00s"
     assert stats["avg_per_finding"] == "2.50s"
     assert stats["throughput"] == "24.0 findings/min"
+    assert stats["reviewed"] == 4
+    assert stats["skipped"] == 3
+    assert stats["dismissed"] == 1
+    assert stats["downgraded"] == 1
+    assert stats["reinstated"] == 1
     assert stats["failed_batches"] == "0"
 
 
