@@ -896,6 +896,9 @@ def test_scan_page_selection_view_stays_pre_scan():
     assert "Scan Results" in html
     assert "repo1" in html
     assert "Current Findings" not in html
+    assert 'src="/assets/scan_page.js"' in html
+    assert 'current-findings-body' not in html
+    assert 'id="inventory-summary"' not in html
 
 
 def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view():
@@ -1033,7 +1036,9 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "old.py:12" in html
     assert "New" in html
     assert "Existing" in html
-    assert "submitInFlight=true" in html
+    assert 'src="/assets/scan_page.js"' in html
+    assert "findingsBody" not in html
+    assert "repairTimer" not in html
 
 
 def test_scan_session_log_normalizes_blank_lines():

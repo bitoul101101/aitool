@@ -259,6 +259,7 @@ HISTORY_FILE = str(_BASE_DIR / "output" / "scan_history.json")
 LOG_DIR = str(_BASE_DIR / "output" / "logs")
 DB_FILE = str(_BASE_DIR / "output" / "scan_jobs.db")
 AUDIT_FILE = str(_BASE_DIR / "output" / "audit_events.jsonl")
+ASSETS_DIR = _BASE_DIR / "assets"
 _audit_log = AuditLogService(AUDIT_FILE)
 
 _scan_service = ScanJobService(
@@ -804,6 +805,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not _is_connected():
                 return self._redirect("/login")
             self._render_help_page()
+        elif p == "/assets/scan_page.js":
+            asset_path = ASSETS_DIR / "scan_page.js"
+            if not asset_path.exists():
+                return self._404()
+            self._send(200, "application/javascript; charset=utf-8", asset_path.read_bytes())
         elif p == "/api/status":
             llm_cfg = load_llm_config()
             llm_info = _ollama_snapshot(llm_cfg.get("base_url", "http://localhost:11434"), refresh=False)
