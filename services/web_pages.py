@@ -486,34 +486,6 @@ def render_scan_page(
         </div>
       </div>
     </section>"""
-    timings_html = (
-        '<section class="card" id="timings-card">'
-        '<h2 style="margin:0 0 8px;font-size:15px">Structured Timings</h2>'
-        '<div class="baseline-summary"><div class="hardware-grid">'
-        + "".join(
-            f'<div class="hardware-stat"><span class="baseline-label">{_esc(label)}</span><strong>{_esc(_fmt_duration(phase_metrics.get(key, 0)))}</strong></div>'
-            for key, label in (("init", "Init"), ("clone", "Clone"), ("scan", "Scan"), ("llm review", "LLM"), ("report", "Report"), ("total", "Total"))
-            if key in phase_metrics
-        )
-        + (
-            f'<div class="hardware-stat"><span class="baseline-label">Cache</span><strong>{_esc(str(cache_metrics.get("hits", 0)))} / {_esc(str(cache_metrics.get("misses", 0)))} </strong></div>'
-            if cache_metrics else ""
-        )
-        + '</div></div></section>'
-    )
-    repo_metrics_rows = "".join(
-        f'<div class="hardware-stat"><span class="baseline-label">{_esc(repo)}</span>'
-        f'<strong>{_esc(_fmt_duration(data.get("clone_s", 0)))} / {_esc(_fmt_duration(data.get("scan_s", 0)))} / {_esc(_fmt_duration(data.get("llm_review_s", 0)))}</strong></div>'
-        for repo, data in list(repo_metrics.items())[:6]
-    )
-    repo_metrics_body = repo_metrics_rows or '<div class="muted">No repo timing data yet.</div>'
-    repo_metrics_html = (
-        '<section class="card" id="repo-metrics-card">'
-        '<h2 style="margin:0 0 8px;font-size:15px">Per-Repo Timings</h2>'
-        '<div class="muted" style="font-size:11px;margin-bottom:6px">Clone / Scan / LLM review</div>'
-        f'<div class="baseline-summary"><div class="hardware-grid">{repo_metrics_body}</div></div>'
-        '</section>'
-    )
     llm_batches_html = (
         '<section class="card" id="llm-batches-card">'
         '<h2 style="margin:0 0 8px;font-size:15px">LLM Batch Timings</h2>'
@@ -613,8 +585,6 @@ def render_scan_page(
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
     {hardware_html}
-    {timings_html}
-    {repo_metrics_html}
     {llm_batches_html}
     {errors_html}
     {baseline_html}
