@@ -4260,6 +4260,7 @@ def test_send_swallows_client_disconnects():
     handler = DummyHandler()
 
     srv._Handler._send(handler, 200, "text/plain", b"ok")
+    assert handler.close_connection is True
 
 
 def test_do_get_swallows_client_disconnect_from_api_json_write():

@@ -2628,8 +2628,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._cors()
             self.end_headers()
             self.wfile.write(body)
-        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
-            return
+        except Exception as exc:
+            if _Handler._is_client_disconnect(exc):
+                self.close_connection = True
+                return
+            raise
         finally:
             self._response_cookies = []
 
@@ -2644,8 +2647,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._cors()
             self.end_headers()
             self.wfile.write(body)
-        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
-            return
+        except Exception as exc:
+            if _Handler._is_client_disconnect(exc):
+                self.close_connection = True
+                return
+            raise
         finally:
             self._response_cookies = []
 

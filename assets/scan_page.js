@@ -42,6 +42,7 @@
   let previousScanState = null;
   let replaceInitialLog = Boolean(logEl && logEl.textContent.trim());
   let stream = null;
+  let statusPollInFlight = false;
 
   function escHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, function (ch) {
@@ -432,6 +433,10 @@
   }
 
   async function pollStatus() {
+    if (statusPollInFlight) {
+      return;
+    }
+    statusPollInFlight = true;
     try {
       const res = await fetch("/api/scan/status?_ts=" + Date.now(), {
         headers: { Accept: "application/json" },
@@ -444,6 +449,8 @@
       updateSelectionStatus(data);
       updateRunningStatus(data);
     } catch (_err) {
+    } finally {
+      statusPollInFlight = false;
     }
   }
 
