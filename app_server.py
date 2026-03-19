@@ -548,6 +548,12 @@ def _is_tool_generated_legacy_file(path: Path, *, scan_id: str, artifact: str) -
         return path.suffix.lower() == ".html" and path.name.lower().startswith("ai_scan_")
     if artifact == "csv":
         return path.suffix.lower() == ".csv" and path.name.lower().startswith("ai_scan_")
+    if artifact == "json":
+        return path.suffix.lower() == ".json" and path.name.lower().startswith("ai_scan_")
+    if artifact == "sarif":
+        return path.suffix.lower() == ".sarif" and path.name.lower().startswith("ai_scan_")
+    if artifact == "threat_dragon":
+        return path.suffix.lower() == ".json" and path.name.lower().startswith("ai_scan_") and "threat_dragon" in path.name.lower()
     return False
 
 
@@ -1539,6 +1545,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._page_scan_stop()
         elif p.startswith("/scan/") and p.endswith("/generate-html"):
             return self._page_generate_html_report(p[6:-14])
+        elif p.startswith("/scan/") and p.endswith("/replay-threat-model"):
+            return self._page_replay_threat_model(p[6:-20], body)
         elif p == "/history/delete":
             return self._page_history_delete(body)
         elif p == "/findings/bulk":
@@ -1753,6 +1761,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 state=session_state or str(record.get("state", "done")),
                 html_name=html_name,
                 csv_name=report.get("csv_name", ""),
+                json_name=report.get("json_name", ""),
+                sarif_name=report.get("sarif_name", ""),
+                threat_dragon_name=report.get("threat_dragon_name", ""),
                 log_url=f"/api/history/log/{safe_scan_id}",
                 started_at_utc=str(record.get("started_at_utc", "") or ""),
                 can_generate_html=can_generate_html,
@@ -1996,6 +2007,34 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", error=str(e)))
             return
         self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice="HTML report generation started"))
+
+    def _page_replay_threat_model(self, scan_id: str, body: dict):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        safe_scan_id = Path(scan_id).name
+        record = _scan_record_for_id(safe_scan_id)
+        if not record:
+            return self._err(404, "Scan results not found")
+        project_key = str(record.get("project_key", "") or "")
+        if project_key and _require_project_access(self, project_key):
+            return
+        replay_instructions = str(body.get("replay_instructions", "") or "").strip()
+        try:
+            snapshot = _current_session_snapshot()
+            findings = list(snapshot["findings"]) if snapshot["scan_id"] == safe_scan_id else None
+            updated = _scan_service.replay_threat_model(
+                safe_scan_id,
+                findings=findings,
+                replay_instructions=replay_instructions,
+            )
+            if snapshot["scan_id"] == safe_scan_id:
+                with _state_lock:
+                    current = _current_session()
+                    current.report_paths = dict(updated.get("reports") or {})
+        except Exception as e:
+            self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", error=str(e)))
+            return
+        self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice="Threat model replayed; regenerate HTML if you want the report refreshed"))
 
     def _page_history_delete(self, body: dict):
         if _require_role(self, ROLE_ADMIN):

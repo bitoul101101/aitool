@@ -10,6 +10,7 @@
   const fs = document.getElementById("filter-status");
   const fm = document.getElementById("filter-model");
   const delBtn = document.getElementById("delete-selected-btn");
+  const form = document.getElementById("history-form");
   const prevBtn = document.getElementById("history-prev-btn");
   const nextBtn = document.getElementById("history-next-btn");
   const pageInfo = document.getElementById("history-page-info");
@@ -115,6 +116,17 @@
     applyFilters();
   });
   rows().forEach((r) => r.querySelector(".history-check")?.addEventListener("change", updateDelete));
+  form?.addEventListener("submit", (event) => {
+    const selected = rows().filter((r) => r.querySelector(".history-check")?.checked).length;
+    if (!selected) {
+      event.preventDefault();
+      return;
+    }
+    const noun = selected === 1 ? "scan" : "scans";
+    if (!window.confirm(`Delete ${selected} selected ${noun}? This removes the scan history, activity log, and generated reports.`)) {
+      event.preventDefault();
+    }
+  });
   prevBtn?.addEventListener("click", () => {
     if (currentPage > 1) {
       currentPage -= 1;

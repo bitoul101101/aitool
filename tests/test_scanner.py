@@ -21,6 +21,8 @@ from scanner.suppressions import TRIAGE_REVIEWED, list_suppressions, list_triage
 from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
 from reports.html_report import HTMLReporter
+from reports.json_report import JSONReporter
+from reports.threat_dragon_report import ThreatDragonReporter
 from services.access_control import ROLE_ADMIN, ROLE_SCANNER, ROLE_TRIAGE, ROLE_VIEWER, UserContext
 from services.single_user_state import SingleUserConfig, SingleUserState
 from tests._support import install_browser_session as _install_browser_session
@@ -2126,13 +2128,21 @@ def test_results_page_is_server_rendered():
         state="done",
         html_name="scan.html",
         csv_name="scan.csv",
+        json_name="scan.json",
+        sarif_name="scan.sarif",
+        threat_dragon_name="scan_threat_dragon.json",
         log_url="/api/history/log/20260318_140208",
+        csrf_token="csrf-demo",
     ).decode("utf-8")
 
     assert '<iframe class="results-frame" src="/reports/scan.html"' in html
     assert 'Open Raw HTML' in html
     assert 'Download CSV File' in html
+    assert 'Download JSON' in html
+    assert 'Download SARIF' in html
+    assert 'Download Threat Dragon' in html
     assert 'Download Logs' in html
+    assert 'Replay Threat Model' in html
     assert 'href="/scan/20260318_140208?tab=activity"' in html
     assert 'href="/scan/20260318_140208?tab=results"' in html
     assert '<h2>Results</h2>' not in html
@@ -2167,6 +2177,9 @@ def test_results_page_offers_on_demand_html_generation_when_findings_exist():
         state="done",
         html_name="",
         csv_name="scan.csv",
+        json_name="scan.json",
+        sarif_name="scan.sarif",
+        threat_dragon_name="scan_threat_dragon.json",
         log_url="/api/history/log/20260318_140208",
         can_generate_html=True,
         csrf_token="csrf-demo",
@@ -2176,6 +2189,8 @@ def test_results_page_offers_on_demand_html_generation_when_findings_exist():
     assert 'action="/scan/20260318_140208/generate-html"' in html
     assert "Generate HTML Report" in html
     assert "Download CSV File" in html
+    assert "Download Threat Dragon" in html
+    assert "Replay Threat Model" in html
     assert '<iframe class="results-frame"' not in html
 
 
@@ -2200,6 +2215,101 @@ def test_results_page_shows_html_generation_progress_card():
     assert 'data-report-generation-active="1"' in html
     assert 'src="/assets/results_page.js"' in html
     assert "Generating HTML Report..." in html
+
+
+def test_json_report_includes_structured_threat_model(tmp_path):
+    findings = [{
+        "provider_or_lib": "secret_ai_correlation",
+        "description": "Credential-like data appears near AI usage.",
+        "file": "app.py",
+        "line": 12,
+        "severity": 1,
+        "context": "production",
+    }]
+    reporter = JSONReporter(str(tmp_path), "scan_demo")
+    path = reporter.write_json(findings, meta={"project_key": "LOCAL", "repo": "repo1"})
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+
+    assert "threat_model" in payload
+    assert payload["threat_model"]["stages"]["threats"]
+    assert payload["threat_model"]["stages"]["attack_trees"]
+
+
+def test_threat_dragon_report_writes_model_file(tmp_path):
+    findings = [{
+        "provider_or_lib": "prompt_injection_risk",
+        "description": "Untrusted prompt content may influence model behavior.",
+        "file": "workflow.py",
+        "line": 44,
+        "severity": 2,
+        "context": "production",
+    }]
+    reporter = ThreatDragonReporter(str(tmp_path), "scan_demo")
+    path = reporter.write_json(findings, meta={"project_key": "LOCAL", "repo": "repo1"})
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+
+    assert payload["summary"]["title"].startswith("AI Scanner Threat Model")
+    assert payload["detail"]["diagrams"][0]["diagramType"] == "STRIDE"
+    assert payload["detail"]["diagrams"][0]["diagramJson"]["cells"]
+
+
+def test_scan_service_replay_threat_model_rewrites_exports_and_invalidates_html(tmp_path):
+    from services import scan_jobs
+
+    paths = scan_jobs.ScanJobPaths(
+        output_dir=str(tmp_path),
+        temp_dir=str(tmp_path / "tmp"),
+        history_file=str(tmp_path / "history.json"),
+        log_dir=str(tmp_path / "logs"),
+        db_file=str(tmp_path / "scan_jobs.db"),
+        suppressions_file=str(tmp_path / "suppressions.json"),
+        llm_cfg_file=str(tmp_path / "llm.json"),
+        policy_file=str(tmp_path / "policy.json"),
+        owner_map_file=str(tmp_path / "owner_map.json"),
+    )
+    service = scan_jobs.ScanJobService(
+        app_version="19.1",
+        paths=paths,
+        load_policy=lambda _path: {},
+        load_owner_map=lambda _path: {},
+        policy_version=lambda _path: "test-policy",
+        utc_now_iso=lambda: "2026-03-19T17:06:00Z",
+        git_head_commit=lambda _path: "abc123",
+        ollama_ping=lambda _url: False,
+    )
+    html_path = tmp_path / "ai_scan_demo.html"
+    html_path.write_text("old", encoding="utf-8")
+    record = {
+        "scan_id": "20260319_170000",
+        "project_key": "LOCAL",
+        "repo_slugs": ["repo1"],
+        "repo_details": {"repo1": {"owner": "User", "branch": "main", "commit": "abc123"}},
+        "started_at_utc": "2026-03-19T17:00:00Z",
+        "completed_at_utc": "2026-03-19T17:05:00Z",
+        "state": "done",
+        "total": 1,
+        "reports": {"__all__": {"html": str(html_path), "html_name": html_path.name}},
+        "findings": [{
+            "provider_or_lib": "prompt_injection_risk",
+            "description": "Prompt content may be influenced by untrusted data.",
+            "file": "agent.py",
+            "line": 21,
+            "severity": 2,
+            "context": "production",
+        }],
+        "inventory": {"repos_using_ai_count": 1, "provider_count": 1, "model_count": 0, "repo_profiles": []},
+    }
+    service._upsert_job_record(record)
+
+    updated = service.replay_threat_model("20260319_170000", replay_instructions="Focus on prompt injection")
+    reports = dict((updated.get("reports") or {}).get("__all__", {}) or {})
+
+    assert "html" not in reports
+    assert reports.get("json_name", "").endswith(".json")
+    assert reports.get("threat_dragon_name", "").endswith("_threat_dragon.json")
+    assert updated.get("threat_model_replay_count") == 1
+    assert updated.get("threat_model_replay_instructions") == "Focus on prompt injection"
+    assert not html_path.exists()
 
 
 def test_render_results_page_resolves_current_session_report():
@@ -3395,6 +3505,76 @@ def test_api_history_delete_refuses_unmanaged_paths():
         srv._invalidate_history_cache()
 
 
+def test_api_history_delete_removes_all_generated_artifacts():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    d = Path(tempfile.mkdtemp())
+    logs_dir = d / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    html = d / "ai_scan_report.html"
+    csv = d / "ai_scan_report.csv"
+    json_report = d / "ai_scan_report.json"
+    sarif = d / "ai_scan_report.sarif"
+    log_file = logs_dir / "20250317_000004.txt"
+    for path in (html, csv, json_report, sarif, log_file):
+        path.write_text("artifact", encoding="utf-8")
+
+    orig_out = srv.OUTPUT_DIR
+    orig_hist = srv.HISTORY_FILE
+    orig_log = srv.LOG_DIR
+    orig_db = srv.DB_FILE
+    srv.OUTPUT_DIR = str(d)
+    srv.HISTORY_FILE = str(d / "scan_history.json")
+    srv.LOG_DIR = str(logs_dir)
+    srv.DB_FILE = str(d / "scan_jobs.db")
+    srv._invalidate_history_cache()
+
+    try:
+        handler = DummyHandler()
+        record = {
+            "scan_id": "20250317_000004",
+            "project_key": "COGI",
+            "repo_slugs": ["repo1"],
+            "reports": {
+                "__all__": {
+                    "html": str(html),
+                    "csv": str(csv),
+                    "json": str(json_report),
+                    "sarif": str(sarif),
+                }
+            },
+            "log_file": str(log_file),
+        }
+        with patch.object(srv, "_load_history", return_value=[record]), patch.object(srv, "_delete_history") as delete_mock:
+            srv._Handler._api_history_delete(handler, {"scan_ids": ["20250317_000004"]})
+
+        assert handler.payload[0] == 200
+        assert handler.payload[1]["errors"] == []
+        assert not html.exists()
+        assert not csv.exists()
+        assert not json_report.exists()
+        assert not sarif.exists()
+        assert not log_file.exists()
+        delete_mock.assert_called_once_with(["20250317_000004"])
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv.HISTORY_FILE = orig_hist
+        srv.LOG_DIR = orig_log
+        srv.DB_FILE = orig_db
+        srv._invalidate_history_cache()
+
+
 def test_stop_active_scan_kills_processes_and_marks_stopped():
     import app_server as srv
 
@@ -3660,6 +3840,7 @@ def test_run_scan_with_no_repos_completes_cleanly():
     assert report.get("csv_name", "").endswith(".csv")
     assert report.get("json_name", "").endswith(".json")
     assert report.get("sarif_name", "").endswith(".sarif")
+    assert report.get("threat_dragon_name", "").endswith("_threat_dragon.json")
     assert all(ord(ch) < 128 for entry in session.log_lines for ch in entry["msg"])
 
 

@@ -1,0 +1,512 @@
+{
+  "summary": {
+    "title": "AI Scanner Threat Model - dvllm",
+    "owner": "Unknown",
+    "description": "Threat model generated from scan evidence, repository signals, and staged analysis.",
+    "id": 0
+  },
+  "detail": {
+    "contributors": [
+      {
+        "name": "AI Security & Compliance Scanner"
+      }
+    ],
+    "reviewer": "Unknown",
+    "diagrams": [
+      {
+        "title": "Repository Threat Model",
+        "diagramType": "STRIDE",
+        "id": 0,
+        "size": {
+          "width": 980,
+          "height": 720
+        },
+        "diagramJson": {
+          "cells": [
+            {
+              "type": "tm.Actor",
+              "id": "actor_12dea96fec20",
+              "position": {
+                "x": 40,
+                "y": 40
+              },
+              "size": {
+                "width": 160,
+                "height": 80
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "User / Browser"
+                }
+              }
+            },
+            {
+              "type": "tm.Actor",
+              "id": "actor_3dacbce532cc",
+              "position": {
+                "x": 40,
+                "y": 170
+              },
+              "size": {
+                "width": 160,
+                "height": 80
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "Developer / Operator"
+                }
+              }
+            },
+            {
+              "type": "tm.Actor",
+              "id": "actor_040f06fd7740",
+              "position": {
+                "x": 40,
+                "y": 300
+              },
+              "size": {
+                "width": 160,
+                "height": 80
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "Untrusted Content Source"
+                }
+              }
+            },
+            {
+              "type": "tm.Actor",
+              "id": "actor_90c5d1358d12",
+              "position": {
+                "x": 40,
+                "y": 430
+              },
+              "size": {
+                "width": 160,
+                "height": 80
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "External / Local AI Provider"
+                }
+              }
+            },
+            {
+              "type": "tm.Process",
+              "id": "proc_7d1043473d55",
+              "position": {
+                "x": 310,
+                "y": 30
+              },
+              "size": {
+                "width": 110,
+                "height": 110
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "Application\nRuntime"
+                }
+              }
+            },
+            {
+              "type": "tm.Process",
+              "id": "proc_36847a298bc3",
+              "position": {
+                "x": 310,
+                "y": 180
+              },
+              "size": {
+                "width": 110,
+                "height": 110
+              },
+              "threats": [
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Cross Context Injection in main.py",
+                  "type": "Information disclosure",
+                  "description": "Conversation history or session memory injected into the active prompt context without a trust boundary — a poisoned prior turn can carry instructions into future interactions (cross-context injection). Validate and sanitise stored context before reuse.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Debug Mode in main.py",
+                  "type": "Information disclosure",
+                  "description": "Debug or verbose mode is enabled — this may expose full prompts, API keys, or internal data in logs; disable before deploying to production.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Hardcoded Credential Db in transaction_db.py",
+                  "type": "Information disclosure",
+                  "description": "Plaintext credentials inserted directly into the database — passwords must be hashed (bcrypt/argon2) before storage; never store or commit plaintext passwords in seed data or fixtures.",
+                  "mitigation": "Move credentials to a managed secret store and rotate any exposed values.\nPrevent secret-bearing values from entering prompts, logs, and model requests."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Llm Output File Write in main.py",
+                  "type": "Information disclosure",
+                  "description": "LLM output written directly to a file without validation — an attacker could inject path traversal sequences; validate and sanitise before writing.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Llm Tool No Authz in tools.py",
+                  "type": "Elevation of privilege",
+                  "description": "LLM agent tool defined — verify that tool functions enforce authorization checks; without them an LLM can be manipulated into accessing arbitrary users' data (excessive agency / IDOR).",
+                  "mitigation": "Require explicit approval and argument validation for model-triggered actions.\nRestrict execution to allowlisted tools with audited inputs and outputs."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Llm Tool No Authz in tools.py",
+                  "type": "Elevation of privilege",
+                  "description": "LLM agent tool defined — verify that tool functions enforce authorization checks; without them an LLM can be manipulated into accessing arbitrary users' data (excessive agency / IDOR).",
+                  "mitigation": "Require explicit approval and argument validation for model-triggered actions.\nRestrict execution to allowlisted tools with audited inputs and outputs."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Llm Tool No Authz in tools.py",
+                  "type": "Elevation of privilege",
+                  "description": "LLM agent tool defined — verify that tool functions enforce authorization checks; without them an LLM can be manipulated into accessing arbitrary users' data (excessive agency / IDOR).",
+                  "mitigation": "Require explicit approval and argument validation for model-triggered actions.\nRestrict execution to allowlisted tools with audited inputs and outputs."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Sql In Tool Description in tools.py",
+                  "type": "Elevation of privilege",
+                  "description": "Raw SQL query in an LLM tool description — leaking query structure to the LLM enables prompt injection: an attacker can craft inputs that manipulate the query to target different records or users.",
+                  "mitigation": "Require explicit approval and argument validation for model-triggered actions.\nRestrict execution to allowlisted tools with audited inputs and outputs."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Sql Injection Direct in transaction_db.py",
+                  "type": "Information disclosure",
+                  "description": "SQL query built with an f-string passed directly to cursor.execute() — user-controlled input without parameterisation enables SQL injection; use parameterised queries with ? placeholders.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Sql Injection Direct in transaction_db.py",
+                  "type": "Information disclosure",
+                  "description": "SQL query built with an f-string passed directly to cursor.execute() — user-controlled input without parameterisation enables SQL injection; use parameterised queries with ? placeholders.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Unsafe Output Rendering in main.py",
+                  "type": "Information disclosure",
+                  "description": "LLM output rendered as raw HTML — without sanitisation this enables stored XSS; always escape or sanitise LLM output before rendering.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Critical",
+                  "title": "Unsafe Output Rendering in utils.py",
+                  "type": "Information disclosure",
+                  "description": "LLM output rendered as raw HTML — without sanitisation this enables stored XSS; always escape or sanitise LLM output before rendering.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "High",
+                  "title": "Langchain in main.py",
+                  "type": "Information disclosure",
+                  "description": "LangChain framework is used — review which underlying providers are invoked and whether each is approved.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "High",
+                  "title": "Langchain in main.py",
+                  "type": "Information disclosure",
+                  "description": "LangChain framework is used — review which underlying providers are invoked and whether each is approved.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                },
+                {
+                  "status": "Open",
+                  "severity": "Medium",
+                  "title": "Langchain in tools.py",
+                  "type": "Information disclosure",
+                  "description": "LangChain framework is used — review which underlying providers are invoked and whether each is approved.",
+                  "mitigation": "Review the affected code path and document whether the AI behavior is intentional and controlled.\nAdd boundary checks, logging, and policy controls around this AI interaction."
+                }
+              ],
+              "outOfScope": false,
+              "hasOpenThreats": true,
+              "attrs": {
+                "text": {
+                  "text": "AI\nIntegration Layer"
+                }
+              }
+            },
+            {
+              "type": "tm.Process",
+              "id": "proc_0608c4054662",
+              "position": {
+                "x": 310,
+                "y": 330
+              },
+              "size": {
+                "width": 110,
+                "height": 110
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "Agent\n/ Tool Orchestrator"
+                }
+              }
+            },
+            {
+              "type": "tm.Store",
+              "id": "store_dfba7aade086",
+              "position": {
+                "x": 590,
+                "y": 40
+              },
+              "size": {
+                "width": 170,
+                "height": 80
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "Configuration / Secrets"
+                }
+              }
+            },
+            {
+              "type": "tm.Store",
+              "id": "store_474c797713f3",
+              "position": {
+                "x": 590,
+                "y": 160
+              },
+              "size": {
+                "width": 170,
+                "height": 80
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "Logs / Outputs"
+                }
+              }
+            },
+            {
+              "type": "tm.Store",
+              "id": "store_0352a8acc949",
+              "position": {
+                "x": 590,
+                "y": 280
+              },
+              "size": {
+                "width": 170,
+                "height": 80
+              },
+              "threats": [],
+              "outOfScope": false,
+              "hasOpenThreats": false,
+              "attrs": {
+                "text": {
+                  "text": "Database / Internal Records"
+                }
+              }
+            },
+            {
+              "type": "tm.Flow",
+              "id": "flow_5d5bb4ef7342",
+              "source": {
+                "id": "actor_12dea96fec20"
+              },
+              "target": {
+                "id": "proc_7d1043473d55"
+              },
+              "size": {
+                "width": 10,
+                "height": 10
+              },
+              "smooth": true,
+              "labels": [
+                {
+                  "position": 0.5,
+                  "attrs": {
+                    "text": {
+                      "text": "User Request",
+                      "font-size": "small"
+                    }
+                  }
+                }
+              ],
+              "threats": [],
+              "hasOpenThreats": false,
+              "outOfScope": false,
+              "isPublicNetwork": true,
+              "attrs": {}
+            },
+            {
+              "type": "tm.Flow",
+              "id": "flow_b23c6a05c961",
+              "source": {
+                "id": "proc_7d1043473d55"
+              },
+              "target": {
+                "id": "proc_36847a298bc3"
+              },
+              "size": {
+                "width": 10,
+                "height": 10
+              },
+              "smooth": true,
+              "labels": [
+                {
+                  "position": 0.5,
+                  "attrs": {
+                    "text": {
+                      "text": "Application Data to AI",
+                      "font-size": "small"
+                    }
+                  }
+                }
+              ],
+              "threats": [],
+              "hasOpenThreats": false,
+              "outOfScope": false,
+              "isPublicNetwork": true,
+              "attrs": {}
+            },
+            {
+              "type": "tm.Flow",
+              "id": "flow_95a69ff80052",
+              "source": {
+                "id": "proc_36847a298bc3"
+              },
+              "target": {
+                "id": "actor_90c5d1358d12"
+              },
+              "size": {
+                "width": 10,
+                "height": 10
+              },
+              "smooth": true,
+              "labels": [
+                {
+                  "position": 0.5,
+                  "attrs": {
+                    "text": {
+                      "text": "Prompt / Model Request",
+                      "font-size": "small"
+                    }
+                  }
+                }
+              ],
+              "threats": [],
+              "hasOpenThreats": false,
+              "outOfScope": false,
+              "isPublicNetwork": true,
+              "attrs": {}
+            },
+            {
+              "type": "tm.Flow",
+              "id": "flow_6f7ea0507aca",
+              "source": {
+                "id": "proc_36847a298bc3"
+              },
+              "target": {
+                "id": "proc_0608c4054662"
+              },
+              "size": {
+                "width": 10,
+                "height": 10
+              },
+              "smooth": true,
+              "labels": [
+                {
+                  "position": 0.5,
+                  "attrs": {
+                    "text": {
+                      "text": "Model Decision to Tool Action",
+                      "font-size": "small"
+                    }
+                  }
+                }
+              ],
+              "threats": [],
+              "hasOpenThreats": false,
+              "outOfScope": false,
+              "isPublicNetwork": false,
+              "attrs": {}
+            }
+          ]
+        }
+      }
+    ],
+    "metadata": {
+      "generated_at_utc": "2026-03-19T17:06:06.650706Z",
+      "replay_instructions": "",
+      "gaps": [
+        "No major structural threat-model gaps were inferred from the current scan, but trust-boundary validation still requires human review."
+      ],
+      "attack_trees": [
+        {
+          "title": "Cross Context Injection in main.py",
+          "root": "Exploit Cross Context Injection in main.py",
+          "paths": [
+            "Identify reachable path in main.py",
+            "Abuse User / Browser input or boundary crossing to target AI Integration Layer",
+            "Impact confidentiality/integrity through information disclosure scenario"
+          ]
+        },
+        {
+          "title": "Debug Mode in main.py",
+          "root": "Exploit Debug Mode in main.py",
+          "paths": [
+            "Identify reachable path in main.py",
+            "Abuse User / Browser input or boundary crossing to target AI Integration Layer",
+            "Impact confidentiality/integrity through information disclosure scenario"
+          ]
+        },
+        {
+          "title": "Hardcoded Credential Db in transaction_db.py",
+          "root": "Exploit Hardcoded Credential Db in transaction_db.py",
+          "paths": [
+            "Identify reachable path in transaction_db.py",
+            "Abuse User / Browser input or boundary crossing to target AI Integration Layer",
+            "Impact confidentiality/integrity through information disclosure scenario"
+          ]
+        }
+      ]
+    }
+  }
+}
