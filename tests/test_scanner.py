@@ -63,6 +63,42 @@ def test_detects_hardcoded_key():
     assert "Security" in cats
 
 
+def test_secret_ai_correlation_fires_for_secret_plus_live_ai_usage():
+    detector = AIUsageDetector()
+    code = (
+        'OPENAI_API_KEY = "sk-abcdefghijklmnopqrstuvwxyz123456"\n'
+        "from openai import OpenAI\n"
+        "client = OpenAI(api_key=OPENAI_API_KEY)\n"
+        'user_input = "hello"\n'
+        'prompt = f"Answer: {user_input}"\n'
+        'client.chat.completions.create(model="gpt-4o-mini", messages=[{"role":"user","content":prompt}])\n'
+    )
+    tmpdir, _ = make_test_file(code)
+    findings = detector.scan(tmpdir, repo_name="repo1")
+
+    correlated = [f for f in findings if f.get("provider_or_lib") == "secret_ai_correlation"]
+    assert correlated, "Expected correlated secret-to-AI finding"
+    finding = correlated[0]
+    assert finding["severity"] == 1
+    assert "correlated_evidence" in finding
+    assert len(finding["correlated_evidence"]) >= 2
+    assert "why_flagged" in finding
+
+
+def test_secret_ai_correlation_does_not_fire_without_prompt_flow_signal():
+    detector = AIUsageDetector()
+    code = (
+        'OPENAI_API_KEY = "sk-abcdefghijklmnopqrstuvwxyz123456"\n'
+        "from openai import OpenAI\n"
+        "client = OpenAI(api_key=OPENAI_API_KEY)\n"
+    )
+    tmpdir, _ = make_test_file(code)
+    findings = detector.scan(tmpdir, repo_name="repo1")
+
+    correlated = [f for f in findings if f.get("provider_or_lib") == "secret_ai_correlation"]
+    assert not correlated
+
+
 def test_detects_openai_key_pattern():
     detector = AIUsageDetector()
     code = 'api_key = "sk-abcdefghijklmnopqrstuvwxyz123456"\n'

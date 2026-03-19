@@ -10,6 +10,7 @@ Enhancements:
   F  Dynamic imports        — importlib/__import__/dynamic require() detected
   G  Data exfiltration      — file/df/db/env content piped to LLM flagged
   H  Unsafe model loading   — torch.load / pickle / remote from_pretrained flagged
+  I  Secret/AI correlation  — secret + live AI usage + prompt/data handling escalated
 """
 
 import re
@@ -47,6 +48,30 @@ _CODE_EXTENSIONS = {
     '.rs', '.swift', '.kt', '.scala', '.groovy',
     '.rb', '.sh', '.bash', '.ps1', '.r', '.pl', '.sql',
 }
+
+_SECRET_FINDING_LIBS = {
+    "hardcoded_key",
+    "openai_key_pattern",
+    "anthropic_key_pattern",
+    "js_hardcoded_key",
+    "entropy_secret",
+    "notebook_output_secret",
+    "minified_bundle_secret",
+}
+
+_AI_USAGE_CATEGORIES = {
+    "External AI API",
+    "AI Proxy/Gateway",
+    "Agent Framework",
+    "RAG/Vector DB",
+}
+
+_PROMPT_FLOW_RE = re.compile(
+    r"(\bprompt\b|\bmessages\b|\buser[_\- ]?input\b|\brequest\b|\bresponse\b"
+    r"|\boutput\b|\bcontent\b|\bchat_history\b|\bcontext\b|\bstream\b|\binput\s*\("
+    r"|request\.(get_json|json|form|args)|flask\.request|fastapi|gradio|streamlit)",
+    re.IGNORECASE,
+)
 
 # ── Entropy guard for credential patterns ────────────────────────
 # Real secrets have high entropy (≥3.0 bits/char).  Documentation examples,
@@ -373,6 +398,14 @@ def _scan_exfil_multiline(
             })
 
     return findings
+
+
+def _normalize_evidence_label(finding: Dict[str, Any]) -> str:
+    label = str(finding.get("provider_or_lib", "") or "").strip()
+    capability = str(finding.get("capability", "") or "").strip()
+    if capability:
+        return f"{label}: {capability}"
+    return label or "signal"
 
 
 # ── Task 12: Calibrated Confidence Scoring ───────────────────────
@@ -797,6 +830,17 @@ class AIUsageDetector:
                 _scan_exfil_multiline(stripped, lines, rel_path, repo_name, is_test)
             )
 
+        findings.extend(
+            self._correlate_secret_to_ai_usage(
+                findings=findings,
+                content=content,
+                rel_path=rel_path,
+                repo_name=repo_name,
+                context=ctx_str,
+                is_test=is_test,
+            )
+        )
+
         return self._dedupe(findings)
 
     # ── D: Corroboration boost ────────────────────────────────────
@@ -825,6 +869,85 @@ class AIUsageDetector:
                     f["corroboration_count"] = distinct_libs
 
     # ── File walker ───────────────────────────────────────────────
+    def _correlate_secret_to_ai_usage(
+        self,
+        *,
+        findings: List[Dict[str, Any]],
+        content: str,
+        rel_path: str,
+        repo_name: str,
+        context: str,
+        is_test: bool,
+    ) -> List[Dict[str, Any]]:
+        secrets = [f for f in findings if str(f.get("provider_or_lib", "")) in _SECRET_FINDING_LIBS]
+        ai_usage = [
+            f for f in findings
+            if (
+                str(f.get("category", "")) in _AI_USAGE_CATEGORIES
+                or (bool(f.get("_symbol_tracked")) and str(f.get("category", "")) == "External AI API")
+            )
+        ]
+        if not secrets or not ai_usage:
+            return []
+        prompt_flow = _PROMPT_FLOW_RE.search(content or "")
+        if not prompt_flow:
+            return []
+
+        evidence = secrets[:2] + ai_usage[:2]
+        evidence_labels = [_normalize_evidence_label(item) for item in evidence]
+        ai_libs = sorted({
+            str(f.get("provider_or_lib", "") or "").strip()
+            for f in ai_usage
+            if f.get("provider_or_lib")
+        })
+        line_candidates = [
+            int(f.get("line", 0) or 0)
+            for f in evidence
+            if int(f.get("line", 0) or 0) > 0
+        ]
+        line_no = min(line_candidates) if line_candidates else 1
+        severity = 2 if context in {"docs", "test", "deleted_file"} or is_test else 1
+        policy_status = "REVIEW" if severity > 1 else "CRITICAL"
+        snippet = self._get_snippet((content or "").splitlines(), max(line_no - 1, 0))
+        match_text = " | ".join(evidence_labels)[:300]
+        provider_text = ", ".join(ai_libs) if ai_libs else "AI provider"
+        prompt_signal = prompt_flow.group(0)
+        uid = hashlib.md5(
+            f"{repo_name}::{rel_path}::secret-ai-correlation::{provider_text}::{prompt_signal}".encode()
+        ).hexdigest()
+        return [{
+            "repo": repo_name,
+            "category": "Security",
+            "provider_or_lib": "secret_ai_correlation",
+            "capability": "Secret + AI Request Correlation",
+            "severity": severity,
+            "file": rel_path,
+            "line": line_no,
+            "snippet": snippet,
+            "match": match_text,
+            "policy_status": policy_status,
+            "is_notebook": False,
+            "description": (
+                f"A committed secret appears in the same file as live AI usage ({provider_text}) "
+                f"and prompt/input/output handling ('{prompt_signal}'). This combination is a much "
+                "stronger indicator of an active credential exposure path than isolated pattern hits."
+            ),
+            "confidence": 95 if severity == 1 else 88,
+            "context": context,
+            "corroboration_count": len({
+                item.get("provider_or_lib", "")
+                for item in evidence
+                if item.get("provider_or_lib")
+            }),
+            "correlated_evidence": evidence_labels,
+            "why_flagged": [
+                "secret-like credential detected in the file",
+                f"live AI integration detected ({provider_text})",
+                f"prompt/data handling signal detected ('{prompt_signal}')",
+            ],
+            "_hash": uid,
+        }]
+
     def _iter_files(self, root: Path):
         for path in root.rglob("*"):
             if not path.is_file():

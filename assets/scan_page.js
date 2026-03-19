@@ -12,6 +12,8 @@
   const localRepoPathInput = document.getElementById("local-repo-path-input");
   const localRepoBrowseBtn = document.getElementById("local-repo-browse-btn");
   const localRepoPickerStatus = document.getElementById("local-repo-picker-status");
+  const repoActions = document.getElementById("repo-actions");
+  const noReposMessage = document.getElementById("no-repos-message");
   const logEl = document.getElementById("scan-log");
   const textEl = document.getElementById("scan-state-text");
   const timelineEl = document.getElementById("phase-timeline");
@@ -58,7 +60,7 @@
     const selectedCount = repoCheckboxes().filter(function (cb) { return cb.checked; }).length;
     const hasLocalPath = Boolean(localRepoPathInput && localRepoPathInput.value.trim());
     if (repoCount) {
-      repoCount.textContent = hasLocalPath ? "Local path selected" : selectedCount + " selected";
+      repoCount.textContent = hasLocalPath ? "" : selectedCount + " selected";
     }
     if (startScanBtn && !startScanBtn.dataset.blockedByRun) {
       startScanBtn.disabled = !hasLocalPath && selectedCount === 0;
@@ -124,6 +126,12 @@
     }
     document.getElementById("select-all-repos-btn")?.toggleAttribute("disabled", usingLocal);
     document.getElementById("select-none-repos-btn")?.toggleAttribute("disabled", usingLocal);
+    if (repoActions) {
+      repoActions.classList.toggle("hidden", usingLocal);
+    }
+    if (noReposMessage) {
+      noReposMessage.classList.toggle("hidden", usingLocal);
+    }
     updateRepoCount();
   }
 
@@ -201,7 +209,7 @@
       }
       localRepoPathInput.value = String(data.path);
       updateTargetMode();
-      setLocalRepoPickerStatus("Selected local repository: " + String(data.path), false);
+      setLocalRepoPickerStatus("", false);
     } catch (err) {
       setLocalRepoPickerStatus(String(err && err.message ? err.message : "Unable to open folder picker."), true);
     } finally {
@@ -331,9 +339,10 @@
       return;
     }
     const blocked = String(data.state || "").toLowerCase() === "running";
+    const hasLocalPath = Boolean(localRepoPathInput && localRepoPathInput.value.trim());
     if (startScanBtn) {
       startScanBtn.dataset.blockedByRun = blocked ? "1" : "";
-      startScanBtn.disabled = blocked || repoCheckboxes().filter(function (cb) { return cb.checked; }).length === 0;
+      startScanBtn.disabled = blocked || (!hasLocalPath && repoCheckboxes().filter(function (cb) { return cb.checked; }).length === 0);
     }
     if (runningNotice) {
       runningNotice.textContent = "A scan is in progress. Wait until it finishes before starting a new scan.";

@@ -335,7 +335,7 @@ def render_scan_page(
     repo_rows = "".join(
         f'<label class="repo-row" data-repo-name="{_esc(repo.get("slug","").lower())}"><input type="checkbox" class="repo-checkbox" name="repo_slugs" value="{_esc(repo.get("slug",""))}"{" checked" if repo.get("slug","") in selected else ""}><span>{_esc(repo.get("slug","").lower())}</span></label>'
         for repo in repos
-    ) or '<div class="muted">No repositories available for the selected project.</div>'
+    ) or '<div class="muted" id="no-repos-message">No repositories available for the selected project.</div>'
     models = list(dict.fromkeys([m for m in llm_models if m] + ([llm_cfg.get("model", "")] if llm_cfg.get("model") else [])))
     model_options = "".join(
         f'<option value="{_esc(model)}"{" selected" if model == llm_cfg.get("model", "") else ""}>{_esc(model)}</option>'
@@ -496,19 +496,19 @@ def render_scan_page(
             <button type="button" class="ghost" id="local-repo-browse-btn">Browse...</button>
           </div>
         </div>
-        <div class="muted" id="local-repo-picker-status" style="align-self:end">If a local path is provided, the tool scans that repository instead of the selected Bitbucket repos.</div>
+        <div></div>
         <div></div>
       </div>
       <div class="repo-toolbar">
-        <div><label>Scan Scope</label><select name="scan_scope" id="scan-scope-select">{scope_options}</select></div>
+        <div><label>Scan Scope</label><select name="scan_scope" id="scan-scope-select">{scope_options}</select><div class="muted" id="scan-scope-help" style="display:block;margin-top:6px">Changed-file and baseline-aware scans reduce traversal and LLM work on repeated runs.</div></div>
         <div id="compare-ref-wrap"{" class=\"hidden\"" if scope_value != "branch_diff" else ""}><label>Compare Branch</label><input type="text" name="compare_ref" id="compare-ref-input" value="{_esc(compare_ref_value)}" placeholder="e.g. master"></div>
-        <div class="muted" id="scan-scope-help" style="align-self:end">Changed-file and baseline-aware scans reduce traversal and LLM work on repeated runs.</div>
+        <div></div>
       </div>
       <div class="repo-notices">
         <div class="warn-box{" hidden" if not running_notice else ""}" id="running-scan-notice">{_esc(running_notice)}</div>
         <div class="warn-box{" hidden" if not model_warning else ""}" id="model-size-warning">{_esc(model_warning)}</div>
       </div>
-      <div class="repo-actions">
+      <div class="repo-actions" id="repo-actions">
         <span class="muted" id="repo-selection-count"></span>
         <button type="button" class="ghost" id="select-all-repos-btn">All</button>
         <button type="button" class="ghost" id="select-none-repos-btn">None</button>
