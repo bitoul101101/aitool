@@ -193,6 +193,99 @@ def test_detector_scan_excludes_explicit_paths():
     assert "output/skip.py" not in files
 
 
+def test_self_scan_ignores_internal_pattern_catalog_findings():
+    detector = AIUsageDetector()
+    code = (
+        '{\n'
+        '    "pattern": r"exec\\(|eval\\(|subprocess\\.|os\\.system\\(|shell=True",\n'
+        '    "category": "Security",\n'
+        '    "provider_or_lib": "unsafe_code_exec",\n'
+        '}\n'
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".py",
+        "scanner/patterns.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    assert findings == []
+
+
+def test_shell_cmd_from_llm_ignores_fixed_argv_subprocess_calls():
+    detector = AIUsageDetector()
+    code = (
+        "import subprocess\n"
+        "def gpu_stats():\n"
+        "    result = subprocess.run(\n"
+        '        ["nvidia-smi", "--query-gpu=name"],\n'
+        "        capture_output=True,\n"
+        "        text=True,\n"
+        "        timeout=2,\n"
+        "    )\n"
+        "    return result.stdout\n"
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".py",
+        "app_server.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    assert "shell_cmd_from_llm" not in {f["provider_or_lib"] for f in findings}
+
+
+def test_sql_in_tool_description_ignores_parameterized_sql_without_tool_context():
+    detector = AIUsageDetector()
+    code = (
+        "import sqlite3\n"
+        "def load_record(conn, scan_id):\n"
+        "    return conn.execute(\n"
+        '        "SELECT record_json FROM scan_jobs WHERE scan_id = ?",\n'
+        "        (scan_id,),\n"
+        "    ).fetchone()\n"
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".py",
+        "services/scan_jobs.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    assert "sql_in_tool_description" not in {f["provider_or_lib"] for f in findings}
+
+
+def test_file_content_to_llm_requires_real_prompt_or_llm_sink_context():
+    detector = AIUsageDetector()
+    code = (
+        "from pathlib import Path\n"
+        "import hashlib\n"
+        "def policy_version(path: str) -> str:\n"
+        "    data = Path(path).read_bytes()\n"
+        "    return hashlib.sha256(data).hexdigest()[:12]\n"
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".py",
+        "app_server.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    assert "file_content_to_llm" not in {f["provider_or_lib"] for f in findings}
+
+
 # ── Security Analyzer tests ───────────────────────────────────────
 
 POLICY = {

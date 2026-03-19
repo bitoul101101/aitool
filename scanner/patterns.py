@@ -1630,8 +1630,8 @@ DEEPTEAM_PATTERNS: List[Dict[str, Any]] = [
     {
         "pattern": (
             r"(?:open|read_text|read_file|load_document|Document)\s*\([^)]+\)"
-            r".*?(?:prompt|messages|content|system_prompt)"
-            r"|(?:prompt|messages|content|system_prompt)"
+            r".*?(?:prompt|messages|system_prompt|user_message)"
+            r"|(?:prompt|messages|system_prompt|user_message)"
             r".*?(?:open|read_text|read_file|load_document|Document)\s*\("
         ),
         "category": "Security",

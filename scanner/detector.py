@@ -73,6 +73,15 @@ _PROMPT_FLOW_RE = re.compile(
     re.IGNORECASE,
 )
 
+_TOOL_MARKER_RE = re.compile(r"Tool\s*\(|BaseTool|StructuredTool|@tool\b", re.IGNORECASE)
+_FIXED_ARGV_SUBPROCESS_RE = re.compile(
+    r"^\s*\w+\s*=\s*subprocess\.(?:run|call|Popen|check_output|check_call)\s*\($"
+)
+_REPORT_PROVIDER_MAP_RE = re.compile(r'^\s*"[^"]+"\s*:\s*"[^"]+"')
+_SELF_SCAN_IGNORED_PATHS = {
+    "scanner/patterns.py",
+}
+
 # ── Entropy guard for credential patterns ────────────────────────
 # Real secrets have high entropy (≥3.0 bits/char).  Documentation examples,
 # placeholder values, and env-var references (e.g. $VAR, ${VAR}) are low-
@@ -291,11 +300,10 @@ _EXFIL_SINK_RE = re.compile(
     r"|ChatCompletion\.|litellm\.completion|anthropic\."
     r"|langchain|llm\.invoke|llm\.predict|llm\.generate"
     r"|\bprompt\s*[\+=]|\bmessages\s*[\+=\[]"
-    r"|\bcontent\s*[\+=]|\bsystem_prompt\b|\buser_message\b"
+    r"|\bsystem_prompt\b|\buser_message\b"
     r"|\bHumanMessage\b|\bSystemMessage\b|\bAIMessage\b"
     r"|\bPromptTemplate\b|\bChatPromptTemplate\b"
-    r"|f[\"'].*\{.*\}.*[\"']"          # f-string (any) near source = suspicious
-    r"|\+\s*str\(|\bformat\s*\()",
+    r"|\bprompt\s*=\s*f[\"']|\bmessages\s*=\s*\[)",
     re.IGNORECASE,
 )
 
@@ -359,6 +367,15 @@ def _scan_exfil_multiline(
             win_start   = max(0, source_line - 2)           # small look-behind
             win_end     = min(total_lines, source_line + EXFIL_WINDOW_LINES + 1)
             window_text = "\n".join(lines[win_start:win_end])
+            line_text = lines[source_line] if source_line < total_lines else ""
+
+            if _should_ignore_internal_match(
+                rel_path,
+                rule.get("provider_or_lib", ""),
+                line_text,
+                local_window=window_text,
+            ):
+                continue
 
             if not _EXFIL_SINK_RE.search(window_text):
                 continue
@@ -406,6 +423,39 @@ def _normalize_evidence_label(finding: Dict[str, Any]) -> str:
     if capability:
         return f"{label}: {capability}"
     return label or "signal"
+
+
+def _normalize_rel_path(rel_path: str) -> str:
+    return str(rel_path or "").replace("\\", "/").lstrip("./")
+
+
+def _should_ignore_internal_match(
+    rel_path: str,
+    provider_or_lib: str,
+    line_text: str,
+    *,
+    local_window: str = "",
+) -> bool:
+    normalized = _normalize_rel_path(rel_path)
+    lib = str(provider_or_lib or "")
+    line = str(line_text or "")
+    window = str(local_window or "")
+
+    if normalized in _SELF_SCAN_IGNORED_PATHS:
+        return True
+
+    if normalized == "reports/html_report.py" and _REPORT_PROVIDER_MAP_RE.match(line):
+        return True
+
+    if lib == "shell_cmd_from_llm":
+        if _FIXED_ARGV_SUBPROCESS_RE.match(line) and "shell=True" not in window:
+            return True
+
+    if lib == "sql_in_tool_description":
+        if "?" in window and "execute(" in window and not _TOOL_MARKER_RE.search(window):
+            return True
+
+    return False
 
 
 # ── Task 12: Calibrated Confidence Scoring ───────────────────────
@@ -783,10 +833,21 @@ class AIUsageDetector:
             for m in rule["_re"].finditer(stripped):
                 line_no    = stripped[:m.start()].count("\n") + 1
                 match_text = m.group(0)
+                raw_line = lines[line_no - 1] if line_no - 1 < len(lines) else ""
+                win_start = max(0, line_no - 3)
+                win_end = min(len(lines), line_no + 2)
+                local_window = "\n".join(lines[win_start:win_end])
+
+                if _should_ignore_internal_match(
+                    rel_path,
+                    lib,
+                    raw_line,
+                    local_window=local_window,
+                ):
+                    continue
 
                 # Entropy guard
                 if rule.get("entropy_guard"):
-                    raw_line = lines[line_no - 1] if line_no - 1 < len(lines) else ""
                     if _credential_value_is_low_entropy(match_text, raw_line):
                         continue
 
