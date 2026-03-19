@@ -4179,6 +4179,44 @@ def test_send_swallows_client_disconnects():
     srv._Handler._send(handler, 200, "text/plain", b"ok")
 
 
+def test_do_get_swallows_client_disconnect_from_api_json_write():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/api/status"
+        headers = {}
+
+        def send_response(self, _status):
+            return None
+
+        def send_header(self, _name, _value):
+            return None
+
+        def _cors(self):
+            return None
+
+        def end_headers(self):
+            return None
+
+        @property
+        def wfile(self):
+            class BrokenWriter:
+                def write(self, _data):
+                    raise ConnectionAbortedError(10053, "connection aborted")
+            return BrokenWriter()
+
+        _send = srv._Handler._send
+        _json = srv._Handler._json
+        _404 = srv._Handler._404
+        do_GET = srv._Handler.do_GET
+
+    handler = DummyHandler()
+
+    with patch.object(srv._Handler, "_handle_page_get", return_value=False), \
+         patch.object(srv._Handler, "_handle_api_get", side_effect=lambda self, parsed: self._json({"ok": True}) or True):
+        handler.do_GET()
+
+
 def test_run_scan_with_no_repos_completes_cleanly():
     import app_server as srv
 

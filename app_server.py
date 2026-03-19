@@ -1556,75 +1556,93 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     # ── Routing ───────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _is_client_disconnect(exc: BaseException) -> bool:
+        if isinstance(exc, (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)):
+            return True
+        if isinstance(exc, OSError) and getattr(exc, "winerror", None) in {10053, 10054}:
+            return True
+        return False
+
     def do_GET(self):
-        parsed = urlparse(self.path)
-        if _Handler._handle_page_get(self, parsed):
-            return
-        if _Handler._handle_api_get(self, parsed):
-            return
-        self._404()
+        try:
+            parsed = urlparse(self.path)
+            if _Handler._handle_page_get(self, parsed):
+                return
+            if _Handler._handle_api_get(self, parsed):
+                return
+            self._404()
+        except Exception as exc:
+            if _Handler._is_client_disconnect(exc):
+                return
+            raise
 
     def do_POST(self):
-        p = urlparse(self.path).path
-        body = self._read_body()
-        exempt_paths = {"/login", "/connect", "/api/connect"}
-        if p not in exempt_paths:
-            if not _has_valid_browser_session(self):
-                return self._err(401, "Authentication required")
-            if not _csrf_matches(self, body):
-                return self._err(403, "CSRF validation failed")
-        if p in ("/login", "/connect"):
-            return self._page_connect(body)
-        elif p == "/app/exit":
-            return self._page_app_exit()
-        elif p == "/scan/start":
-            return self._page_scan_start(body)
-        elif p == "/scan/stop":
-            return self._page_scan_stop()
-        elif p.startswith("/scan/") and p.endswith("/generate-html"):
-            return self._page_generate_html_report(p[6:-14], body)
-        elif p.startswith("/scan/") and p.endswith("/replay-threat-model"):
-            return self._page_replay_threat_model(p[6:-20], body)
-        elif p == "/history/delete":
-            return self._page_history_delete(body)
-        elif p == "/findings/bulk":
-            return self._page_findings_bulk(body)
-        elif p == "/settings/save":
-            return self._page_settings_save(body)
-        elif p == "/findings/triage":
-            return self._page_finding_triage(body)
-        elif p == "/findings/reset":
-            return self._page_finding_reset(body)
-        if p == "/api/connect":
-            self._api_connect(body)
-        elif p == "/api/scan/start":
-            self._api_scan_start(body)
-        elif p == "/api/local-repo/pick":
-            self._api_local_repo_pick()
-        elif p == "/api/scan/stop":
-            self._api_scan_stop()
-        elif p == "/api/ollama/start":
-            self._api_ollama_start(body)
-        elif p in ("/api/ollama", "/ollama"):
-            self._proxy_ollama(body)
-        elif p == "/api/llm/config":
-            self._api_llm_config(body)
-        elif p == "/api/settings/save":
-            self._api_settings_save(body)
-        elif p == "/api/history/delete":
-            self._api_history_delete(body)
-        elif p == "/api/findings/suppress":
-            self._api_finding_suppress(body)
-        elif p == "/api/findings/unsuppress":
-            self._api_finding_unsuppress(body)
-        elif p == "/api/findings/triage":
-            self._api_finding_triage(body)
-        elif p == "/api/findings/reset":
-            self._api_finding_reset(body)
-        elif p == "/api/app/shutdown":
-            self._api_app_shutdown()
-        else:
-            self._404()
+        try:
+            p = urlparse(self.path).path
+            body = self._read_body()
+            exempt_paths = {"/login", "/connect", "/api/connect"}
+            if p not in exempt_paths:
+                if not _has_valid_browser_session(self):
+                    return self._err(401, "Authentication required")
+                if not _csrf_matches(self, body):
+                    return self._err(403, "CSRF validation failed")
+            if p in ("/login", "/connect"):
+                return self._page_connect(body)
+            elif p == "/app/exit":
+                return self._page_app_exit()
+            elif p == "/scan/start":
+                return self._page_scan_start(body)
+            elif p == "/scan/stop":
+                return self._page_scan_stop()
+            elif p.startswith("/scan/") and p.endswith("/generate-html"):
+                return self._page_generate_html_report(p[6:-14], body)
+            elif p.startswith("/scan/") and p.endswith("/replay-threat-model"):
+                return self._page_replay_threat_model(p[6:-20], body)
+            elif p == "/history/delete":
+                return self._page_history_delete(body)
+            elif p == "/findings/bulk":
+                return self._page_findings_bulk(body)
+            elif p == "/settings/save":
+                return self._page_settings_save(body)
+            elif p == "/findings/triage":
+                return self._page_finding_triage(body)
+            elif p == "/findings/reset":
+                return self._page_finding_reset(body)
+            if p == "/api/connect":
+                self._api_connect(body)
+            elif p == "/api/scan/start":
+                self._api_scan_start(body)
+            elif p == "/api/local-repo/pick":
+                self._api_local_repo_pick()
+            elif p == "/api/scan/stop":
+                self._api_scan_stop()
+            elif p == "/api/ollama/start":
+                self._api_ollama_start(body)
+            elif p in ("/api/ollama", "/ollama"):
+                self._proxy_ollama(body)
+            elif p == "/api/llm/config":
+                self._api_llm_config(body)
+            elif p == "/api/settings/save":
+                self._api_settings_save(body)
+            elif p == "/api/history/delete":
+                self._api_history_delete(body)
+            elif p == "/api/findings/suppress":
+                self._api_finding_suppress(body)
+            elif p == "/api/findings/unsuppress":
+                self._api_finding_unsuppress(body)
+            elif p == "/api/findings/triage":
+                self._api_finding_triage(body)
+            elif p == "/api/findings/reset":
+                self._api_finding_reset(body)
+            elif p == "/api/app/shutdown":
+                self._api_app_shutdown()
+            else:
+                self._404()
+        except Exception as exc:
+            if _Handler._is_client_disconnect(exc):
+                return
+            raise
 
     def do_OPTIONS(self):
         self.send_response(204)
