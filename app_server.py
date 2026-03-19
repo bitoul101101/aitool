@@ -828,6 +828,26 @@ def _repos_for_project(project_key: str) -> list[dict]:
     return repos
 
 
+def _current_scan_nav_context() -> dict | None:
+    snapshot = _current_session_snapshot()
+    session = snapshot["session"]
+    scan_id = str(snapshot.get("scan_id", "") or "")
+    state = str(snapshot.get("state", "") or "")
+    if not scan_id or state != "running":
+        return None
+    label = ""
+    local_repo_path = str(getattr(session, "local_repo_path", "") or "").strip()
+    if local_repo_path:
+        label = Path(local_repo_path).name or local_repo_path
+    else:
+        repo_slugs = list(snapshot.get("repo_slugs", []) or [])
+        if repo_slugs:
+            label = repo_slugs[0] if len(repo_slugs) == 1 else f"{repo_slugs[0]} +{len(repo_slugs) - 1}"
+        else:
+            label = str(snapshot.get("project_key", "") or "Current Scan")
+    return {"scan_id": scan_id, "state": state, "label": label}
+
+
 def _is_connected() -> bool:
     return _operator_state.client is not None
 
@@ -1729,6 +1749,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
+            current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -1838,6 +1859,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 csrf_token=_current_csrf_token(self),
                 notice=notice or (qs.get("notice", [""])[0] or ""),
                 error=error or (qs.get("error", [""])[0] or ""),
+                current_scan=_current_scan_nav_context(),
             )
         else:
             html = render_scan_page(
@@ -1862,6 +1884,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 csrf_token=_current_csrf_token(self),
                 notice=notice or (qs.get("notice", [""])[0] or ""),
                 error=error or (qs.get("error", [""])[0] or ""),
+                current_scan=_current_scan_nav_context(),
             )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -1875,6 +1898,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
+            current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -1888,6 +1912,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
+            current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -1906,6 +1931,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
+            current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -1919,6 +1945,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
+            current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -1937,6 +1964,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
+            current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -1949,6 +1977,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
+            current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
 

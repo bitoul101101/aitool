@@ -1250,6 +1250,33 @@ def test_scan_page_selection_view_stays_pre_scan():
     assert 'id="inventory-summary"' not in html
 
 
+def test_scan_page_shows_resume_scan_when_new_scan_is_blocked_by_running_scan():
+    import app_server as srv
+
+    session = srv.ScanSession()
+    session.state = "running"
+    session.scan_id = "20260320_101500"
+
+    html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}],
+        selected_repos=[],
+        status=session.to_status(),
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["m1"],
+        log_text="",
+        phase_timeline=[("init", "00:02")],
+        force_selection=True,
+        scan_id="20260320_101500",
+        current_scan={"scan_id": "20260320_101500", "state": "running", "label": "repo1"},
+    ).decode("utf-8")
+
+    assert 'id="resume-scan-btn"' in html
+    assert 'href="/scan/20260320_101500?tab=activity"' in html
+    assert '>Current Scan</a>' in html
+
+
 def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view():
     import app_server as srv
 

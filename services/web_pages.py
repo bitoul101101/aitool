@@ -101,13 +101,24 @@ def _scan_workspace_tabs(scan_id: str, active_tab: str = "activity", *, results_
     )
 
 
-def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+def _current_scan_nav_item(current_scan: dict | None, active: str) -> str:
+    if not current_scan:
+        return ""
+    scan_id = str(current_scan.get("scan_id", "") or "").strip()
+    if not scan_id:
+        return ""
+    return f'<a class="nav{" active" if active == "current_scan" else ""}" href="/scan/{_esc(scan_id)}?tab=activity">Current Scan</a>'
+
+
+def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
     if show_nav:
+        current_scan_nav = _current_scan_nav_item(current_scan, active)
         nav = (
             '<div class="header-nav">'
             + f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
+            + current_scan_nav
             + f'<a class="nav{" active" if active == "history" else ""}" href="/history">Past Scans</a>'
             + f'<a class="nav{" active" if active == "findings" else ""}" href="/findings">Findings</a>'
             + f'<a class="nav{" active" if active == "trends" else ""}" href="/trends">Trends</a>'
@@ -183,6 +194,7 @@ def render_scan_page(
     csrf_token: str = "",
     notice: str = "",
     error: str = "",
+    current_scan: dict | None = None,
 ) -> bytes:
     project_query_suffix = "&new=1" if force_selection else ""
     def _model_size_billions(name: str) -> float:
@@ -521,6 +533,11 @@ def render_scan_page(
         if start_blocked
         else ""
     )
+    resume_scan_action = (
+        f'<a class="btn alt" id="resume-scan-btn" href="/scan/{_esc(scan_id)}?tab=activity">Resume Scan</a>'
+        if start_blocked and scan_id
+        else ""
+    )
     selection_view = f"""
 <section class="selection-grid">
   <aside class="card project-panel">
@@ -555,7 +572,7 @@ def render_scan_page(
         <div></div>
       </div>
       <div class="repo-notices">
-        <div class="warn-box{" hidden" if not running_notice else ""}" id="running-scan-notice">{_esc(running_notice)}</div>
+        <div class="warn-box{" hidden" if not running_notice else ""}" id="running-scan-notice">{_esc(running_notice)}{f'<div class="resume-scan-inline">{resume_scan_action}</div>' if resume_scan_action else ''}</div>
         <div class="warn-box{" hidden" if not model_warning else ""}" id="model-size-warning">{_esc(model_warning)}</div>
       </div>
       <div class="repo-actions{" hidden" if not has_selected_project else ""}" id="repo-actions">
@@ -598,11 +615,11 @@ def render_scan_page(
   {running_view if (force_activity_view or (not force_selection and (running or state in ("done", "stopped") and log_text))) else selection_view}
 </section>
 {'<script src="/assets/scan_page.js" defer></script>' if include_live_script else ''}"""
-    nav_active = "" if scan_id else "new_scan"
-    return _layout(title="Scan", body=body, active=nav_active, show_scan_results=show_scan_results, csrf_token=csrf_token)
+    nav_active = "current_scan" if scan_id and current_scan and str(current_scan.get("scan_id", "")) == str(scan_id) else ("" if scan_id else "new_scan")
+    return _layout(title="Scan", body=body, active=nav_active, show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_history_page(*, history: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+def render_history_page(*, history: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     projects = sorted({str(rec.get("project_key", "")) for rec in history if rec.get("project_key")})
     repos = sorted({", ".join(rec.get("repo_slugs", rec.get("repos", []))) for rec in history if rec.get("repo_slugs") or rec.get("repos")})
     statuses = sorted({str(rec.get("state", "")) for rec in history if rec.get("state")})
@@ -697,10 +714,10 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
   </form>
 </section>
 <script src="/assets/history_page.js" defer></script>"""
-    return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")})
     repos = sorted({str(item.get("repo", "")) for item in findings if item.get("repo")})
     rules = sorted({str(item.get("rule", "")) for item in findings if item.get("rule")})
@@ -804,7 +821,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
   </form>
 </section>
 <script src="/assets/findings_page.js" defer></script>"""
-    return _layout(title="Findings", body=body, active="findings", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="Findings", body=body, active="findings", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
 def render_results_page(
@@ -827,6 +844,7 @@ def render_results_page(
     csrf_token: str = "",
     notice: str = "",
     error: str = "",
+    current_scan: dict | None = None,
 ) -> bytes:
     workspace_tabs = _scan_workspace_tabs(scan_id, "results")
     html_generation = dict(html_generation or {})
@@ -929,10 +947,11 @@ def render_results_page(
   {results_body}
 </section>
 {'<script src="/assets/results_page.js" defer></script>' if (generation_state or (can_generate_html and not html_name)) else ''}"""
-    return _layout(title="Results", body=body, active="", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    nav_active = "current_scan" if current_scan and str(current_scan.get("scan_id", "")) == str(scan_id) else ""
+    return _layout(title="Results", body=body, active=nav_active, show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in repo_inventory if item.get("project_key")})
     providers = sorted({label for item in repo_inventory for label in item.get("provider_labels", []) if label})
     models = sorted({model for item in repo_inventory for model in item.get("models", []) if model})
@@ -1074,10 +1093,10 @@ document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
 }});
 sortInventory(0,'datetime');
 </script>"""
-    return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     summary = dict(trends.get("summary") or {})
 
     def _bar_rows(items: list[dict], *, value_key: str, empty_text: str) -> str:
@@ -1174,7 +1193,7 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
     </div>
   </section>
 </section>"""
-    return _layout(title="Trends", body=body, active="trends", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="Trends", body=body, active="trends", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
 def render_settings_page(
@@ -1189,6 +1208,7 @@ def render_settings_page(
     error: str = "",
     show_scan_results: bool = True,
     csrf_token: str = "",
+    current_scan: dict | None = None,
 ) -> bytes:
     legacy_runtime_files = legacy_runtime_files or []
     legacy_runtime_notice = ""
@@ -1220,10 +1240,10 @@ def render_settings_page(
     <div><button type="submit">Save Settings</button></div>
   </form>
 </section>"""
-    return _layout(title="Settings", body=body, active="settings", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="Settings", body=body, active="settings", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     body = f"""
 {_flash(notice, error)}
 <section class="wiki-shell">
@@ -1426,4 +1446,4 @@ python C:\\aitool\\scan_cli.py --project COGI --repo repo1 --repo repo2 --scope 
     </nav>
   </aside>
 </section>"""
-    return _layout(title="Help", body=body, active="help", show_scan_results=show_scan_results, csrf_token=csrf_token)
+    return _layout(title="Help", body=body, active="help", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)

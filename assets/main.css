@@ -2,7 +2,8 @@ body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#f6efe4;color
 header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;padding:12px 18px;background:#4a210c;color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.18)}
 header h1{margin:0;font-size:18px}
 .header-nav{display:flex;justify-content:center;gap:8px;align-items:center}
-.header-actions{display:flex;justify-content:flex-end}
+.header-actions{display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:wrap}
+.resume-scan-inline{display:inline-flex;margin-left:8px;vertical-align:middle}
 .nav{color:#f7e0c0;text-decoration:none;padding:7px 11px;border-radius:8px}
 .nav.active,.nav:hover{background:#6d3514;color:#fff}
 .exit-form{margin:0}

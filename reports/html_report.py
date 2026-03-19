@@ -2336,8 +2336,8 @@ function toggleDetail(evt, row) {
     // No pre-baked answer — show informational message (no live fetch)
     const model = (window.OLLAMA_MODEL || '').trim();
     const msg = model
-      ? `<p style="color:#f97316;font-size:12px">⚠ LLM analysis was not generated for this finding. ` +
-        `Re-run the scan with LLM enabled to embed answers in the report.</p>`
+      ? `<p style="color:#f97316;font-size:12px">⚠ LLM detail was not embedded for this finding. ` +
+        `Generate a Detailed HTML report, or check report enrichment timeout and model availability.</p>`
       : `<p style="color:var(--dim);font-size:12px">ℹ LLM analysis not available — no model was configured when this report was generated.</p>`;
     detTd.innerHTML = `<div class="detail-panel">${scorecard}${msg}</div>`;
   }

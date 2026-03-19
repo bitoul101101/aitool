@@ -115,6 +115,33 @@ def test_html_report_includes_evidence_backed_threat_model_section():
     assert "Review Gaps / Open Questions" in html
 
 
+def test_html_report_missing_llm_detail_message_points_to_detailed_html():
+    reporter = HTMLReporter(
+        output_dir=tempfile.mkdtemp(),
+        scan_id="20260320_103000",
+    )
+    findings = [
+        {
+            "severity": 2,
+            "repo": "repo1",
+            "project_key": "COGI",
+            "file": "app.py",
+            "line": 10,
+            "policy_status": "REVIEW",
+            "provider_or_lib": "openai",
+            "capability": "chat",
+            "description": "Example finding",
+            "context": "production",
+        }
+    ]
+
+    html = reporter._render(findings, policy={}, llm_details={"app.py:10:openai": ""})
+
+    assert "LLM detail was not embedded for this finding" in html
+    assert "Generate a Detailed HTML report" in html
+    assert "Re-run the scan with LLM enabled" not in html
+
+
 def test_html_report_llm_enrichment_deduplicates_repeated_findings():
     import urllib.request
 
