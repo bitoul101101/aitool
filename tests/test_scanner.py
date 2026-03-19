@@ -3561,6 +3561,36 @@ def test_get_pat_owner_skips_non_json_myself_response_without_parsing_error():
     assert len(calls) == 2
 
 
+def test_get_pat_owner_swallows_requests_jsondecodeerror_and_falls_back():
+    from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient("https://bitbucket.example", token="pat-123")
+
+    class _Resp:
+        def __init__(self, status_code, *, text="", headers=None):
+            self.status_code = status_code
+            self.text = text
+            self.headers = headers or {}
+
+        def json(self):
+            raise RequestsJSONDecodeError("Expecting value", "", 0)
+
+    calls = []
+
+    def fake_get(url, timeout=0, params=None):
+        calls.append(url)
+        if url.endswith("/rest/api/1.0/users/myself"):
+            return _Resp(200, text="{broken", headers={"Content-Type": "application/json"})
+        if url.endswith("/plugins/servlet/applinks/whoami"):
+            return type("WhoAmIResp", (), {"status_code": 200, "text": "Segal, Sarit", "headers": {}})()
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    with patch.object(client.session, "get", side_effect=fake_get):
+        assert client.get_pat_owner() == "Segal, Sarit"
+    assert len(calls) == 2
+
+
 def test_bitbucket_client_uses_ca_bundle_for_tls_verification():
     from scanner.bitbucket import BitbucketClient
 

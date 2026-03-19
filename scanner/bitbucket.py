@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Optional, Callable
 
 from requests import RequestException
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 
 
 # ── Rate-limiting defaults ────────────────────────────────────────
@@ -174,7 +175,7 @@ class BitbucketClient:
                     continue
                 try:
                     data = resp.json()
-                except ValueError:
+                except (ValueError, RequestsJSONDecodeError):
                     continue
                 if isinstance(data, dict):
                     owner = (
