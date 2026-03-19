@@ -1775,7 +1775,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
 <div class="trend-summary-grid threat-overview-grid">
   {overview_cards}
 </div>
-<div class="inventory-layout threat-layout">
+<div class="threat-support-grid">
   <div class="card inventory-stack threat-signals-card" style="margin-bottom:0">
     <div class="threat-chip-group">
       <h3>Observed Signals</h3>
@@ -1795,7 +1795,6 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
     </div>
   </div>
   <div class="inventory-stack threat-detail-stack">
-    {scenarios_block}
     <details class="card threat-disclosure" open>
       <summary>Architecture Elements</summary>
       <div class="repo-grid cols-3" style="gap:12px">
@@ -1815,6 +1814,9 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
     {replay_note}
     <div class="muted" style="font-size:12px">This threat model is evidence-backed by scan results and repository signals. It is a structured first pass that should be refined during architecture review.</div>
   </div>
+</div>
+<div class="threat-scenarios-row">
+  {scenarios_block}
 </div>
 </section>"""
 

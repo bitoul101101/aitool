@@ -1,0 +1,567 @@
+{
+  "scan_id": "AI_Scan_Report_COGI_cogi-base-system_20260319_200927",
+  "generated_at": "2026-03-19T18:08:39Z",
+  "meta": {
+    "repo": "cogi-base-system",
+    "project_key": "COGI",
+    "owner": "User",
+    "branch": "",
+    "commit": "",
+    "operator": "Unknown",
+    "started_at_utc": "2026-03-19T18:08:39Z",
+    "completed_at_utc": "",
+    "policy_version": "d74de0a026ce",
+    "tool_version": "19.1",
+    "scan_id": "20260319_200839",
+    "delta": {
+      "has_baseline": false,
+      "new_count": 6,
+      "fixed_count": 0,
+      "unchanged_count": 0,
+      "existing_count": 0,
+      "new_hashes": [
+        "1c9b973d39abe2770bc1c9e79f59ffcb",
+        "3b4867434b75b154696f76259ba0ffcf",
+        "4bf8add54164d77db055a5631bd5793b",
+        "8998f5254dad32b84eec8b666f53b20f",
+        "b214e151c7aea11f9920c1edb34c5d03",
+        "dbdb7d6811d7e6d74d026425a3a6abf7"
+      ],
+      "fixed_hashes": [],
+      "fixed_findings": []
+    },
+    "inventory": {
+      "repos_using_ai_count": 1,
+      "repos_total": 1,
+      "provider_count": 3,
+      "model_count": 0,
+      "providers": [
+        "anthropic",
+        "direct_http_ai",
+        "sql_injection_risk"
+      ],
+      "provider_labels": [
+        "Anthropic",
+        "Direct Http Ai",
+        "Sql Injection Risk"
+      ],
+      "models": [],
+      "category_counts": {
+        "Security": 2,
+        "External AI API": 4
+      },
+      "providers_by_count": [
+        {
+          "provider": "anthropic",
+          "label": "Anthropic",
+          "count": 3
+        },
+        {
+          "provider": "sql_injection_risk",
+          "label": "Sql Injection Risk",
+          "count": 2
+        },
+        {
+          "provider": "direct_http_ai",
+          "label": "Direct Http Ai",
+          "count": 1
+        }
+      ],
+      "models_by_count": [],
+      "embeddings_vector_db_repos": 0,
+      "prompt_handling_repos": 1,
+      "model_serving_repos": 0,
+      "agent_tool_use_repos": 0,
+      "repo_profiles": [
+        {
+          "repo": "cogi-base-system",
+          "finding_count": 6,
+          "providers": [
+            "anthropic",
+            "direct_http_ai",
+            "sql_injection_risk"
+          ],
+          "provider_labels": [
+            "Anthropic",
+            "Direct Http Ai",
+            "Sql Injection Risk"
+          ],
+          "models": [],
+          "categories": [
+            "External AI API",
+            "Security"
+          ],
+          "embeddings_vector_db": false,
+          "prompt_handling": true,
+          "model_serving": false,
+          "agent_tool_use": false
+        }
+      ]
+    },
+    "llm_model_info": {
+      "name": "qwen2.5-coder:14b",
+      "family": "qwen2",
+      "parameter_size": "14.8B",
+      "quantization": "Q4_K_M",
+      "digest": ""
+    },
+    "report_detail_timeout_s": 180,
+    "scan_duration_s": 0,
+    "pre_llm_count": 7,
+    "post_llm_count": 6,
+    "suppressed_count": 1,
+    "reviewed_count": 0,
+    "accepted_risk_count": 0
+  },
+  "finding_count": 6,
+  "findings": [
+    {
+      "repo": "cogi-base-system",
+      "ai_category": "Security",
+      "provider_or_lib": "sql_injection_risk",
+      "capability": "SQL Generation Risk",
+      "policy_status": "CRITICAL",
+      "risk": "Critical",
+      "severity": 1,
+      "file": "system-config-tool.py",
+      "line": 61,
+      "snippet": "        # Prompt the user for manual input\n        custom_option = input(\"Please enter your own choice: \")\n        print(f\"\\033[1;32mYou have selected: {custom_option}!\\033[0m\")\n        return custom_option\n    ",
+      "owner": "Segal, Sarit",
+      "last_seen": "20260319_200839",
+      "remediation": "Use parameterized queries or ORM-level protections. Never pass LLM-generated SQL strings directly to execute(). Validate and whitelist table/column names if dynamic queries are required.",
+      "description": "LLM-generated SQL appears to be executed directly — use parameterised queries or a query allow-list to prevent SQL injection.",
+      "severity_label": "Sev-1 (Critical)",
+      "is_notebook": false,
+      "match": "f\"\\033[1;32mYou have select",
+      "confidence": 82,
+      "context": "production",
+      "corroboration_count": 3,
+      "finding_id": "8998f5254dad32b84eec8b666f53b20f",
+      "llm_verdict": "",
+      "llm_reason": "",
+      "llm_reviewed": false,
+      "_hash": "8998f5254dad32b84eec8b666f53b20f",
+      "project_key": "COGI",
+      "delta_status": "new"
+    },
+    {
+      "repo": "cogi-base-system",
+      "ai_category": "Security",
+      "provider_or_lib": "sql_injection_risk",
+      "capability": "SQL Generation Risk",
+      "policy_status": "CRITICAL",
+      "risk": "Critical",
+      "severity": 1,
+      "file": "system-config-tool.py",
+      "line": 66,
+      "snippet": "    # If not \"Other\", return the selected option from the list\n    selected_option = options_with_other[menu_entry_index]\n    print(f\"\\033[1;32mYou have selected: {selected_option}!\\033[0m\")\n    return selected_option\n",
+      "owner": "Segal, Sarit",
+      "last_seen": "20260319_200839",
+      "remediation": "Use parameterized queries or ORM-level protections. Never pass LLM-generated SQL strings directly to execute(). Validate and whitelist table/column names if dynamic queries are required.",
+      "description": "LLM-generated SQL appears to be executed directly — use parameterised queries or a query allow-list to prevent SQL injection.",
+      "severity_label": "Sev-1 (Critical)",
+      "is_notebook": false,
+      "match": "f\"\\033[1;32mYou have selected: {select",
+      "confidence": 82,
+      "context": "production",
+      "corroboration_count": 3,
+      "finding_id": "b214e151c7aea11f9920c1edb34c5d03",
+      "llm_verdict": "",
+      "llm_reason": "",
+      "llm_reviewed": false,
+      "_hash": "b214e151c7aea11f9920c1edb34c5d03",
+      "project_key": "COGI",
+      "delta_status": "new"
+    },
+    {
+      "repo": "cogi-base-system",
+      "ai_category": "External AI API",
+      "provider_or_lib": "anthropic",
+      "capability": "LLM/Completion",
+      "policy_status": "APPROVED",
+      "risk": "Medium",
+      "severity": 3,
+      "file": "system-config-tool.py",
+      "line": 29,
+      "snippet": "        \"max_token\": 4096,\n        \"temperature\": 0,\n        \"model_api_key\": \"ANTHROPIC_API_KEY\"\n    }\n}",
+      "owner": "Segal, Sarit",
+      "last_seen": "20260319_200839",
+      "remediation": "Confirm Anthropic usage is approved per AI policy. Review data sensitivity before sending to external API. Document usage and obtain approval if not already done.",
+      "description": "Anthropic Claude SDK is used — ensure key is not hardcoded and usage is documented.",
+      "severity_label": "Sev-3 (Medium)",
+      "is_notebook": false,
+      "match": "ANTHROPIC_API_KEY",
+      "confidence": 50,
+      "context": "production",
+      "corroboration_count": 3,
+      "finding_id": "3b4867434b75b154696f76259ba0ffcf",
+      "llm_verdict": "keep",
+      "llm_reason": "Hardcoded API key in production code.",
+      "llm_reviewed": true,
+      "_hash": "3b4867434b75b154696f76259ba0ffcf",
+      "project_key": "COGI",
+      "delta_status": "new"
+    },
+    {
+      "repo": "cogi-base-system",
+      "ai_category": "External AI API",
+      "provider_or_lib": "direct_http_ai",
+      "capability": "Direct HTTP Call",
+      "policy_status": "REVIEW",
+      "risk": "Medium",
+      "severity": 3,
+      "file": "system-config-tool.py",
+      "line": 14,
+      "snippet": "    \"openai\": {\n        \"model_provider\": \"openai\",\n        \"model_url\": \"https://api.openai.com/v1/chat/completions\",\n        \"max_token\": 4096,\n        \"temperature\": 0,",
+      "owner": "Segal, Sarit",
+      "last_seen": "20260319_200839",
+      "remediation": "Review this AI usage against the internal AI policy. Ensure the provider/library is approved, data handling is documented, and usage is logged.",
+      "description": "A direct HTTP call to an external AI API endpoint was found — use an SDK instead and ensure the request is authenticated securely.",
+      "severity_label": "Sev-3 (Medium)",
+      "is_notebook": false,
+      "match": "api.openai.com",
+      "confidence": 50,
+      "context": "production",
+      "corroboration_count": 3,
+      "finding_id": "4bf8add54164d77db055a5631bd5793b",
+      "llm_verdict": "downgrade",
+      "llm_reason": "Direct HTTP call to API, no sensitive data visible.",
+      "llm_reviewed": true,
+      "_hash": "4bf8add54164d77db055a5631bd5793b",
+      "project_key": "COGI",
+      "delta_status": "new"
+    },
+    {
+      "repo": "cogi-base-system",
+      "ai_category": "External AI API",
+      "provider_or_lib": "anthropic",
+      "capability": "LLM/Completion",
+      "policy_status": "APPROVED",
+      "risk": "Low",
+      "severity": 4,
+      "file": "helm-chart\\cogi-base-system\\README.md",
+      "line": 70,
+      "snippet": "    ```\n    OPENAI_API_KEY=your_openai_api_key\n    ANTHROPIC_API_KEY=your_anthropic_api_key\n    ```\n2. Run the script:",
+      "owner": "Segal, Sarit",
+      "last_seen": "20260319_200839",
+      "remediation": "Confirm Anthropic usage is approved per AI policy. Review data sensitivity before sending to external API. Document usage and obtain approval if not already done.",
+      "description": "Anthropic Claude SDK is used — ensure key is not hardcoded and usage is documented.",
+      "severity_label": "Sev-4 (Low)",
+      "is_notebook": false,
+      "match": "ANTHROPIC_API_KEY",
+      "confidence": 19,
+      "context": "docs",
+      "corroboration_count": 1,
+      "finding_id": "1c9b973d39abe2770bc1c9e79f59ffcb",
+      "llm_verdict": "downgrade",
+      "llm_reason": "Pattern in documentation, not production code.",
+      "llm_reviewed": true,
+      "_hash": "1c9b973d39abe2770bc1c9e79f59ffcb",
+      "project_key": "COGI",
+      "delta_status": "new"
+    },
+    {
+      "repo": "cogi-base-system",
+      "ai_category": "External AI API",
+      "provider_or_lib": "anthropic",
+      "capability": "LLM/Completion",
+      "policy_status": "APPROVED",
+      "risk": "Low",
+      "severity": 4,
+      "file": "helm-chart\\cogi-base-system\\README.md",
+      "line": 70,
+      "snippet": "    ```\n    OPENAI_API_KEY=your_openai_api_key\n    ANTHROPIC_API_KEY=your_anthropic_api_key\n    ```\n2. Run the script:",
+      "owner": "Segal, Sarit",
+      "last_seen": "20260319_200839",
+      "remediation": "Confirm Anthropic usage is approved per AI policy. Review data sensitivity before sending to external API. Document usage and obtain approval if not already done.",
+      "description": "Anthropic Claude SDK is used — ensure key is not hardcoded and usage is documented.",
+      "severity_label": "Sev-4 (Low)",
+      "is_notebook": false,
+      "match": "anthropic_api_key",
+      "confidence": 19,
+      "context": "docs",
+      "corroboration_count": 1,
+      "finding_id": "dbdb7d6811d7e6d74d026425a3a6abf7",
+      "llm_verdict": "downgrade",
+      "llm_reason": "Pattern in documentation, not a security risk.",
+      "llm_reviewed": true,
+      "_hash": "dbdb7d6811d7e6d74d026425a3a6abf7",
+      "project_key": "COGI",
+      "delta_status": "new"
+    }
+  ],
+  "threat_model": {
+    "version": 1,
+    "generated_at_utc": "2026-03-19T18:09:27.674391Z",
+    "replay_instructions": "",
+    "summary": {
+      "project_key": "COGI",
+      "repo": "cogi-base-system",
+      "provider_labels": [
+        "Anthropic",
+        "Direct Http Ai",
+        "Sql Injection Risk"
+      ],
+      "models": [],
+      "contexts": {
+        "production": 4,
+        "docs": 2
+      },
+      "finding_count": 6
+    },
+    "stages": {
+      "architecture": {
+        "observed_signals": [
+          "1 repo(s) with AI usage",
+          "3 provider(s) detected",
+          "Prompt and model I/O handling detected"
+        ],
+        "actors": [
+          {
+            "id": "actor_12dea96fec20",
+            "name": "User / Browser",
+            "kind": "external_actor"
+          },
+          {
+            "id": "actor_3dacbce532cc",
+            "name": "Developer / Operator",
+            "kind": "internal_actor"
+          },
+          {
+            "id": "actor_040f06fd7740",
+            "name": "Untrusted Content Source",
+            "kind": "external_actor"
+          },
+          {
+            "id": "actor_90c5d1358d12",
+            "name": "External / Local AI Provider",
+            "kind": "service_actor"
+          }
+        ],
+        "processes": [
+          {
+            "id": "proc_7d1043473d55",
+            "name": "Application Runtime",
+            "kind": "application"
+          },
+          {
+            "id": "proc_36847a298bc3",
+            "name": "AI Integration Layer",
+            "kind": "integration"
+          }
+        ],
+        "stores": [
+          {
+            "id": "store_dfba7aade086",
+            "name": "Configuration / Secrets",
+            "kind": "config"
+          },
+          {
+            "id": "store_474c797713f3",
+            "name": "Logs / Outputs",
+            "kind": "logging"
+          }
+        ],
+        "flows": [
+          {
+            "id": "flow_5d5bb4ef7342",
+            "name": "User Request",
+            "source": "actor_12dea96fec20",
+            "target": "proc_7d1043473d55",
+            "crosses_boundary": true
+          },
+          {
+            "id": "flow_b23c6a05c961",
+            "name": "Application Data to AI",
+            "source": "proc_7d1043473d55",
+            "target": "proc_36847a298bc3",
+            "crosses_boundary": true
+          },
+          {
+            "id": "flow_95a69ff80052",
+            "name": "Prompt / Model Request",
+            "source": "proc_36847a298bc3",
+            "target": "actor_90c5d1358d12",
+            "crosses_boundary": true
+          }
+        ],
+        "boundaries": [
+          {
+            "id": "boundary_7d1043473d55",
+            "name": "Application Trust Boundary",
+            "kind": "internal"
+          },
+          {
+            "id": "boundary_90c5d1358d12",
+            "name": "AI Provider Boundary",
+            "kind": "external_service"
+          },
+          {
+            "id": "boundary_140f86aae51a",
+            "name": "Untrusted Input Boundary",
+            "kind": "content"
+          }
+        ],
+        "repo_profiles": [
+          {
+            "repo": "cogi-base-system",
+            "finding_count": 6,
+            "providers": [
+              "anthropic",
+              "direct_http_ai",
+              "sql_injection_risk"
+            ],
+            "provider_labels": [
+              "Anthropic",
+              "Direct Http Ai",
+              "Sql Injection Risk"
+            ],
+            "models": [],
+            "categories": [
+              "External AI API",
+              "Security"
+            ],
+            "embeddings_vector_db": false,
+            "prompt_handling": true,
+            "model_serving": false,
+            "agent_tool_use": false
+          }
+        ]
+      },
+      "assets": [
+        "Application secrets and provider credentials",
+        "User prompts, retrieved context, and model outputs",
+        "Internal source code, operational data, and configuration"
+      ],
+      "threats": [
+        {
+          "id": "threat_cd4423ce318c",
+          "title": "Sql Injection Risk in system-config-tool.py",
+          "severity": "Critical",
+          "stride": "Elevation of privilege",
+          "target": "AI Integration Layer",
+          "source": "User / Browser",
+          "description": "LLM-generated SQL appears to be executed directly — use parameterised queries or a query allow-list to prevent SQL injection.",
+          "evidence": {
+            "file": "system-config-tool.py",
+            "line": 61,
+            "provider_or_lib": "sql_injection_risk",
+            "why_flagged": ""
+          },
+          "mitigations": [
+            "Review the affected code path and document whether the AI behavior is intentional and controlled.",
+            "Add boundary checks, logging, and policy controls around this AI interaction."
+          ]
+        },
+        {
+          "id": "threat_7ea406ef3a35",
+          "title": "Prompt injection from untrusted content",
+          "severity": "High",
+          "stride": "Tampering",
+          "target": "AI Integration Layer",
+          "source": "Architecture Signal",
+          "description": "Prompt handling was detected, so user input, documents, or remote content may be able to steer model behavior or downstream actions.",
+          "evidence": {
+            "file": "Prompt-handling signals in 1 repo(s)",
+            "line": "",
+            "provider_or_lib": "",
+            "why_flagged": ""
+          },
+          "mitigations": [
+            "Isolate system instructions from user and retrieved content.",
+            "Apply content controls before prompt assembly and tool invocation."
+          ]
+        },
+        {
+          "id": "threat_2156353f8926",
+          "title": "Anthropic in system-config-tool.py",
+          "severity": "Medium",
+          "stride": "Information disclosure",
+          "target": "AI Integration Layer",
+          "source": "User / Browser",
+          "description": "Anthropic Claude SDK is used — ensure key is not hardcoded and usage is documented.",
+          "evidence": {
+            "file": "system-config-tool.py",
+            "line": 29,
+            "provider_or_lib": "anthropic",
+            "why_flagged": ""
+          },
+          "mitigations": [
+            "Review the affected code path and document whether the AI behavior is intentional and controlled.",
+            "Add boundary checks, logging, and policy controls around this AI interaction."
+          ]
+        },
+        {
+          "id": "threat_69fea3998b37",
+          "title": "Direct Http Ai in system-config-tool.py",
+          "severity": "Medium",
+          "stride": "Information disclosure",
+          "target": "AI Integration Layer",
+          "source": "User / Browser",
+          "description": "A direct HTTP call to an external AI API endpoint was found — use an SDK instead and ensure the request is authenticated securely.",
+          "evidence": {
+            "file": "system-config-tool.py",
+            "line": 14,
+            "provider_or_lib": "direct_http_ai",
+            "why_flagged": ""
+          },
+          "mitigations": [
+            "Review the affected code path and document whether the AI behavior is intentional and controlled.",
+            "Add boundary checks, logging, and policy controls around this AI interaction."
+          ]
+        },
+        {
+          "id": "threat_0a1d4d4100cf",
+          "title": "Anthropic in helm-chart\\cogi-base-system\\README.md",
+          "severity": "Low",
+          "stride": "Information disclosure",
+          "target": "AI Integration Layer",
+          "source": "Untrusted Content Source",
+          "description": "Anthropic Claude SDK is used — ensure key is not hardcoded and usage is documented.",
+          "evidence": {
+            "file": "helm-chart\\cogi-base-system\\README.md",
+            "line": 70,
+            "provider_or_lib": "anthropic",
+            "why_flagged": ""
+          },
+          "mitigations": [
+            "Review the affected code path and document whether the AI behavior is intentional and controlled.",
+            "Add boundary checks, logging, and policy controls around this AI interaction."
+          ]
+        }
+      ],
+      "gaps": [
+        "No major structural threat-model gaps were inferred from the current scan, but trust-boundary validation still requires human review."
+      ],
+      "attack_trees": [
+        {
+          "title": "Sql Injection Risk in system-config-tool.py",
+          "root": "Exploit Sql Injection Risk in system-config-tool.py",
+          "paths": [
+            "Identify reachable path in system-config-tool.py",
+            "Abuse User / Browser input or boundary crossing to target AI Integration Layer",
+            "Impact confidentiality/integrity through elevation of privilege scenario"
+          ]
+        },
+        {
+          "title": "Prompt injection from untrusted content",
+          "root": "Exploit Prompt injection from untrusted content",
+          "paths": [
+            "Identify reachable path in Prompt-handling signals in 1 repo(s)",
+            "Abuse Architecture Signal input or boundary crossing to target AI Integration Layer",
+            "Impact confidentiality/integrity through tampering scenario"
+          ]
+        },
+        {
+          "title": "Anthropic in system-config-tool.py",
+          "root": "Exploit Anthropic in system-config-tool.py",
+          "paths": [
+            "Identify reachable path in system-config-tool.py",
+            "Abuse User / Browser input or boundary crossing to target AI Integration Layer",
+            "Impact confidentiality/integrity through information disclosure scenario"
+          ]
+        }
+      ]
+    }
+  }
+}
