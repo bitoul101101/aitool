@@ -38,6 +38,8 @@ import subprocess
 import threading
 import tempfile
 import time
+import tkinter
+from tkinter import filedialog
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -250,32 +252,20 @@ def _allowed_origin(origin: str) -> str | None:
 def _pick_local_repo_path() -> str:
     if os.name != "nt":
         raise RuntimeError("Native folder picker is only supported on Windows")
-    ps_script = r"""
-Add-Type -AssemblyName System.Windows.Forms
-$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = 'Select Local Repository'
-$dialog.ShowNewFolderButton = $false
-if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    Write-Output $dialog.SelectedPath
-}
-""".strip()
     try:
-        proc = subprocess.run(
-            ["powershell", "-NoProfile", "-STA", "-Command", ps_script],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=120,
-            check=False,
+        root = tkinter.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        root.update()
+        selected = filedialog.askdirectory(
+            parent=root,
+            title="Select Local Repository",
+            mustexist=True,
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+        root.destroy()
+        return str(selected or "").strip()
+    except Exception as exc:
         raise RuntimeError("Unable to open the Windows folder picker") from exc
-    if proc.returncode != 0:
-        stderr = (proc.stderr or "").strip()
-        raise RuntimeError(stderr or "Unable to open the Windows folder picker")
-    return (proc.stdout or "").strip()
 
 
 def _with_query(path: str, **params: str) -> str:
