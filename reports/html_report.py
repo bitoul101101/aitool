@@ -1763,41 +1763,55 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
             else ""
         )
 
+        overview_cards = "".join([
+            f'<div class="trend-summary-card threat-overview-card"><span class="baseline-label">Observed Signals</span><strong>{len(list(architecture.get("observed_signals", [])))}</strong></div>',
+            f'<div class="trend-summary-card threat-overview-card"><span class="baseline-label">Assets</span><strong>{len(assets)}</strong></div>',
+            f'<div class="trend-summary-card threat-overview-card"><span class="baseline-label">Threats</span><strong>{len(threats)}</strong></div>',
+            f'<div class="trend-summary-card threat-overview-card"><span class="baseline-label">Gaps</span><strong>{len(gaps)}</strong></div>',
+        ])
+
         return f"""<section id="threat-model">
 <h2>🛡️ Threat Model</h2>
-<div class="inventory-layout">
-  <div class="card inventory-stack" style="margin-bottom:0">
-    <div>
+<div class="trend-summary-grid threat-overview-grid">
+  {overview_cards}
+</div>
+<div class="inventory-layout threat-layout">
+  <div class="card inventory-stack threat-signals-card" style="margin-bottom:0">
+    <div class="threat-chip-group">
       <h3>Observed Signals</h3>
       <div class="inventory-list">{chips(architecture.get("observed_signals", []))}</div>
     </div>
-    <div>
+    <div class="threat-chip-group">
       <h3>Assets at Risk</h3>
       <div class="inventory-list">{chips(assets)}</div>
     </div>
-    <div>
+    <div class="threat-chip-group">
       <h3>Trust Boundaries</h3>
       <div class="inventory-list">{chips(item.get("name", "") for item in architecture.get("boundaries", []))}</div>
     </div>
-    <div>
+    <div class="threat-chip-group">
       <h3>Flows</h3>
       <div class="inventory-list">{chips(item.get("name", "") for item in architecture.get("flows", [])[:6])}</div>
     </div>
   </div>
-  <div class="inventory-stack">
+  <div class="inventory-stack threat-detail-stack">
     {scenarios_block}
-  </div>
-  <div class="card inventory-stack" style="margin-bottom:0">
-    <h3>Architecture Elements</h3>
-    <div class="repo-grid cols-3" style="gap:12px">
-      <div><strong style="font-size:12px">Actors</strong><ul style="margin:6px 0 0;padding-left:18px;line-height:1.6">{entity_list(architecture.get("actors", []))}</ul></div>
-      <div><strong style="font-size:12px">Processes</strong><ul style="margin:6px 0 0;padding-left:18px;line-height:1.6">{entity_list(architecture.get("processes", []))}</ul></div>
-      <div><strong style="font-size:12px">Stores</strong><ul style="margin:6px 0 0;padding-left:18px;line-height:1.6">{entity_list(architecture.get("stores", []))}</ul></div>
-    </div>
-    <h3 style="margin-top:12px">Review Gaps / Open Questions</h3>
-    <ul style="margin:0;padding-left:18px;line-height:1.7">{gap_items}</ul>
-    <h3 style="margin-top:12px">Attack Trees</h3>
-    <div class="inventory-stack">{attack_tree_cards}</div>
+    <details class="card threat-disclosure" open>
+      <summary>Architecture Elements</summary>
+      <div class="repo-grid cols-3" style="gap:12px">
+        <div><strong style="font-size:12px">Actors</strong><ul style="margin:6px 0 0;padding-left:18px;line-height:1.6">{entity_list(architecture.get("actors", []))}</ul></div>
+        <div><strong style="font-size:12px">Processes</strong><ul style="margin:6px 0 0;padding-left:18px;line-height:1.6">{entity_list(architecture.get("processes", []))}</ul></div>
+        <div><strong style="font-size:12px">Stores</strong><ul style="margin:6px 0 0;padding-left:18px;line-height:1.6">{entity_list(architecture.get("stores", []))}</ul></div>
+      </div>
+    </details>
+    <details class="card threat-disclosure">
+      <summary>Review Gaps / Open Questions</summary>
+      <ul style="margin:0;padding-left:18px;line-height:1.7">{gap_items}</ul>
+    </details>
+    <details class="card threat-disclosure">
+      <summary>Attack Trees</summary>
+      <div class="inventory-stack">{attack_tree_cards}</div>
+    </details>
     {replay_note}
     <div class="muted" style="font-size:12px">This threat model is evidence-backed by scan results and repository signals. It is a structured first pass that should be refined during architecture review.</div>
   </div>

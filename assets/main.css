@@ -77,8 +77,8 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .wiki-toc-links a{display:block;padding:6px 8px;border-radius:8px;text-decoration:none;color:#5d3612;background:#f9f1e8}
 .wiki-toc-links a:hover{background:#efdfcd}
 .scan-sidebar-head{display:grid;gap:8px}
-.scan-actions{display:flex;gap:6px;flex-wrap:wrap}
-.scan-actions .warn,.scan-actions .btn{padding:6px 9px;font-size:11px}
+.scan-actions{display:flex;gap:5px;flex-wrap:wrap}
+.scan-actions .warn,.scan-actions .btn{padding:5px 8px;font-size:11px}
 .state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
 .state-icon.pending{background:#bfa78c}
 .state-icon.running{animation:blink 1s ease-in-out infinite}
@@ -149,6 +149,19 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .inventory-stat strong{display:block;font-size:18px;line-height:1.1}
 .inventory-list{display:flex;flex-wrap:wrap;gap:6px}
 .inventory-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#efe1cf;color:#5d3b15;font-size:11px;font-weight:700}
+.threat-overview-grid{margin-bottom:10px}
+.threat-overview-card{padding:10px 12px}
+.threat-overview-card strong{font-size:22px}
+.threat-layout{grid-template-columns:minmax(240px,0.9fr) minmax(0,1.6fr);align-items:start}
+.threat-signals-card{position:sticky;top:10px;display:grid;gap:10px}
+.threat-chip-group{display:grid;gap:6px}
+.threat-chip-group h3{margin:0;font-size:13px}
+.threat-detail-stack{display:grid;gap:10px}
+.threat-disclosure{padding:0;overflow:hidden}
+.threat-disclosure summary{cursor:pointer;list-style:none;padding:10px 12px;font-weight:700;background:#f6ebdc;color:#5d3b15;border-bottom:1px solid #ead4ba}
+.threat-disclosure summary::-webkit-details-marker{display:none}
+.threat-disclosure[open] summary{border-bottom:1px solid #ead4ba}
+.threat-disclosure > :not(summary){padding:10px 12px}
 .inventory-repos{display:grid;gap:8px}
 .inventory-repo{padding:8px 10px;border:1px solid #ead4ba;border-radius:10px;background:#fffdf8}
 .inventory-repo strong{display:block;margin-bottom:4px}
@@ -191,13 +204,13 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .report-progress-bar{height:10px;border-radius:999px;background:#efe1cf;overflow:hidden}
 .report-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#6d3514,#b8682b);transition:width .25s ease}
 .report-progress-meta{font-size:12px;color:#705333;font-weight:700}
-.subnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-.subnav a{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#efe1cf;color:#5d3b15;text-decoration:none;font-size:12px;font-weight:700}
+.subnav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.subnav a{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#efe1cf;color:#5d3b15;text-decoration:none;font-size:11px;font-weight:700}
 .subnav a.active{background:#6d3514;color:#fff}
 .subnav a.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
-.workspace-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin-bottom:10px}
+.workspace-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-bottom:8px}
 .workspace-header .subnav{margin-bottom:0;justify-self:start}
-.workspace-header .page-title{justify-self:center;font-size:16px;font-weight:700;margin:0}
+.workspace-header .page-title{justify-self:center;font-size:15px;font-weight:700;margin:0}
 .workspace-header .scan-actions{justify-self:end}
 .results-frame{width:100%;height:calc(100vh - 150px);min-height:560px;border:1px solid #d8b995;border-radius:14px;background:#fff}
 .trends-shell{display:grid;gap:14px}
@@ -216,5 +229,5 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .trend-table-shell{max-height:360px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.wiki-toc{position:static}}
-@media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}}
+@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-layout{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.wiki-toc{position:static}.threat-signals-card{position:static}}
+@media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell,.threat-overview-grid{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}}
