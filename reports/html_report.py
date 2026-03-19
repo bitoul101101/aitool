@@ -1723,17 +1723,28 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
                 for item in items
             ) or "<li class='muted'>No elements inferred.</li>"
 
-        scenario_cards = "".join(
-            '<div class="card inventory-stack" style="margin-bottom:0">'
-            f'<div class="inline" style="justify-content:space-between;align-items:flex-start"><h3 style="margin:0">{html_mod.escape(item["title"])}</h3><span class="pill">{html_mod.escape(item["severity"])}</span></div>'
-            f'<div class="muted" style="font-size:12px">{html_mod.escape(item["stride"])} · {html_mod.escape(item["source"])} → {html_mod.escape(item["target"])}</div>'
-            f'<div><strong style="font-size:12px">Evidence</strong><div class="inventory-repo-meta" style="margin-top:4px">{html_mod.escape(str(item.get("evidence", {}).get("file", "")))}'
-            f'{":" + html_mod.escape(str(item.get("evidence", {}).get("line", ""))) if item.get("evidence", {}).get("line") else ""}</div></div>'
-            f'<div><strong style="font-size:12px">Description</strong><div class="inventory-repo-meta" style="margin-top:4px">{html_mod.escape(item["description"])}</div></div>'
-            f'<div><strong style="font-size:12px">Recommended Controls</strong><div class="inventory-repo-meta" style="margin-top:4px">{html_mod.escape("; ".join(item.get("mitigations", [])))}</div></div>'
-            '</div>'
+        scenario_rows = "".join(
+            "<tr>"
+            f"<td><div style='font-weight:700'>{html_mod.escape(item['title'])}</div>"
+            f"<div class='muted' style='font-size:11px'>{html_mod.escape(item['stride'])}</div></td>"
+            f"<td><span class='pill'>{html_mod.escape(item['severity'])}</span></td>"
+            f"<td>{html_mod.escape(item['source'])}<br><span class='muted'>to {html_mod.escape(item['target'])}</span></td>"
+            f"<td>{html_mod.escape(str(item.get('evidence', {}).get('file', '')))}"
+            f"{':' + html_mod.escape(str(item.get('evidence', {}).get('line', ''))) if item.get('evidence', {}).get('line') else ''}</td>"
+            f"<td>{html_mod.escape(item['description'])}</td>"
+            f"<td>{html_mod.escape('; '.join(item.get('mitigations', [])))}</td>"
+            "</tr>"
             for item in threats[:6]
-        ) or "<div class='card'><div class='muted'>No threats inferred from the current scan.</div></div>"
+        )
+        scenarios_block = (
+            '<div class="card inventory-stack" style="margin-bottom:0">'
+            '<h3 style="margin:0 0 10px">Threat Scenarios</h3>'
+            '<div class="table-shell threat-table-shell"><table>'
+            '<thead><tr><th>Threat</th><th>Severity</th><th>Flow</th><th>Evidence</th><th>Description</th><th>Recommended Controls</th></tr></thead>'
+            f'<tbody>{scenario_rows}</tbody></table></div></div>'
+            if scenario_rows
+            else "<div class='card'><div class='muted'>No threats inferred from the current scan.</div></div>"
+        )
 
         gap_items = "".join(f"<li>{html_mod.escape(item)}</li>" for item in gaps)
         attack_tree_cards = "".join(
@@ -1774,7 +1785,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
     </div>
   </div>
   <div class="inventory-stack">
-    {scenario_cards}
+    {scenarios_block}
   </div>
   <div class="card inventory-stack" style="margin-bottom:0">
     <h3>Architecture Elements</h3>

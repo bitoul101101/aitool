@@ -167,6 +167,15 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
 .table-shell tbody tr:hover{background:#f4eadb}
+.threat-table-shell{max-height:320px}
+.threat-table-shell table{table-layout:fixed}
+.threat-table-shell th,.threat-table-shell td{font-size:11px;line-height:1.35;word-break:break-word}
+.threat-table-shell th:nth-child(1),.threat-table-shell td:nth-child(1){width:18%}
+.threat-table-shell th:nth-child(2),.threat-table-shell td:nth-child(2){width:10%}
+.threat-table-shell th:nth-child(3),.threat-table-shell td:nth-child(3){width:14%}
+.threat-table-shell th:nth-child(4),.threat-table-shell td:nth-child(4){width:14%}
+.threat-table-shell th:nth-child(5),.threat-table-shell td:nth-child(5){width:22%}
+.threat-table-shell th:nth-child(6),.threat-table-shell td:nth-child(6){width:22%}
 .history-time{font-size:11px;color:#7a5d3e}
 .history-pagination{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:10px}
 .history-pagination .page-info{font-size:12px;color:#705333}
