@@ -286,6 +286,27 @@ class ScanJobService:
     def _scan_temp_root(self, session: ScanSession) -> Path:
         return Path(self.paths.temp_dir) / self._scan_workspace_name(session.scan_id)
 
+    def _local_scan_excludes(self, repo_root: Path) -> list[str]:
+        repo_root = Path(repo_root).resolve()
+        candidates = [
+            Path(self.paths.output_dir),
+            Path(self.paths.temp_dir),
+            Path(self.paths.log_dir),
+            Path(self.paths.history_file),
+            Path(self.paths.db_file),
+            Path(self.paths.suppressions_file),
+        ]
+        excludes: list[str] = []
+        for candidate in candidates:
+            try:
+                rel = candidate.resolve().relative_to(repo_root)
+            except (OSError, RuntimeError, ValueError):
+                continue
+            rel_text = str(rel).replace("\\", "/").strip("/")
+            if rel_text:
+                excludes.append(rel_text)
+        return sorted(set(excludes))
+
     def update_paths(
         self,
         *,
@@ -1002,12 +1023,15 @@ class ScanJobService:
             try:
                 last_pct = [-1]
                 scoped_files = _resolve_scoped_files(slug, repo_root)
+                excluded_paths = self._local_scan_excludes(repo_root) if session.scan_source == "local" else []
                 with session.state_lock:
                     session.scoped_files_by_repo[slug] = list(scoped_files or [])
 
                 if scoped_files == []:
                     log(f"  [{slug}] No files matched the selected scan scope", "dim")
                     return slug, [], owner, 0, None
+                if excluded_paths:
+                    log(f"  [{slug}] Local scan excludes: {', '.join(excluded_paths)}", "dim")
 
                 def _on_file(rel, idx, total):
                     with session.state_lock:
@@ -1026,6 +1050,7 @@ class ScanJobService:
                     return_file_contents=True,
                     on_file=_on_file,
                     include_paths=scoped_files,
+                    exclude_paths=excluded_paths,
                 )
                 if not scoped_files:
                     try:

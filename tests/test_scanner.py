@@ -142,6 +142,21 @@ def test_skip_node_modules():
     assert len(findings) == 0, "node_modules should be skipped"
 
 
+def test_detector_scan_excludes_explicit_paths():
+    detector = AIUsageDetector()
+    d = Path(tempfile.mkdtemp())
+    (d / "keep.py").write_text("import openai\n", encoding="utf-8")
+    excluded = d / "output"
+    excluded.mkdir()
+    (excluded / "skip.py").write_text("import openai\n", encoding="utf-8")
+
+    findings = detector.scan(d, exclude_paths=["output"])
+
+    files = {finding.get("file") for finding in findings}
+    assert "keep.py" in files
+    assert "output/skip.py" not in files
+
+
 # ── Security Analyzer tests ───────────────────────────────────────
 
 POLICY = {
@@ -628,6 +643,39 @@ def test_detector_scan_include_paths_limits_files():
     files = {finding.get("file") for finding in findings}
     assert "keep.py" in files
     assert "skip.py" not in files
+
+
+def test_local_scan_excludes_runtime_artifacts_under_repo_root():
+    from services.scan_jobs import ScanJobPaths, ScanJobService
+
+    temp_root = Path(tempfile.mkdtemp())
+    service = ScanJobService(
+        app_version="test",
+        paths=ScanJobPaths(
+            output_dir=str(temp_root / "output"),
+            temp_dir=str(temp_root / "tmp"),
+            policy_file=str(temp_root / "policy.json"),
+            owner_map_file=str(temp_root / "owner_map.json"),
+            suppressions_file=str(temp_root / "ai_scanner_suppressions.json"),
+            history_file=str(temp_root / "scan_history.json"),
+            log_dir=str(temp_root / "logs"),
+            db_file=str(temp_root / "scan_jobs.db"),
+        ),
+        load_policy=lambda path: {},
+        load_owner_map=lambda path: {},
+        policy_version=lambda path: "test",
+        utc_now_iso=lambda: "2026-03-19T11:30:00Z",
+        git_head_commit=lambda repo_dir: "deadbeef",
+        ollama_ping=lambda url, timeout=0.5: False,
+    )
+
+    excludes = service._local_scan_excludes(temp_root)
+
+    assert "output" in excludes
+    assert "tmp" in excludes
+    assert "logs" in excludes
+    assert "scan_history.json" in excludes
+    assert "scan_jobs.db" in excludes
 
 
 def test_start_scan_requires_compare_ref_for_branch_diff():

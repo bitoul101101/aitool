@@ -596,7 +596,8 @@ class AIUsageDetector:
              stop_event=None,
              return_file_contents: bool = False,
              on_file=None,
-             include_paths: List[str] | None = None):
+             include_paths: List[str] | None = None,
+             exclude_paths: List[str] | None = None):
         """
         Scan root and return findings.
 
@@ -629,6 +630,20 @@ class AIUsageDetector:
                 fpath for fpath in all_files
                 if str(fpath.relative_to(root)).replace("\\", "/") in include_set
             ]
+        exclude_set = None
+        if exclude_paths:
+            exclude_set = {
+                str(Path(path)).replace("\\", "/").strip("/").lstrip("./")
+                for path in exclude_paths
+                if str(path).strip()
+            }
+            filtered_files = []
+            for fpath in all_files:
+                rel = str(fpath.relative_to(root)).replace("\\", "/")
+                if any(rel == prefix or rel.startswith(prefix + "/") for prefix in exclude_set):
+                    continue
+                filtered_files.append(fpath)
+            all_files = filtered_files
         total_files = len(all_files)
 
         for file_index, fpath in enumerate(all_files):
