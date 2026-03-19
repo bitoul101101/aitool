@@ -1114,12 +1114,12 @@ def _gpu_snapshot() -> str:
             pass
         try:
             proc.communicate(timeout=0.2)
-        except (OSError, ValueError):
+        except (OSError, ValueError, subprocess.TimeoutExpired):
             pass
         return "Unavailable"
     try:
         stdout, _stderr = proc.communicate(timeout=0.2)
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, subprocess.TimeoutExpired):
         return "Unavailable"
     if proc.returncode not in (0, None):
         return "Unavailable"

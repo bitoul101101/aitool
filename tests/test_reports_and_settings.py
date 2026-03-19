@@ -178,6 +178,22 @@ def test_html_report_llm_enrichment_applies_budget_placeholder():
     assert "skipped for this finding" in details[skipped_key]
 
 
+def test_html_report_llm_enrichment_timeout_returns_placeholder():
+    import urllib.request
+
+    reporter = HTMLReporter(output_dir=tempfile.mkdtemp(), scan_id="20260318_180150")
+    findings = [
+        {"file": "app.py", "line": 10, "provider_or_lib": "openai", "capability": "chat", "severity": 2}
+    ]
+
+    with patch.object(urllib.request, "urlopen", side_effect=TimeoutError("timed out")):
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen", timeout=180)
+
+    assert len(details) == 1
+    only_value = next(iter(details.values()))
+    assert "LLM unavailable (qwen): timed out" in only_value
+
+
 def test_generate_html_report_builds_and_persists_html_artifact_on_demand():
     from services.scan_jobs import ScanJobPaths, ScanJobService
 

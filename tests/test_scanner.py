@@ -4212,6 +4212,28 @@ def test_gpu_snapshot_returns_unavailable_when_nvidia_smi_hangs(monkeypatch):
     assert srv._gpu_snapshot() == "Unavailable"
 
 
+def test_gpu_snapshot_returns_unavailable_when_communicate_times_out(monkeypatch):
+    import app_server as srv
+
+    class SlowCommunicateProc:
+        def __init__(self, *args, **kwargs):
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+        def communicate(self, timeout=None):
+            raise subprocess.TimeoutExpired(
+                cmd=["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+                timeout=timeout or 0.2,
+            )
+
+    monkeypatch.setattr(srv.os, "name", "nt")
+    monkeypatch.setattr(srv.subprocess, "Popen", lambda *args, **kwargs: SlowCommunicateProc())
+
+    assert srv._gpu_snapshot() == "Unavailable"
+
+
 def test_send_swallows_client_disconnects():
     import app_server as srv
 

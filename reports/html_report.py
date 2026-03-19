@@ -448,7 +448,7 @@ class HTMLReporter:
                     content = (data.get("message") or {}).get("content", "") or \
                               data.get("response", "")
                 return key, _render_html(content)
-            except (urllib.error.URLError, TimeoutError, OSError, ValueError, _json.JSONDecodeError) as exc:
+            except Exception as exc:
                 return key, _placeholder_html(f"⚠ LLM unavailable ({model}): {exc}")
 
         limited_findings = list(findings[:REPORT_LLM_MAX_FINDINGS])
@@ -510,7 +510,11 @@ class HTMLReporter:
                 future_meta[future] = finding
             for future in as_completed(future_meta):
                 finding = future_meta[future]
-                key, html = future.result()
+                try:
+                    key, html = future.result()
+                except Exception as exc:
+                    key = _key(finding)
+                    html = _placeholder_html(f"⚠ LLM unavailable ({model}): {exc}")
                 results[key] = html
                 cache[_cache_key(finding)] = html
                 completed += 1
