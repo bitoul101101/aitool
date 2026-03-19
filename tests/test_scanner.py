@@ -1812,6 +1812,50 @@ def test_phase_timeline_hides_total_until_scan_finishes():
     assert 'class="timeline-name">total<' in done_html.lower()
 
 
+def test_phase_timeline_assigns_residual_seconds_to_last_started_phase():
+    from services.scan_runtime_views import phase_timeline
+
+    entries = [
+        {"ts": 0.0, "msg": "Scan ID  : 1"},
+        {"ts": 4.0, "msg": "repo  branch:main  owner:User"},
+        {"ts": 4.0, "msg": "Starting parallel scan (workers=1)..."},
+        {"ts": 6.0, "msg": "[LLM] Evaluating 3 finding(s) for review..."},
+        {"ts": 55.0, "msg": "Scan complete."},
+    ]
+
+    timeline = phase_timeline(entries, "done")
+    durations = {item["name"]: item["duration"] for item in timeline}
+
+    assert durations["init"] == "00:04"
+    assert durations["clone"] == "00:00"
+    assert durations["scan"] == "00:02"
+    assert durations["llm review"] == "00:49"
+    assert durations["total"] == "00:55"
+
+
+def test_phase_timeline_total_matches_sum_of_displayed_finished_phases():
+    from services.scan_runtime_views import phase_timeline
+
+    entries = [
+        {"ts": 0.0, "msg": "Scan ID  : 1"},
+        {"ts": 3.0, "msg": "repo  branch:main  owner:User"},
+        {"ts": 3.0, "msg": "Starting parallel scan (workers=1)..."},
+        {"ts": 3.0, "msg": "[LLM] Evaluating 2 finding(s) for review..."},
+        {"ts": 10.0, "msg": "Scan complete."},
+    ]
+
+    timeline = phase_timeline(entries, "done")
+    durations = {
+        item["name"]: (int(item["duration"].split(":")[0]) * 60) + int(item["duration"].split(":")[1])
+        for item in timeline
+        if item["duration"] != "—"
+    }
+
+    phase_total = sum(value for key, value in durations.items() if key != "total")
+
+    assert durations["total"] == phase_total
+
+
 def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():
     import app_server as srv
 

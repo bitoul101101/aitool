@@ -10,6 +10,18 @@ from dateutil import tz
 ISRAEL_TZ = tz.gettz("Asia/Jerusalem")
 
 
+def _entry_ts(entry: dict | None, fallback: float) -> float:
+    if not entry:
+        return float(fallback)
+    value = entry.get("ts")
+    if value is None:
+        return float(fallback)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(fallback)
+
+
 def format_log_entry(entry: dict) -> str:
     ts = entry.get("ts")
     try:
@@ -61,18 +73,18 @@ def phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
     if not entries:
         return []
     state = (state or "").lower()
-    first_ts = float(entries[0].get("ts") or time.time())
+    first_ts = _entry_ts(entries[0], time.time())
     markers = {
         "init": first_ts,
         "clone": None,
         "scan": None,
         "llm review": None,
         "report": None,
-        "end": float(entries[-1].get("ts") or first_ts),
+        "end": _entry_ts(entries[-1], first_ts),
     }
     for entry in entries:
         msg = str(entry.get("msg", ""))
-        ts = float(entry.get("ts") or first_ts)
+        ts = _entry_ts(entry, first_ts)
         if markers["clone"] is None and "branch:" in msg:
             markers["clone"] = ts
         if markers["scan"] is None and "Starting parallel scan" in msg:
@@ -91,6 +103,7 @@ def phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
         ("report", markers["report"], markers["end"]),
     ]
     timeline = []
+    phase_seconds: list[tuple[str, int]] = []
     active_name = ""
     started_names = [name for name, start, _ in points if start is not None]
     if state == "running" and started_names:
@@ -100,13 +113,35 @@ def phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
             timeline.append({"name": name, "duration": "—", "state": "pending"})
             continue
         seconds = max(int((end or start) - start), 0)
+        phase_seconds.append((name, seconds))
         phase_state = "done"
         if state in ("stopped", "error") and name == active_name:
             phase_state = "stopped"
         elif state == "running" and name == active_name:
             phase_state = "running"
         timeline.append({"name": name, "duration": f"{seconds // 60:02d}:{seconds % 60:02d}", "state": phase_state})
+
     total_seconds = max(int(markers["end"] - first_ts), 0)
+    phase_sum = sum(seconds for _, seconds in phase_seconds)
+    residual = total_seconds - phase_sum
+    if residual > 0 and phase_seconds:
+        last_started_name = phase_seconds[-1][0]
+        adjusted: list[dict] = []
+        for row in timeline:
+            if row.get("name") == last_started_name:
+                current_duration = str(row.get("duration", "00:00"))
+                minutes, seconds = current_duration.split(":")
+                adjusted_seconds = (int(minutes) * 60) + int(seconds) + residual
+                row = {
+                    **row,
+                    "duration": f"{adjusted_seconds // 60:02d}:{adjusted_seconds % 60:02d}",
+                }
+            adjusted.append(row)
+        timeline = adjusted
+        total_seconds = phase_sum + residual
+    elif phase_sum > 0:
+        total_seconds = phase_sum
+
     total_state = "running" if state == "running" else "stopped" if state in ("stopped", "error") else "done"
     timeline.append({"name": "total", "duration": f"{total_seconds // 60:02d}:{total_seconds % 60:02d}", "state": total_state})
     return timeline
