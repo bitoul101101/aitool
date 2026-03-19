@@ -654,26 +654,54 @@ def render_results_page(
     log_url: str = "",
     started_at_utc: str = "",
     can_generate_html: bool = False,
+    html_generation: dict | None = None,
     show_scan_results: bool = True,
     csrf_token: str = "",
     notice: str = "",
     error: str = "",
 ) -> bytes:
     workspace_tabs = _scan_workspace_tabs(scan_id, "results")
+    html_generation = dict(html_generation or {})
+    generation_state = str(html_generation.get("state", "") or "").lower()
+    generation_active = generation_state in {"queued", "running"}
     toolbar_actions = []
     if html_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
-    elif can_generate_html:
+    elif can_generate_html and not generation_active:
         toolbar_actions.append(
             f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
             f'{_csrf_field(csrf_token)}'
             '<button type="submit" class="btn alt">Generate HTML Report</button>'
             '</form>'
         )
+    elif generation_active:
+        toolbar_actions.append('<button type="button" class="btn alt disabled" disabled>Generating HTML Report...</button>')
     if csv_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
     if log_url:
         toolbar_actions.append(f'<a class="btn ghost" href="{_esc(log_url)}" download>Download Logs</a>')
+    progress_card = ""
+    if generation_state:
+        progress_text = str(html_generation.get("message", "") or "")
+        current = int(html_generation.get("current", 0) or 0)
+        total = int(html_generation.get("total", 0) or 0)
+        pct = int(round((current / total) * 100)) if total > 0 else (100 if generation_state == "done" else 0)
+        state_label = {
+            "queued": "Queued",
+            "running": "Running",
+            "done": "Ready",
+            "error": "Failed",
+        }.get(generation_state, generation_state.title())
+        meta_text = f"{current}/{total}" if total > 0 else ("Complete" if generation_state == "done" else "")
+        progress_card = (
+            f'<section class="card report-progress-card" id="report-progress-card" data-scan-id="{_esc(scan_id)}" '
+            f'data-report-generation-active="{"1" if generation_active else "0"}">'
+            f'<div class="report-progress-head"><strong>HTML Report Generation</strong><span class="pill">{_esc(state_label)}</span></div>'
+            f'<div class="muted" id="report-progress-message">{_esc(progress_text or "Preparing report generation...")}</div>'
+            f'<div class="report-progress-bar"><div class="report-progress-fill" id="report-progress-fill" style="width:{pct}%"></div></div>'
+            f'<div class="report-progress-meta" id="report-progress-meta">{_esc(meta_text)}</div>'
+            '</section>'
+        )
     if html_name:
         results_body = f'<iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Detailed Report"></iframe>'
     elif can_generate_html:
@@ -698,8 +726,10 @@ def render_results_page(
       </div>
     </div>
   </section>
+  {progress_card}
   {results_body}
-</section>"""
+</section>
+{'<script src="/assets/results_page.js" defer></script>' if (generation_state or (can_generate_html and not html_name)) else ''}"""
     return _layout(title="Results", body=body, active="", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 

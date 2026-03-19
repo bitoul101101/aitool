@@ -198,3 +198,59 @@ def test_live_local_repo_picker_returns_selected_path():
         srv._browser_sessions.clear()
         srv._browser_sessions.update(original_sessions)
         srv._operator_state = orig_state
+
+
+def test_live_report_generation_status_api_returns_progress_payload():
+    import app_server as srv
+
+    orig_state = srv._operator_state
+    original_sessions = install_browser_session(srv, csrf_token="csrf-demo")
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Viewer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Viewer",
+                roles=(ROLE_VIEWER,),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+    srv._set_report_generation_status(
+        "20260319_120000",
+        state="running",
+        message="Generating LLM analysis 2/5...",
+        current=2,
+        total=5,
+    )
+    orig_find = srv._find_history_record_by_scan_id
+    srv._find_history_record_by_scan_id = lambda _scan_id: {
+        "scan_id": "20260319_120000",
+        "project_key": "COGI",
+        "repo_slugs": ["repo1"],
+        "reports": {"__all__": {}},
+    }
+    server, thread = start_live_server(srv)
+    try:
+        with patch.object(srv, "_is_connected", return_value=True):
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+            conn.request(
+                "GET",
+                "/api/report-generation/status/20260319_120000",
+                headers={"Cookie": "ai_scanner_session=valid-session"},
+            )
+            resp = conn.getresponse()
+            payload = json.loads(resp.read().decode("utf-8"))
+            assert resp.status == 200
+            assert payload["state"] == "running"
+            assert payload["current"] == 2
+            assert payload["total"] == 5
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        srv._clear_report_generation_status("20260319_120000")
+        srv._find_history_record_by_scan_id = orig_find
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state

@@ -1890,6 +1890,29 @@ def test_results_page_offers_on_demand_html_generation_when_findings_exist():
     assert '<iframe class="results-frame"' not in html
 
 
+def test_results_page_shows_html_generation_progress_card():
+    import app_server as srv
+
+    html = srv.render_results_page(
+        scan_id="20260318_140208",
+        project_key="COGI",
+        repo_label="repo1",
+        state="done",
+        html_name="",
+        csv_name="scan.csv",
+        log_url="/api/history/log/20260318_140208",
+        can_generate_html=True,
+        html_generation={"state": "running", "message": "Generating LLM analysis 3/12...", "current": 3, "total": 12},
+        csrf_token="csrf-demo",
+    ).decode("utf-8")
+
+    assert "HTML Report Generation" in html
+    assert "Generating LLM analysis 3/12..." in html
+    assert 'data-report-generation-active="1"' in html
+    assert 'src="/assets/results_page.js"' in html
+    assert "Generating HTML Report..." in html
+
+
 def test_render_results_page_resolves_current_session_report():
     import app_server as srv
 

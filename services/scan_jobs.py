@@ -717,7 +717,13 @@ class ScanJobService:
             "accepted_risk_count": int(record.get("accepted_risk_count", 0) or 0),
         }
 
-    def generate_html_report(self, scan_id: str, findings: list[dict] | None = None) -> dict:
+    def generate_html_report(
+        self,
+        scan_id: str,
+        findings: list[dict] | None = None,
+        *,
+        progress_fn: Callable[[int, int, str], None] | None = None,
+    ) -> dict:
         record = self._load_db_history_record(scan_id)
         if not record:
             raise RuntimeError("Stored scan record not found")
@@ -745,6 +751,7 @@ class ScanJobService:
             policy=self._load_policy(self.paths.policy_file),
             ollama_url=ollama_url,
             ollama_model=ollama_model,
+            progress_fn=progress_fn,
         )
         reports["html"] = str(Path(html_path).resolve())
         reports["html_name"] = Path(html_path).name

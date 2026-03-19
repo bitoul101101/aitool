@@ -355,6 +355,8 @@ DB_FILE = str(_BASE_DIR / "output" / "scan_jobs.db")
 AUDIT_FILE = str(_BASE_DIR / "output" / "audit_events.jsonl")
 ASSETS_DIR = _BASE_DIR / "assets"
 _audit_log = AuditLogService(AUDIT_FILE)
+_report_generation_lock = threading.RLock()
+_report_generation_jobs: dict[str, dict[str, Any]] = {}
 
 _scan_service = ScanJobService(
     app_version=APP_VERSION,
@@ -411,6 +413,24 @@ def _audit_event(action: str, **details) -> None:
         "roles": list(_operator_state.ctx.roles),
         **details,
     })
+
+
+def _report_generation_status(scan_id: str) -> dict[str, Any]:
+    with _report_generation_lock:
+        return dict(_report_generation_jobs.get(scan_id, {}))
+
+
+def _set_report_generation_status(scan_id: str, **status) -> dict[str, Any]:
+    with _report_generation_lock:
+        current = dict(_report_generation_jobs.get(scan_id, {}))
+        current.update(status)
+        _report_generation_jobs[scan_id] = current
+        return dict(current)
+
+
+def _clear_report_generation_status(scan_id: str) -> None:
+    with _report_generation_lock:
+        _report_generation_jobs.pop(scan_id, None)
 
 
 def _require_role(handler, role: str):
@@ -693,6 +713,74 @@ def _generate_html_report_for_scan(scan_id: str) -> dict:
             current = _current_session()
             current.report_paths = dict(updated.get("reports") or {})
     return updated
+
+
+def _start_html_report_generation(scan_id: str) -> dict[str, Any]:
+    safe_scan_id = Path(scan_id).name
+    record = _scan_record_for_id(safe_scan_id)
+    if not record:
+        raise RuntimeError("Scan results not found")
+    report = dict((record.get("reports") or {}).get("__all__", {}) or {})
+    html_path = str(report.get("html", "") or "")
+    if html_path and Path(html_path).exists():
+        _clear_report_generation_status(safe_scan_id)
+        return {"state": "done", "message": "HTML report already generated.", "current": 1, "total": 1}
+
+    existing = _report_generation_status(safe_scan_id)
+    if str(existing.get("state", "") or "").lower() in {"queued", "running"}:
+        return existing
+
+    _set_report_generation_status(
+        safe_scan_id,
+        state="queued",
+        message="Queued for HTML report generation...",
+        current=0,
+        total=0,
+    )
+
+    def _worker():
+        def _progress(i: int, n: int, _cap: str) -> None:
+            _set_report_generation_status(
+                safe_scan_id,
+                state="running",
+                message=f"Generating LLM analysis {i}/{n}...",
+                current=i,
+                total=n,
+            )
+
+        try:
+            _set_report_generation_status(
+                safe_scan_id,
+                state="running",
+                message="Building HTML report...",
+                current=0,
+                total=0,
+            )
+            snapshot = _current_session_snapshot()
+            findings = list(snapshot["findings"]) if snapshot["scan_id"] == safe_scan_id else None
+            updated = _scan_service.generate_html_report(safe_scan_id, findings=findings, progress_fn=_progress)
+            if snapshot["scan_id"] == safe_scan_id:
+                with _state_lock:
+                    current = _current_session()
+                    current.report_paths = dict(updated.get("reports") or {})
+            _set_report_generation_status(
+                safe_scan_id,
+                state="done",
+                message="HTML report generated.",
+                current=1,
+                total=1,
+            )
+        except Exception as exc:
+            _set_report_generation_status(
+                safe_scan_id,
+                state="error",
+                message=str(exc),
+                current=0,
+                total=0,
+            )
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return _report_generation_status(safe_scan_id)
 
 
 def _triage_by_hash() -> Dict[str, dict]:
@@ -1329,6 +1417,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
             self._json(status)
             return True
+        if p.startswith("/api/report-generation/status/"):
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+                return True
+            safe_scan_id = Path(p.rsplit("/", 1)[-1]).name
+            record = _scan_record_for_id(safe_scan_id)
+            if not record:
+                return self._err(404, "Scan results not found")
+            project_key = str(record.get("project_key", "") or "")
+            if project_key and _require_project_access(self, project_key):
+                return True
+            reports = dict((record.get("reports") or {}).get("__all__", {}) or {})
+            html_name = str(reports.get("html_name", "") or "")
+            status = _report_generation_status(safe_scan_id)
+            if html_name and not status:
+                status = {"state": "done", "message": "HTML report generated.", "current": 1, "total": 1}
+            self._json({"scan_id": safe_scan_id, "html_name": html_name, **status})
+            return True
         if p == "/api/history":
             if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
                 return True
@@ -1613,6 +1718,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             can_generate_html = bool(
                 len(snapshot["findings"]) if is_current else len(list(record.get("findings") or []))
             )
+            html_generation = _report_generation_status(safe_scan_id)
+            if html_name and html_generation:
+                _clear_report_generation_status(safe_scan_id)
+                html_generation = {}
             repo_label = ", ".join(repo_slugs)
             html = render_results_page(
                 scan_id=safe_scan_id,
@@ -1624,6 +1733,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 log_url=f"/api/history/log/{safe_scan_id}",
                 started_at_utc=str(record.get("started_at_utc", "") or ""),
                 can_generate_html=can_generate_html,
+                html_generation=html_generation,
                 show_scan_results=_has_scan_results(),
                 csrf_token=_current_csrf_token(self),
                 notice=notice or (qs.get("notice", [""])[0] or ""),
@@ -1812,11 +1922,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if project_key and _require_project_access(self, project_key):
             return
         try:
-            _generate_html_report_for_scan(safe_scan_id)
+            _start_html_report_generation(safe_scan_id)
         except Exception as e:
             self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", error=str(e)))
             return
-        self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice="HTML report generated"))
+        self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice="HTML report generation started"))
 
     def _page_history_delete(self, body: dict):
         if _require_role(self, ROLE_ADMIN):
