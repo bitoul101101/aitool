@@ -45,7 +45,7 @@
   let statusPollInFlight = false;
   let statusPollAbortController = null;
   let statusPollTimer = null;
-  const metricHistory = { cpu: [], ram: [], gpu: [] };
+  const metricHistory = { cpu: [], ram: [], gpu: [], disk: [] };
   const METRIC_HISTORY_LIMIT = 60;
 
   function escHtml(value) {
@@ -327,13 +327,10 @@
       return;
     }
     const hardware = data.hardware || {};
-    const llm = data.llm_stats || {};
     const cpuEl = document.getElementById("hardware-cpu");
     const ramEl = document.getElementById("hardware-ram");
     const gpuEl = document.getElementById("hardware-gpu");
     const diskIoEl = document.getElementById("hardware-disk-io");
-    const reviewedSkippedEl = document.getElementById("perf-reviewed-skipped");
-    const llmOutcomesEl = document.getElementById("perf-llm-outcomes");
     if (cpuEl) {
       cpuEl.textContent = String(hardware.cpu_percent || "Sampling...");
     }
@@ -346,20 +343,14 @@
     if (diskIoEl) {
       diskIoEl.textContent = String(hardware.disk_io_text || "Sampling...");
     }
-    if (reviewedSkippedEl) {
-      reviewedSkippedEl.textContent = String(llm.reviewed || 0) + " / " + String(llm.skipped || 0);
-    }
-    if (llmOutcomesEl) {
-      llmOutcomesEl.textContent =
-        String(llm.dismissed || 0) + " / " +
-        String(llm.downgraded || 0);
-    }
     pushMetricSample("cpu", parsePercent(hardware.cpu_percent || ""));
     pushMetricSample("ram", parseRamPercent(hardware.ram_text || ""));
     pushMetricSample("gpu", parseGpuPercent(hardware.gpu_text || ""));
+    pushMetricSample("disk", parseDiskIoRate(hardware.disk_io_text || ""));
     renderMetricSparkline("cpu");
     renderMetricSparkline("ram");
     renderMetricSparkline("gpu");
+    renderMetricSparkline("disk");
   }
 
   function parsePercent(text) {
@@ -386,6 +377,27 @@
   function parseGpuPercent(text) {
     const firstPart = String(text || "").split("|")[0] || "";
     return parsePercent(firstPart);
+  }
+
+  function parseDiskIoRate(text) {
+    const parts = String(text || "").split("|");
+    if (!parts.length) {
+      return null;
+    }
+    let total = 0;
+    let matched = false;
+    parts.forEach(function (part) {
+      const match = String(part).match(/([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB)\/s/i);
+      if (!match) {
+        return;
+      }
+      matched = true;
+      const value = Number(match[1]);
+      const unit = String(match[2] || "B").toUpperCase();
+      const scale = { B: 1, KB: 1024, MB: 1024 * 1024, GB: 1024 * 1024 * 1024 }[unit] || 1;
+      total += value * scale;
+    });
+    return matched ? total : null;
   }
 
   function parseNumericMagnitude(text) {
@@ -426,9 +438,12 @@
     }
     const width = 220;
     const height = 46;
+    const maxValue = metric === "disk"
+      ? Math.max.apply(null, values.concat([1]))
+      : 100;
     const points = values.map(function (value, index) {
       const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
-      const y = height - ((value / 100) * (height - 4)) - 2;
+      const y = height - ((value / maxValue) * (height - 4)) - 2;
       return [x, Math.max(2, Math.min(height - 2, y))];
     });
     const linePath = points.map(function (point, index) {

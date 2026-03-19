@@ -1427,8 +1427,9 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'id="hardware-cpu-graph"' in html
     assert 'id="hardware-ram-graph"' in html
     assert 'id="hardware-gpu-graph"' in html
-    assert 'id="perf-reviewed-skipped"' in html
-    assert 'id="perf-llm-outcomes"' in html
+    assert 'id="hardware-disk-graph"' in html
+    assert 'id="perf-reviewed-skipped"' not in html
+    assert 'id="perf-llm-outcomes"' not in html
     assert '<div class="workspace-header">' in html
     assert html.index("Activity Log") < html.index('id="new-scan-btn"')
     assert "Results Actions" not in html

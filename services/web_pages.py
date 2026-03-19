@@ -492,9 +492,7 @@ def render_scan_page(
           <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong><div class="metric-sparkline" id="hardware-cpu-graph" aria-hidden="true"></div></div>
           <div class="hardware-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong><div class="metric-sparkline" id="hardware-ram-graph" aria-hidden="true"></div></div>
           <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong><div class="metric-sparkline" id="hardware-gpu-graph" aria-hidden="true"></div></div>
-          <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong></div>
-          <div class="hardware-stat"><span class="baseline-label">Findings Reviewed / Skipped</span><strong id="perf-reviewed-skipped">{_esc(llm_stats.get("reviewed", 0))} / {_esc(llm_stats.get("skipped", 0))}</strong></div>
-          <div class="hardware-stat"><span class="baseline-label">Dismissed / Downgraded</span><strong id="perf-llm-outcomes">{_esc(llm_stats.get("dismissed", 0))} / {_esc(llm_stats.get("downgraded", 0))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong><div class="metric-sparkline" id="hardware-disk-graph" aria-hidden="true"></div></div>
         </div>
       </div>
     </section>"""
