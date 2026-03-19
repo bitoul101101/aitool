@@ -99,6 +99,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
             '<div class="header-nav">'
             + f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
             + f'<a class="nav{" active" if active == "history" else ""}" href="/history">Past Scans</a>'
+            + f'<a class="nav{" active" if active == "trends" else ""}" href="/trends">Trends</a>'
             + f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
             + f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
             + f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
@@ -826,6 +827,106 @@ sortInventory(0,'datetime');
     return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
+def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+    summary = dict(trends.get("summary") or {})
+
+    def _bar_rows(items: list[dict], *, value_key: str, empty_text: str) -> str:
+        if not items:
+            return f'<div class="empty-state">{_esc(empty_text)}</div>'
+        max_value = max(int(item.get(value_key, 0) or 0) for item in items) or 1
+        rows = []
+        for item in items:
+            value = int(item.get(value_key, 0) or 0)
+            width = max(6, round((value / max_value) * 100)) if value > 0 else 0
+            rows.append(
+                '<div class="trend-bar-row">'
+                + f'<div class="trend-bar-meta"><strong>{_esc(item.get("label", ""))}</strong><span class="muted">{_esc(item.get("repo", ""))}</span></div>'
+                + f'<div class="trend-bar-track"><div class="trend-bar-fill" style="width:{width}%"></div></div>'
+                + f'<div class="trend-bar-value">{_esc(value)}</div>'
+                + '</div>'
+            )
+        return "".join(rows)
+
+    def _table_rows(items: list[dict], columns: list[tuple[str, str]], empty_text: str) -> str:
+        if not items:
+            return f'<tr><td colspan="{len(columns)}">{_esc(empty_text)}</td></tr>'
+        rows = []
+        for item in items:
+            rows.append("<tr>" + "".join(f"<td>{_esc(item.get(key, ''))}</td>" for key, _label in columns) + "</tr>")
+        return "".join(rows)
+
+    body = f"""
+{_flash(notice, error)}
+<section class="trends-shell">
+  <section class="trend-summary-grid">
+    <div class="trend-summary-card"><span class="baseline-label">Scans in History</span><strong>{_esc(summary.get("scan_count", 0))}</strong></div>
+    <div class="trend-summary-card"><span class="baseline-label">Findings Captured</span><strong>{_esc(summary.get("total_findings", 0))}</strong></div>
+    <div class="trend-summary-card"><span class="baseline-label">Critical in Prod</span><strong>{_esc(summary.get("critical_prod_total", 0))}</strong></div>
+    <div class="trend-summary-card"><span class="baseline-label">Models Used</span><strong>{_esc(summary.get("models_used", 0))}</strong></div>
+  </section>
+  <section class="trend-grid">
+    <section class="card">
+      <h2 style="margin:0 0 10px">Findings Over Time</h2>
+      <div class="trend-bars">{_bar_rows(list(trends.get("findings_over_time") or []), value_key="value", empty_text="No scan history available for findings trend.")}</div>
+    </section>
+    <section class="card">
+      <h2 style="margin:0 0 10px">Critical in Prod Over Time</h2>
+      <div class="trend-bars">{_bar_rows(list(trends.get("critical_over_time") or []), value_key="value", empty_text="No critical-in-prod trend data available.")}</div>
+    </section>
+  </section>
+  <section class="trend-grid">
+    <section class="card">
+      <h2 style="margin:0 0 10px">New vs Fixed Findings</h2>
+      <div class="table-shell trend-table-shell">
+        <table>
+          <thead><tr><th>Date</th><th>Repo</th><th>New</th><th>Fixed</th></tr></thead>
+          <tbody>{_table_rows(list(trends.get("new_fixed_over_time") or []), [("label","Date"),("repo","Repo"),("new_count","New"),("fixed_count","Fixed")], "No baseline-aware trend data available yet.")}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="card">
+      <h2 style="margin:0 0 10px">Top Repos by Risk</h2>
+      <div class="table-shell trend-table-shell">
+        <table>
+          <thead><tr><th>Repo</th><th>Scans</th><th>Risk Score</th><th>Critical in Prod</th><th>Last Findings</th></tr></thead>
+          <tbody>{_table_rows(list(trends.get("top_repos_by_risk") or []), [("repo","Repo"),("scans","Scans"),("risk_score","Risk"),("critical_prod","Critical in Prod"),("latest_total","Last Findings")], "No repository trend data available.")}</tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+  <section class="trend-grid">
+    <section class="card">
+      <h2 style="margin:0 0 10px">Top Noisy Rules</h2>
+      <div class="table-shell trend-table-shell">
+        <table>
+          <thead><tr><th>Rule</th><th>Hits</th><th>Suppressed</th></tr></thead>
+          <tbody>{_table_rows(list(trends.get("top_noisy_rules") or []), [("rule","Rule"),("hits","Hits"),("suppressed","Suppressed")], "Rule-level trend data will appear after new scans are saved.")}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="card">
+      <h2 style="margin:0 0 10px">Suppression Rate by Rule</h2>
+      <div class="table-shell trend-table-shell">
+        <table>
+          <thead><tr><th>Rule</th><th>Suppressed</th><th>Total</th><th>Rate</th></tr></thead>
+          <tbody>{_table_rows([{**item, "rate": f"{item.get('rate_pct', 0)}%"} for item in list(trends.get("suppression_rate_by_rule") or [])], [("rule","Rule"),("suppressed","Suppressed"),("total","Total"),("rate","Rate")], "Suppression-rate trends will appear after new scans are saved.")}</tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+  <section class="card">
+    <h2 style="margin:0 0 10px">LLM Review Failure Rate by Model</h2>
+    <div class="table-shell trend-table-shell">
+      <table>
+        <thead><tr><th>Model</th><th>Scans</th><th>Failed Scans</th><th>Failed Batches</th><th>Failure Rate</th><th>Reviewed</th><th>Downgraded</th></tr></thead>
+        <tbody>{_table_rows([{**item, "failure_rate": f"{item.get('failure_rate_pct', 0)}%"} for item in list(trends.get("llm_review_failure_rate_by_model") or [])], [("model","Model"),("scans","Scans"),("failed_scans","Failed Scans"),("failed_batches","Failed Batches"),("failure_rate","Failure Rate"),("reviewed","Reviewed"),("downgraded","Downgraded")], "No LLM trend data available yet.")}</tbody>
+      </table>
+    </div>
+  </section>
+</section>"""
+    return _layout(title="Trends", body=body, active="trends", show_scan_results=show_scan_results, csrf_token=csrf_token)
+
+
 def render_settings_page(
     *,
     bitbucket_url: str,
@@ -865,6 +966,7 @@ def render_settings_page(
     <div><label>Output Directory</label><input type="text" name="output_dir" value="{_esc(output_dir)}"></div>
     <div><label>LLM URL</label><input type="text" name="llm_url" value="{_esc(llm_cfg.get('base_url',''))}"></div>
     <div><label>LLM Model</label><input type="text" name="llm_model" value="{_esc(llm_cfg.get('model',''))}"></div>
+    <div><label>Report LLM Detail Timeout (seconds)</label><input type="number" min="30" max="600" step="1" name="report_detail_timeout_s" value="{_esc(llm_cfg.get('report_detail_timeout_s', 180))}"></div>
     <div><button type="submit">Save Settings</button></div>
   </form>
 </section>"""

@@ -92,6 +92,7 @@ from services.scan_runtime_views import (
     parse_log_text_entries as _parse_log_text_entries,
     phase_timeline as _phase_timeline,
 )
+from services.trends import compute_history_trends
 from services.web_pages import (
     render_help_page,
     render_history_page,
@@ -100,6 +101,7 @@ from services.web_pages import (
     render_results_page,
     render_scan_page,
     render_settings_page,
+    render_trends_page,
 )
 from services.runtime_support import (
     DEFAULT_LLM_CONFIG,
@@ -220,7 +222,9 @@ def load_llm_config() -> dict:
     return load_llm_config_file(LLM_CFG_FILE)
 
 def save_llm_config(cfg: dict) -> None:
-    save_llm_config_file(LLM_CFG_FILE, cfg)
+    merged = load_llm_config()
+    merged.update(dict(cfg or {}))
+    save_llm_config_file(LLM_CFG_FILE, merged)
 
 def load_tls_config() -> dict:
     return load_tls_config_file(TLS_CFG_FILE)
@@ -363,6 +367,7 @@ _scan_service = ScanJobService(
         history_file=HISTORY_FILE,
         log_dir=LOG_DIR,
         db_file=DB_FILE,
+        llm_cfg_file=LLM_CFG_FILE,
     ),
     load_policy=load_policy,
     load_owner_map=load_owner_map,
@@ -383,6 +388,7 @@ def _sync_scan_service_paths() -> None:
         history_file=HISTORY_FILE,
         log_dir=LOG_DIR,
         db_file=DB_FILE,
+        llm_cfg_file=LLM_CFG_FILE,
     )
     _audit_log.update_path(AUDIT_FILE)
 
@@ -1212,6 +1218,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return True
             self._render_inventory_page()
             return True
+        if p == "/trends":
+            if not _is_connected():
+                self._redirect("/login")
+                return True
+            if self._require_browser_session():
+                return True
+            self._render_trends_page()
+            return True
         if p == "/settings":
             if not _is_connected():
                 self._redirect("/login")
@@ -1635,6 +1649,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         )
         self._send(200, "text/html; charset=utf-8", html)
 
+    def _render_trends_page(self, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        html = render_trends_page(
+            trends=compute_history_trends(list(reversed(_history_records_for_user()))),
+            csrf_token=_current_csrf_token(self),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+            show_scan_results=_has_scan_results(),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
     def _render_settings_page(self, *, notice: str = "", error: str = ""):
         if _require_role(self, ROLE_ADMIN):
             return
@@ -1764,6 +1791,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             llm_url = body.get("llm_url", "").strip()
             llm_model = body.get("llm_model", "").strip()
+            report_detail_timeout_s = body.get("report_detail_timeout_s", "").strip()
             output_dir = body.get("output_dir", "").strip()
             bitbucket_verify_ssl = bool(body.get("bitbucket_verify_ssl"))
             bitbucket_ca_bundle = body.get("bitbucket_ca_bundle", "").strip()
@@ -1773,7 +1801,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
             _apply_tls_settings_to_connected_client(tls_result)
             if llm_url or llm_model:
-                _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
+                _settings_service.save_llm_settings(
+                    llm_url=llm_url,
+                    llm_model=llm_model,
+                    report_detail_timeout_s=report_detail_timeout_s,
+                )
             if output_dir:
                 is_scan_running = _current_session_snapshot().get("state") == "running"
                 _settings_service.save_output_dir(
@@ -1908,9 +1940,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         url = body.get("base_url", "").strip()
         model = body.get("model", "").strip()
+        report_detail_timeout_s = body.get("report_detail_timeout_s", "").strip()
         if not url or not model:
             return self._err(400, "base_url and model required")
-        self._json(_settings_service.save_llm_settings(llm_url=url, llm_model=model))
+        self._json(_settings_service.save_llm_settings(
+            llm_url=url,
+            llm_model=model,
+            report_detail_timeout_s=report_detail_timeout_s,
+        ))
 
     def _sse_stream(self):
         """Stream log lines as Server-Sent Events."""
@@ -2012,6 +2049,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         llm_url    = body.get("llm_url", "").strip()
         llm_model  = body.get("llm_model", "").strip()
+        report_detail_timeout_s = body.get("report_detail_timeout_s", "").strip()
         output_dir = body.get("output_dir", "").strip()
         bitbucket_verify_ssl = bool(body.get("bitbucket_verify_ssl"))
         bitbucket_ca_bundle = body.get("bitbucket_ca_bundle", "").strip()
@@ -2024,7 +2062,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             return self._err(400, str(e))
         if llm_url and llm_model:
-            _settings_service.save_llm_settings(llm_url=llm_url, llm_model=llm_model)
+            _settings_service.save_llm_settings(
+                llm_url=llm_url,
+                llm_model=llm_model,
+                report_detail_timeout_s=report_detail_timeout_s,
+            )
         if output_dir:
             try:
                 is_scan_running = _current_session_snapshot().get("state") == "running"

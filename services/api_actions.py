@@ -98,7 +98,7 @@ def start_scan(
             raise ValueError("local_repo_path not found")
         if not repo_path.is_dir():
             raise ValueError("local_repo_path must be a directory")
-        project_key = project_key or "LOCAL"
+        project_key = "LOCAL"
         repo_slugs = [repo_path.resolve().name or "local-repo"]
     elif not project_key or not repo_slugs:
         raise ValueError("project_key and repo_slugs required")

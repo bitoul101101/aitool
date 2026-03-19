@@ -196,9 +196,10 @@ class HTMLReporter:
         llm_details = {}
         if ollama_url and ollama_model:
             try:
+                timeout_s = int(self.meta.get("report_detail_timeout_s", 180) or 180)
                 llm_details = self._fetch_llm_details(
                     findings, ollama_url.rstrip("/"), ollama_model,
-                    progress_fn=progress_fn)
+                    progress_fn=progress_fn, timeout=timeout_s)
             except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
                 pass  # LLM unavailable — report still generates without answers
         path.write_text(self._render(findings, policy or {}, llm_details),
@@ -207,7 +208,7 @@ class HTMLReporter:
 
     # ── Pre-bake LLM answers at write time ────────────────────────
     def _fetch_llm_details(self, findings: list, base_url: str,
-                           model: str, progress_fn=None) -> dict:
+                           model: str, progress_fn=None, timeout: int = 180) -> dict:
         """
         Call Ollama once per finding at report-write time.
         Returns {finding_key: rendered_html_str}.
@@ -216,7 +217,7 @@ class HTMLReporter:
         import urllib.request, urllib.error, json as _json, html as _html
 
         endpoint = base_url + "/api/chat"
-        timeout  = 60
+        timeout  = max(30, int(timeout or 180))
         results  = {}
 
         _SYSTEM_PROMPT = (

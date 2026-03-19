@@ -778,6 +778,36 @@ def test_start_scan_accepts_local_repo_without_bitbucket_client():
     assert session.repo_slugs == [repo_dir.name]
 
 
+def test_start_scan_forces_local_project_key_even_when_form_posts_bitbucket_project():
+    from services.api_actions import start_scan
+    from services.scan_jobs import ScanSession
+
+    class DummyOperatorState:
+        client = None
+
+        class Ctx:
+            username = "tester"
+
+        ctx = Ctx()
+
+    repo_dir = Path(tempfile.mkdtemp())
+    session = start_scan(
+        body={
+            "project_key": "COGI",
+            "local_repo_path": str(repo_dir),
+            "llm_model": "demo-model",
+        },
+        session_factory=ScanSession,
+        current_session=ScanSession(),
+        operator_state=DummyOperatorState(),
+        save_llm_config=lambda cfg: None,
+        audit_event=lambda *args, **kwargs: None,
+    )
+
+    assert session.scan_source == "local"
+    assert session.project_key == "LOCAL"
+
+
 def test_build_inventory_aggregates_ai_usage_profiles():
     from services.inventory import build_inventory
 
@@ -2049,7 +2079,7 @@ def test_settings_page_is_server_rendered():
     html = srv.render_settings_page(
         bitbucket_url=srv.BITBUCKET_URL,
         output_dir=srv.OUTPUT_DIR,
-        llm_cfg={"base_url": "http://localhost:11434", "model": "m"},
+        llm_cfg={"base_url": "http://localhost:11434", "model": "m", "report_detail_timeout_s": 180},
         tls_cfg={"verify_ssl": True, "ca_bundle": "C:\\corp-ca.pem"},
         state_dir="C:\\Users\\demo\\AppData\\Local\\AI Scanner",
     ).decode("utf-8")
@@ -2059,6 +2089,7 @@ def test_settings_page_is_server_rendered():
     assert 'name="bitbucket_ca_bundle"' in html
     assert 'value="C:\\corp-ca.pem"' in html
     assert 'name="bitbucket_verify_ssl"' in html
+    assert 'name="report_detail_timeout_s"' in html
 
 
 def test_settings_page_warns_about_legacy_repo_root_runtime_files():
@@ -2067,7 +2098,7 @@ def test_settings_page_warns_about_legacy_repo_root_runtime_files():
     html = srv.render_settings_page(
         bitbucket_url=srv.BITBUCKET_URL,
         output_dir=srv.OUTPUT_DIR,
-        llm_cfg={"base_url": "http://localhost:11434", "model": "m"},
+        llm_cfg={"base_url": "http://localhost:11434", "model": "m", "report_detail_timeout_s": 180},
         tls_cfg={"verify_ssl": True, "ca_bundle": ""},
         state_dir="C:\\Users\\demo\\AppData\\Local\\AI Scanner",
         legacy_runtime_files=[

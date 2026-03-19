@@ -60,10 +60,11 @@ def test_html_report_llm_enrichment_deduplicates_repeated_findings():
         return FakeResponse(payload)
 
     with patch.object(urllib.request, "urlopen", side_effect=fake_urlopen):
-        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen")
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen", timeout=180)
 
     assert len(calls) == 1
     assert len(details) == 1
+    assert calls[0][1] == 180
 
 
 def test_html_report_llm_enrichment_applies_budget_placeholder():
@@ -91,11 +92,35 @@ def test_html_report_llm_enrichment_applies_budget_placeholder():
         return FakeResponse(payload)
 
     with patch.object(urllib.request, "urlopen", side_effect=fake_urlopen):
-        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen")
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen", timeout=180)
 
     assert len(calls) == report_mod.REPORT_LLM_MAX_FINDINGS
     skipped_key = f"app{report_mod.REPORT_LLM_MAX_FINDINGS}.py:{report_mod.REPORT_LLM_MAX_FINDINGS}:openai"
     assert "skipped for this finding" in details[skipped_key]
+
+
+def test_save_llm_settings_persists_report_detail_timeout():
+    from services.settings_service import SettingsService
+
+    captured = {}
+    service = SettingsService(
+        load_llm_config=lambda: {"base_url": "http://localhost:11434", "model": "old", "report_detail_timeout_s": 180},
+        save_llm_config=lambda cfg: captured.update(cfg),
+        save_tls_config=lambda cfg: None,
+        ensure_ollama_running=lambda url: {"ok": True},
+        list_ollama_models=lambda url: ["m"],
+        audit_event=lambda action, **details: None,
+        sync_paths=lambda: None,
+    )
+
+    result = service.save_llm_settings(
+        llm_url="http://localhost:11434",
+        llm_model="gpt-oss:20b",
+        report_detail_timeout_s="240",
+    )
+
+    assert result["ok"] is True
+    assert captured["report_detail_timeout_s"] == 240
 
 
 def test_save_tls_settings_validates_pem_bundle_content():

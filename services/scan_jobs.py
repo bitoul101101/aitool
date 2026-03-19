@@ -32,6 +32,8 @@ from scanner.suppressions import (
     list_triage,
 )
 from services.inventory import build_inventory
+from services.runtime_support import load_llm_config
+from services.scan_runtime_views import llm_stats
 
 
 EXPECTED_LLM_ERRORS = (
@@ -238,6 +240,7 @@ class ScanJobPaths:
     history_file: str
     log_dir: str
     db_file: str
+    llm_cfg_file: str = ""
 
 
 class ScanJobService:
@@ -318,6 +321,7 @@ class ScanJobService:
         history_file: Optional[str] = None,
         log_dir: Optional[str] = None,
         db_file: Optional[str] = None,
+        llm_cfg_file: Optional[str] = None,
     ) -> None:
         if output_dir is not None:
             self.paths.output_dir = output_dir
@@ -335,6 +339,8 @@ class ScanJobService:
             self.paths.log_dir = log_dir
         if db_file is not None:
             self.paths.db_file = db_file
+        if llm_cfg_file is not None:
+            self.paths.llm_cfg_file = llm_cfg_file
         self._ensure_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -380,10 +386,22 @@ class ScanJobService:
         findings: list,
         *,
         log_file: str = "",
+        log_lines: list[dict] | None = None,
     ) -> dict:
         sev = Counter(f.get("severity", 4) for f in findings)
         ctx = Counter(f.get("context", "production") for f in findings)
         llm_name = (session.llm_model_info or {}).get("name", session.llm_model)
+        active_rules = Counter(str(f.get("provider_or_lib", "") or f.get("category", "") or "unknown") for f in findings)
+        suppressed_rules = Counter(
+            str(f.get("provider_or_lib", "") or f.get("category", "") or "unknown")
+            for f in list(session.suppressed_findings or [])
+        )
+        llm_summary = llm_stats(
+            list(log_lines or []),
+            state=session.state,
+            llm_model=session.llm_model,
+            llm_model_info=session.llm_model_info,
+        )
         critical_prod = sum(
             1 for f in findings
             if f.get("severity") == 1 and str(f.get("context", "production")).lower() == "production"
@@ -428,6 +446,20 @@ class ScanJobService:
             "scoped_files_by_repo": dict(session.scoped_files_by_repo),
             "log_file": log_file,
             "reports": session.report_paths,
+            "trend": {
+                "rules": {
+                    "active": dict(active_rules),
+                    "suppressed": dict(suppressed_rules),
+                },
+                "llm": {
+                    "reviewed": int(llm_summary.get("reviewed", 0) or 0),
+                    "skipped": int(llm_summary.get("skipped", 0) or 0),
+                    "dismissed": int(llm_summary.get("dismissed", 0) or 0),
+                    "downgraded": int(llm_summary.get("downgraded", 0) or 0),
+                    "failed_batches": int(llm_summary.get("failed_batches", 0) or 0),
+                    "failed_scan": int(llm_summary.get("failed_batches", 0) or 0) > 0,
+                },
+            },
         }
 
     def _build_scan_delta(
@@ -760,7 +792,7 @@ class ScanJobService:
                 fh.write(f"[{ts}] {entry.get('msg', '')}\n")
 
         with session.state_lock:
-            record = self._build_record(session, findings, log_file=str(log_path))
+            record = self._build_record(session, findings, log_file=str(log_path), log_lines=log_lines)
         try:
             self._upsert_job_record(record)
             self._replace_scan_logs(session.scan_id, log_lines)
@@ -781,6 +813,7 @@ class ScanJobService:
         persist_record = save_history_record or self.save_history_record
         log = session.log
         stop = session.stop_event
+        llm_cfg = load_llm_config(self.paths.llm_cfg_file) if self.paths.llm_cfg_file else {}
 
         policy = self._load_policy(self.paths.policy_file)
         owner_map = self._load_owner_map(self.paths.owner_map_file)
@@ -1251,6 +1284,7 @@ class ScanJobService:
                         "delta": session.delta,
                         "inventory": session.inventory,
                         "llm_model_info": session.llm_model_info,
+                        "report_detail_timeout_s": int(llm_cfg.get("report_detail_timeout_s", 180) or 180),
                         "scan_duration_s": elapsed_so_far,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,
@@ -1276,6 +1310,7 @@ class ScanJobService:
                         "delta": session.delta,
                         "inventory": session.inventory,
                         "llm_model_info": session.llm_model_info,
+                        "report_detail_timeout_s": int(llm_cfg.get("report_detail_timeout_s", 180) or 180),
                         "scan_duration_s": elapsed_so_far,
                         "pre_llm_count": total_pre_llm,
                         "post_llm_count": total_post_llm,

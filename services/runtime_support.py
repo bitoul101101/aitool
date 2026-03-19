@@ -14,6 +14,7 @@ from typing import Callable
 DEFAULT_LLM_CONFIG = {
     "base_url": "http://localhost:11434",
     "model": "qwen2.5-coder:7b-instruct",
+    "report_detail_timeout_s": 180,
 }
 DEFAULT_TLS_CONFIG = {
     "verify_ssl": True,

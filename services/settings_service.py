@@ -28,11 +28,25 @@ class SettingsService:
         self._audit_event = audit_event
         self._sync_paths = sync_paths
 
-    def save_llm_settings(self, *, llm_url: str, llm_model: str) -> dict:
+    def save_llm_settings(self, *, llm_url: str, llm_model: str, report_detail_timeout_s: int | str | None = None) -> dict:
         if not llm_url or not llm_model:
             raise ValueError("llm_url and llm_model required")
-        self._save_llm_config({"base_url": llm_url, "model": llm_model})
-        self._audit_event("settings_llm_update", base_url=llm_url, model=llm_model)
+        existing = dict(self._load_llm_config() or {})
+        if report_detail_timeout_s in (None, ""):
+            timeout_value = int(existing.get("report_detail_timeout_s", 180) or 180)
+        else:
+            try:
+                timeout_value = int(report_detail_timeout_s)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("report_detail_timeout_s must be an integer") from exc
+        timeout_value = max(30, min(600, timeout_value))
+        self._save_llm_config({
+            **existing,
+            "base_url": llm_url,
+            "model": llm_model,
+            "report_detail_timeout_s": timeout_value,
+        })
+        self._audit_event("settings_llm_update", base_url=llm_url, model=llm_model, report_detail_timeout_s=timeout_value)
         return {"ok": True, "models": self._list_ollama_models(llm_url or "http://localhost:11434")}
 
     def save_output_dir(
