@@ -557,15 +557,19 @@ def render_scan_page(
       {_csrf_field(csrf_token)}
       <input type="hidden" name="project_key" value="{_esc(selected_project)}">
       <div class="repo-toolbar">
-        <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
+        <div class="stack" style="gap:8px">
+          <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
+          <div class="inline" style="gap:8px;align-items:center">
+            <button type="button" class="ghost" id="local-repo-toggle-btn">Local Repo</button>
+            <div class="inline{" hidden" if not local_repo_path_value else ""}" id="local-repo-row" style="gap:8px;align-items:center;flex:1 1 auto">
+              <input type="text" name="local_repo_path" id="local-repo-path-input" value="{_esc(local_repo_path_value)}" placeholder="Local Repository Path e.g. C:\\repo or /home/user/repo">
+              <button type="button" class="ghost" id="local-repo-browse-btn">Browse...</button>
+            </div>
+          </div>
+        </div>
         <div><label>Scan Scope</label><select name="scan_scope" id="scan-scope-select">{scope_options}</select></div>
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
         <div class="inline repo-action-bar" style="justify-content:flex-start;align-items:end;gap:8px">
-          <div class="inline{" hidden" if not local_repo_path_value else ""}" id="local-repo-row" style="gap:8px;align-items:center;flex:1 1 auto">
-            <input type="text" name="local_repo_path" id="local-repo-path-input" value="{_esc(local_repo_path_value)}" placeholder="Local Repository Path e.g. C:\\repo or /home/user/repo">
-            <button type="button" class="ghost" id="local-repo-browse-btn">Browse...</button>
-          </div>
-          <button type="button" class="ghost" id="local-repo-toggle-btn">Local Repo</button>
           <button type="submit" id="start-scan-btn"{" disabled" if start_blocked or (not selected and not local_repo_path_value) else ""}>Start Scan</button>
         </div>
       </div>

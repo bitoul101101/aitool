@@ -1451,7 +1451,8 @@ def test_scan_page_renders_incremental_scope_controls():
     assert 'class="inline hidden" id="local-repo-row"' in html
     assert 'id="local-repo-path-input"' in html
     assert 'id="local-repo-browse-btn"' in html
-    assert html.index('id="local-repo-row"') < html.index('>Start Scan</button>')
+    assert html.index('id="local-repo-toggle-btn"') < html.index('id="scan-scope-select"')
+    assert html.index('id="local-repo-row"') < html.index('id="scan-scope-select"')
     assert "Baseline-Aware Rescan" in html
     assert "Changed-file and baseline-aware scans reduce traversal and LLM work on repeated runs." not in html
 
