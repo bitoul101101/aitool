@@ -218,8 +218,11 @@ def load_policy(path):
         return {}
 
 def load_owner_map(path):
+    owner_map_path = Path(path)
+    if not owner_map_path.exists() or not owner_map_path.is_file():
+        return {}
     try:
-        return json.loads(Path(path).read_text("utf-8"))
+        return json.loads(owner_map_path.read_text("utf-8"))
     except Exception:
         return {}
 

@@ -3611,6 +3611,13 @@ def test_delete_pat_skips_delete_call_when_no_stored_value():
     assert fake.delete_calls == 0
 
 
+def test_load_owner_map_returns_empty_when_file_is_missing():
+    import app_server as srv
+
+    missing = Path(tempfile.mkdtemp()) / "owner_map.json"
+    assert srv.load_owner_map(str(missing)) == {}
+
+
 def test_bitbucket_client_uses_ca_bundle_for_tls_verification():
     from scanner.bitbucket import BitbucketClient
 
