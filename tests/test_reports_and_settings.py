@@ -178,6 +178,79 @@ def test_html_report_llm_enrichment_applies_budget_placeholder():
     assert "skipped for this finding" in details[skipped_key]
 
 
+def test_generate_html_report_builds_and_persists_html_artifact_on_demand():
+    from services.scan_jobs import ScanJobPaths, ScanJobService
+
+    temp_root = Path(tempfile.mkdtemp())
+    output_dir = temp_root / "output"
+    service = ScanJobService(
+        app_version="test",
+        paths=ScanJobPaths(
+            output_dir=str(output_dir),
+            temp_dir=str(temp_root / "tmp"),
+            policy_file=str(temp_root / "policy.json"),
+            owner_map_file=str(temp_root / "owner_map.json"),
+            suppressions_file=str(temp_root / "ai_scanner_suppressions.json"),
+            history_file=str(temp_root / "scan_history.json"),
+            log_dir=str(temp_root / "logs"),
+            db_file=str(temp_root / "scan_jobs.db"),
+            llm_cfg_file=str(temp_root / "llm.json"),
+        ),
+        load_policy=lambda path: {},
+        load_owner_map=lambda path: {},
+        policy_version=lambda path: "test",
+        utc_now_iso=lambda: "2026-03-19T12:00:00Z",
+        git_head_commit=lambda repo_dir: "deadbeef",
+        ollama_ping=lambda url, timeout=0.5: False,
+    )
+
+    record = {
+        "scan_id": "20260319_120000",
+        "project_key": "LOCAL",
+        "repo_slugs": ["demo-repo"],
+        "state": "done",
+        "duration_s": 12,
+        "started_at_utc": "2026-03-19T12:00:00Z",
+        "completed_at_utc": "2026-03-19T12:00:12Z",
+        "tool_version": "test",
+        "policy_version": "test",
+        "operator": "tester",
+        "total": 1,
+        "delta": {},
+        "inventory": {"repos_total": 1},
+        "llm_model": "qwen2.5-coder:7b-instruct",
+        "llm_model_info": {"name": "qwen2.5-coder:7b-instruct"},
+        "pre_llm_count": 1,
+        "post_llm_count": 1,
+        "repo_details": {"demo-repo": {"owner": "User", "branch": "main", "commit": "abc123"}},
+        "reports": {"__all__": {"csv_name": "AI_Scan_Report_LOCAL_demo-repo_20260319_120000.csv"}},
+        "findings": [
+            {
+                "severity": 2,
+                "ai_category": "External AI API",
+                "repo": "demo-repo",
+                "project_key": "LOCAL",
+                "file": "app.py",
+                "line": 10,
+                "policy_status": "REVIEW",
+                "provider_or_lib": "openai",
+                "capability": "chat",
+                "description": "OpenAI usage",
+                "context": "production",
+            }
+        ],
+    }
+    service._upsert_job_record(record)
+
+    updated = service.generate_html_report("20260319_120000")
+
+    html_name = updated["reports"]["__all__"]["html_name"]
+    html_path = Path(updated["reports"]["__all__"]["html"])
+    assert html_name.endswith(".html")
+    assert html_path.exists()
+    assert html_path.read_text("utf-8").startswith("<!DOCTYPE html>")
+
+
 def test_save_llm_settings_persists_report_detail_timeout():
     from services.settings_service import SettingsService
 

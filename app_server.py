@@ -657,11 +657,42 @@ def _scan_record_for_id(scan_id: str) -> dict | None:
             "reports": {"__all__": dict(current_report)},
             "delta": dict(snapshot["delta"] or {}),
             "inventory": dict(snapshot["inventory"] or {}),
+            "findings": list(snapshot["findings"]),
+            "llm_model": str(snapshot.get("status", {}).get("llm_model", "") or ""),
+            "llm_model_info": dict(snapshot.get("status", {}).get("llm_model_info") or {}),
+            "pre_llm_count": int(snapshot["session"].pre_llm_count or 0),
+            "post_llm_count": int(snapshot["session"].post_llm_count or 0),
+            "repo_details": dict(snapshot["session"].repo_details or {}),
+            "tool_version": snapshot["session"].tool_version,
+            "policy_version": snapshot["session"].policy_version,
+            "operator": snapshot["session"].operator,
             "finding_total": len(snapshot["findings"]),
             "suppressed_total": len(snapshot["suppressed_findings"]),
             "log_file": f"{scan_id}.txt" if scan_id else "",
         }
     return _find_history_record_by_scan_id(scan_id)
+
+
+def _generate_html_report_for_scan(scan_id: str) -> dict:
+    safe_scan_id = Path(scan_id).name
+    record = _scan_record_for_id(safe_scan_id)
+    if not record:
+        raise RuntimeError("Scan results not found")
+    report = dict((record.get("reports") or {}).get("__all__", {}) or {})
+    html_path = str(report.get("html", "") or "")
+    if html_path and Path(html_path).exists():
+        return record
+
+    snapshot = _current_session_snapshot()
+    findings = None
+    if snapshot["scan_id"] == safe_scan_id:
+        findings = list(snapshot["findings"])
+    updated = _scan_service.generate_html_report(safe_scan_id, findings=findings)
+    if snapshot["scan_id"] == safe_scan_id:
+        with _state_lock:
+            current = _current_session()
+            current.report_paths = dict(updated.get("reports") or {})
+    return updated
 
 
 def _triage_by_hash() -> Dict[str, dict]:
@@ -1385,6 +1416,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._page_scan_start(body)
         elif p == "/scan/stop":
             return self._page_scan_stop()
+        elif p.startswith("/scan/") and p.endswith("/generate-html"):
+            return self._page_generate_html_report(p[6:-14])
         elif p == "/history/delete":
             return self._page_history_delete(body)
         elif p == "/settings/save":
@@ -1577,6 +1610,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not scan_complete:
                 return self._redirect(f"/scan/{quote(safe_scan_id)}?tab=activity")
             html_name = report.get("html_name", "")
+            can_generate_html = bool(
+                len(snapshot["findings"]) if is_current else len(list(record.get("findings") or []))
+            )
             repo_label = ", ".join(repo_slugs)
             html = render_results_page(
                 scan_id=safe_scan_id,
@@ -1587,6 +1623,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 csv_name=report.get("csv_name", ""),
                 log_url=f"/api/history/log/{safe_scan_id}",
                 started_at_utc=str(record.get("started_at_utc", "") or ""),
+                can_generate_html=can_generate_html,
                 show_scan_results=_has_scan_results(),
                 csrf_token=_current_csrf_token(self),
                 notice=notice or (qs.get("notice", [""])[0] or ""),
@@ -1763,6 +1800,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         target = f"/scan/{current_session.scan_id}" if current_session.scan_id else "/scan"
         extra = {"tab": "activity"} if current_session.scan_id else {"new": "1"}
         self._redirect(_with_query(target, notice="Stop requested", **extra))
+
+    def _page_generate_html_report(self, scan_id: str):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        safe_scan_id = Path(scan_id).name
+        record = _scan_record_for_id(safe_scan_id)
+        if not record:
+            return self._err(404, "Scan results not found")
+        project_key = str(record.get("project_key", "") or "")
+        if project_key and _require_project_access(self, project_key):
+            return
+        try:
+            _generate_html_report_for_scan(safe_scan_id)
+        except Exception as e:
+            self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", error=str(e)))
+            return
+        self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice="HTML report generated"))
 
     def _page_history_delete(self, body: dict):
         if _require_role(self, ROLE_ADMIN):

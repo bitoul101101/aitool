@@ -1868,6 +1868,28 @@ def test_results_page_handles_missing_html_report():
     assert '<iframe class="results-frame"' not in html
 
 
+def test_results_page_offers_on_demand_html_generation_when_findings_exist():
+    import app_server as srv
+
+    html = srv.render_results_page(
+        scan_id="20260318_140208",
+        project_key="COGI",
+        repo_label="repo1",
+        state="done",
+        html_name="",
+        csv_name="scan.csv",
+        log_url="/api/history/log/20260318_140208",
+        can_generate_html=True,
+        csrf_token="csrf-demo",
+    ).decode("utf-8")
+
+    assert "Detailed HTML report has not been generated yet." in html
+    assert 'action="/scan/20260318_140208/generate-html"' in html
+    assert "Generate HTML Report" in html
+    assert "Download CSV File" in html
+    assert '<iframe class="results-frame"' not in html
+
+
 def test_render_results_page_resolves_current_session_report():
     import app_server as srv
 
@@ -3197,7 +3219,7 @@ def test_run_scan_logs_structured_metadata_fetch_errors():
         srv._operator_state.client = orig_client
 
 
-def test_run_scan_logs_structured_report_generation_errors():
+def test_run_scan_defers_html_report_generation_until_requested():
     import app_server as srv
 
     d = Path(tempfile.mkdtemp())
@@ -3251,11 +3273,11 @@ def test_run_scan_logs_structured_report_generation_errors():
              patch("services.scan_jobs.AIUsageDetector.scan", return_value=[finding]), \
              patch("services.scan_jobs.SecurityAnalyzer.analyze", side_effect=lambda self, rows: rows), \
              patch("services.scan_jobs.Aggregator.process", return_value=[finding]), \
-             patch("services.scan_jobs.CSVReporter.write_csv", return_value=str(d / "output" / "report.csv")), \
-             patch("services.scan_jobs.HTMLReporter.write", side_effect=OSError("disk full")):
+             patch("services.scan_jobs.CSVReporter.write_csv", return_value=str(d / "output" / "report.csv")):
             srv._run_scan(session)
 
-        assert any("[REPORT_GEN] error: disk full" in entry["msg"] for entry in session.log_lines)
+        assert any("HTML report deferred until requested from the Results tab." in entry["msg"] for entry in session.log_lines)
+        assert not any("Writing HTML report" in entry["msg"] for entry in session.log_lines)
     finally:
         srv.OUTPUT_DIR = orig_out
         srv._operator_state.client = orig_client

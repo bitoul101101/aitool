@@ -653,6 +653,7 @@ def render_results_page(
     csv_name: str = "",
     log_url: str = "",
     started_at_utc: str = "",
+    can_generate_html: bool = False,
     show_scan_results: bool = True,
     csrf_token: str = "",
     notice: str = "",
@@ -662,10 +663,30 @@ def render_results_page(
     toolbar_actions = []
     if html_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
+    elif can_generate_html:
+        toolbar_actions.append(
+            f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
+            f'{_csrf_field(csrf_token)}'
+            '<button type="submit" class="btn alt">Generate HTML Report</button>'
+            '</form>'
+        )
     if csv_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
     if log_url:
         toolbar_actions.append(f'<a class="btn ghost" href="{_esc(log_url)}" download>Download Logs</a>')
+    if html_name:
+        results_body = f'<iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Detailed Report"></iframe>'
+    elif can_generate_html:
+        results_body = (
+            '<section class="card empty-state"><strong>Detailed HTML report has not been generated yet.</strong>'
+            '<div class="muted" style="margin-top:6px">Generate it when you need the full exported report. CSV and log artifacts remain available immediately.</div>'
+            '</section>'
+        )
+    else:
+        results_body = (
+            '<section class="card empty-state"><strong>No report was generated for this scan.</strong>'
+            '<div class="muted" style="margin-top:6px">This usually means the scan completed without findings or stopped before report generation.</div></section>'
+        )
     body = f"""
 {_flash(notice, error)}
 <section class="results-shell">
@@ -677,7 +698,7 @@ def render_results_page(
       </div>
     </div>
   </section>
-  {f'<iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Detailed Report"></iframe>' if html_name else '<section class="card empty-state"><strong>No report was generated for this scan.</strong><div class="muted" style="margin-top:6px">This usually means the scan completed without findings or stopped before report generation.</div></section>'}
+  {results_body}
 </section>"""
     return _layout(title="Results", body=body, active="", show_scan_results=show_scan_results, csrf_token=csrf_token)
 

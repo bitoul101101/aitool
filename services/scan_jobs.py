@@ -110,6 +110,8 @@ class ScanSession:
         self.delta: dict = {}
         self.inventory: dict = {}
         self.scoped_files_by_repo: Dict[str, List[str]] = {}
+        self.pre_llm_count: int = 0
+        self.post_llm_count: int = 0
 
     @staticmethod
     def _finding_detail(finding: dict) -> dict:
@@ -213,6 +215,8 @@ class ScanSession:
                 "duration_s": self.scan_duration_s,
                 "llm_model": (self.llm_model_info or {}).get("name", self.llm_model),
                 "llm_model_info": dict(self.llm_model_info),
+                "pre_llm_count": self.pre_llm_count,
+                "post_llm_count": self.post_llm_count,
                 "finding_details": [
                     self._finding_detail(f)
                     for f in sorted(
@@ -440,12 +444,16 @@ class ScanJobService:
             },
             "ctx": dict(ctx),
             "llm_model": llm_name,
+            "llm_model_info": dict(session.llm_model_info or {}),
+            "pre_llm_count": int(session.pre_llm_count or 0),
+            "post_llm_count": int(session.post_llm_count or 0),
             "critical_prod": critical_prod,
             "high_prod": high_prod,
             "repo_details": session.repo_details,
             "scoped_files_by_repo": dict(session.scoped_files_by_repo),
             "log_file": log_file,
             "reports": session.report_paths,
+            "findings": list(findings),
             "trend": {
                 "rules": {
                     "active": dict(active_rules),
@@ -562,6 +570,23 @@ class ScanJobService:
             )
             conn.commit()
 
+    def _load_db_history_record(self, scan_id: str) -> dict | None:
+        self._ensure_db()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT record_json FROM scan_jobs WHERE scan_id = ?",
+                (scan_id,),
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            record = json.loads(row["record_json"])
+        except (TypeError, ValueError, JSONDecodeError):
+            return None
+        if not isinstance(record, dict):
+            return None
+        return self._normalize_history_record(record)
+
     def _replace_scan_logs(self, scan_id: str, log_lines: list[dict]) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM scan_logs WHERE scan_id = ?", (scan_id,))
@@ -611,7 +636,123 @@ class ScanJobService:
             repo_slugs = []
         normalized["repo_slugs"] = [str(slug).strip() for slug in repo_slugs if str(slug).strip()]
         normalized["repos"] = list(normalized["repo_slugs"])
+        findings = normalized.get("findings", [])
+        normalized["findings"] = findings if isinstance(findings, list) else []
         return normalized
+
+    @staticmethod
+    def _report_base_name(record: dict) -> str:
+        reports = (record.get("reports") or {}).get("__all__", {})
+        csv_name = str(reports.get("csv_name", "") or "").strip()
+        if csv_name:
+            return Path(csv_name).stem
+        project_key = str(record.get("project_key", "") or "LOCAL")
+        repo_slugs = [str(slug).strip() for slug in list(record.get("repo_slugs", record.get("repos", [])) or []) if str(slug).strip()]
+        label = "ALL" if len(repo_slugs) > 1 else (repo_slugs[0] if repo_slugs else "results")
+        scan_id = str(record.get("scan_id", "") or datetime.now().strftime("%Y%m%d_%H%M%S"))
+        date_part = scan_id[:8] if len(scan_id) >= 8 else datetime.now().strftime("%Y%m%d")
+        time_part = scan_id[9:15] if len(scan_id) >= 15 else datetime.now().strftime("%H%M%S")
+        return f"AI_Scan_Report_{project_key}_{label}_{date_part}_{time_part}"
+
+    def _report_meta_from_record(self, record: dict) -> dict:
+        repo_slugs = [str(slug).strip() for slug in list(record.get("repo_slugs", record.get("repos", [])) or []) if str(slug).strip()]
+        repo_details = dict(record.get("repo_details") or {})
+        llm_cfg = load_llm_config(self.paths.llm_cfg_file) if self.paths.llm_cfg_file else {}
+        if len(repo_slugs) > 1:
+            repos_meta = [
+                {
+                    "slug": slug,
+                    "owner": str((repo_details.get(slug) or {}).get("owner", "User") or "User"),
+                    "branch": str((repo_details.get(slug) or {}).get("branch", "default") or "default"),
+                    "commit": str((repo_details.get(slug) or {}).get("commit", "") or ""),
+                }
+                for slug in repo_slugs
+            ]
+            return {
+                "repo": f"{len(repo_slugs)} repositories",
+                "project_key": str(record.get("project_key", "") or ""),
+                "owner": "",
+                "branch": "",
+                "operator": str(record.get("operator", "") or ""),
+                "started_at_utc": str(record.get("started_at_utc", "") or ""),
+                "completed_at_utc": str(record.get("completed_at_utc", "") or ""),
+                "policy_version": str(record.get("policy_version", "") or ""),
+                "tool_version": str(record.get("tool_version", "") or ""),
+                "repos_meta": repos_meta,
+                "scan_id": str(record.get("scan_id", "") or ""),
+                "delta": dict(record.get("delta") or {}),
+                "inventory": dict(record.get("inventory") or {}),
+                "llm_model_info": dict(record.get("llm_model_info") or {}),
+                "report_detail_timeout_s": int(record.get("report_detail_timeout_s", llm_cfg.get("report_detail_timeout_s", 180)) or 180),
+                "scan_duration_s": int(record.get("duration_s", 0) or 0),
+                "pre_llm_count": int(record.get("pre_llm_count", 0) or 0),
+                "post_llm_count": int(record.get("post_llm_count", record.get("total", 0)) or 0),
+                "suppressed_count": int(record.get("suppressed_total", 0) or 0),
+                "reviewed_count": int(record.get("reviewed_count", 0) or 0),
+                "accepted_risk_count": int(record.get("accepted_risk_count", 0) or 0),
+            }
+        single_slug = repo_slugs[0] if repo_slugs else Path(str(record.get("local_repo_path", "") or "")).name or "results"
+        detail = dict(repo_details.get(single_slug) or {})
+        return {
+            "repo": single_slug,
+            "project_key": str(record.get("project_key", "") or ""),
+            "owner": str(detail.get("owner", "User") or "User"),
+            "branch": str(detail.get("branch", "") or ""),
+            "commit": str(detail.get("commit", "") or ""),
+            "operator": str(record.get("operator", "") or ""),
+            "started_at_utc": str(record.get("started_at_utc", "") or ""),
+            "completed_at_utc": str(record.get("completed_at_utc", "") or ""),
+            "policy_version": str(record.get("policy_version", "") or ""),
+            "tool_version": str(record.get("tool_version", "") or ""),
+            "scan_id": str(record.get("scan_id", "") or ""),
+            "delta": dict(record.get("delta") or {}),
+            "inventory": dict(record.get("inventory") or {}),
+            "llm_model_info": dict(record.get("llm_model_info") or {}),
+            "report_detail_timeout_s": int(record.get("report_detail_timeout_s", llm_cfg.get("report_detail_timeout_s", 180)) or 180),
+            "scan_duration_s": int(record.get("duration_s", 0) or 0),
+            "pre_llm_count": int(record.get("pre_llm_count", 0) or 0),
+            "post_llm_count": int(record.get("post_llm_count", record.get("total", 0)) or 0),
+            "suppressed_count": int(record.get("suppressed_total", 0) or 0),
+            "reviewed_count": int(record.get("reviewed_count", 0) or 0),
+            "accepted_risk_count": int(record.get("accepted_risk_count", 0) or 0),
+        }
+
+    def generate_html_report(self, scan_id: str, findings: list[dict] | None = None) -> dict:
+        record = self._load_db_history_record(scan_id)
+        if not record:
+            raise RuntimeError("Stored scan record not found")
+        findings = list(findings if findings is not None else record.get("findings") or [])
+        if not findings:
+            raise RuntimeError("This scan does not have stored findings to build an HTML report")
+        reports = dict((record.get("reports") or {}).get("__all__", {}) or {})
+        existing_html = str(reports.get("html", "") or "")
+        if existing_html and Path(existing_html).exists():
+            return record
+
+        base_name = self._report_base_name(record)
+        Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
+        html_reporter = HTMLReporter(
+            output_dir=self.paths.output_dir,
+            scan_id=base_name,
+            include_snippets=True,
+            meta=self._report_meta_from_record(record),
+        )
+        llm_cfg = load_llm_config(self.paths.llm_cfg_file) if self.paths.llm_cfg_file else load_llm_config()
+        ollama_url = str(llm_cfg.get("base_url", "") or "").strip()
+        ollama_model = str(record.get("llm_model", "") or llm_cfg.get("model", "") or "").strip()
+        html_path = html_reporter.write(
+            findings,
+            policy=self._load_policy(self.paths.policy_file),
+            ollama_url=ollama_url,
+            ollama_model=ollama_model,
+        )
+        reports["html"] = str(Path(html_path).resolve())
+        reports["html_name"] = Path(html_path).name
+        updated = dict(record)
+        updated["reports"] = {"__all__": reports}
+        self._upsert_job_record(updated)
+        self._sync_legacy_history_export()
+        return self._normalize_history_record(updated)
 
     @staticmethod
     def _is_meaningful_history_record(record: dict) -> bool:
@@ -813,7 +954,6 @@ class ScanJobService:
         persist_record = save_history_record or self.save_history_record
         log = session.log
         stop = session.stop_event
-        llm_cfg = load_llm_config(self.paths.llm_cfg_file) if self.paths.llm_cfg_file else {}
 
         policy = self._load_policy(self.paths.policy_file)
         owner_map = self._load_owner_map(self.paths.owner_map_file)
@@ -1199,6 +1339,8 @@ class ScanJobService:
         final = aggregator.process(all_findings)
         with session.state_lock:
             session.findings = final
+            session.pre_llm_count = int(total_pre_llm or 0)
+            session.post_llm_count = int(total_post_llm or 0)
         scanned_slugs = [slug for slug in session.repo_slugs if per_repo.get(slug) is not None]
         delta_meta = self._build_scan_delta(
             final,
@@ -1246,8 +1388,6 @@ class ScanJobService:
             try:
                 dt_date = datetime.now().strftime("%Y%m%d")
                 dt_time = datetime.now().strftime("%H%M%S")
-                report_generated_at_utc = self._utc_now_iso()
-                elapsed_so_far = int(time.time() - t_start)
                 is_multi = len(scanned_slugs) > 1
                 label = "ALL" if is_multi else (scanned_slugs[0] if scanned_slugs else session.repo_slugs[0])
                 safe_name = f"AI_Scan_Report_{session.project_key}_{label}_{dt_date}_{dt_time}"
@@ -1255,104 +1395,14 @@ class ScanJobService:
                 log("  Writing CSV report...", "dim")
                 csv_reporter = CSVReporter(output_dir=self.paths.output_dir, scan_id=safe_name)
                 csv_path = csv_reporter.write_csv(final)
-                log(f"  Writing HTML report ({len(final)} finding(s))...", "dim")
-                if session.llm_url and session.llm_model:
-                    log(f"  [Report] Generating LLM analysis for {len(final)} finding(s)...", "dim")
-
-                if is_multi:
-                    repos_meta_list = [
-                        {
-                            "slug": slug,
-                            "owner": repo_meta.get(slug, {}).get("owner", "User"),
-                            "branch": repo_meta.get(slug, {}).get("branch") or "default",
-                            "commit": repo_meta.get(slug, {}).get("commit", ""),
-                        }
-                        for slug in session.repo_slugs
-                    ]
-                    report_meta = {
-                        "repo": f"{len(session.repo_slugs)} repositories",
-                        "project_key": session.project_key,
-                        "owner": "",
-                        "branch": "",
-                        "operator": session.operator,
-                        "started_at_utc": session.started_at_utc,
-                        "completed_at_utc": report_generated_at_utc,
-                        "policy_version": session.policy_version,
-                        "tool_version": session.tool_version,
-                        "repos_meta": repos_meta_list,
-                        "scan_id": session.scan_id,
-                        "delta": session.delta,
-                        "inventory": session.inventory,
-                        "llm_model_info": session.llm_model_info,
-                        "report_detail_timeout_s": int(llm_cfg.get("report_detail_timeout_s", 180) or 180),
-                        "scan_duration_s": elapsed_so_far,
-                        "pre_llm_count": total_pre_llm,
-                        "post_llm_count": total_post_llm,
-                        "suppressed_count": len(session.suppressed_findings),
-                        "reviewed_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_REVIEWED),
-                        "accepted_risk_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_ACCEPTED_RISK),
-                    }
-                else:
-                    single_slug = label
-                    single_owner = next((finding.get("owner", "") for finding in final), "User")
-                    report_meta = {
-                        "repo": single_slug,
-                        "project_key": session.project_key,
-                        "owner": single_owner,
-                        "branch": per_branch.get(single_slug, ""),
-                        "commit": repo_meta.get(single_slug, {}).get("commit", ""),
-                        "operator": session.operator,
-                        "started_at_utc": session.started_at_utc,
-                        "completed_at_utc": report_generated_at_utc,
-                        "policy_version": session.policy_version,
-                        "tool_version": session.tool_version,
-                        "scan_id": session.scan_id,
-                        "delta": session.delta,
-                        "inventory": session.inventory,
-                        "llm_model_info": session.llm_model_info,
-                        "report_detail_timeout_s": int(llm_cfg.get("report_detail_timeout_s", 180) or 180),
-                        "scan_duration_s": elapsed_so_far,
-                        "pre_llm_count": total_pre_llm,
-                        "post_llm_count": total_post_llm,
-                        "suppressed_count": len(session.suppressed_findings),
-                        "reviewed_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_REVIEWED),
-                        "accepted_risk_count": sum(1 for f in final if f.get("triage_status") == TRIAGE_ACCEPTED_RISK),
-                    }
-
-                html_reporter = HTMLReporter(
-                    output_dir=self.paths.output_dir,
-                    scan_id=safe_name,
-                    include_snippets=True,
-                    meta=report_meta,
-                )
-                report_progress = {"last_logged": 0}
-
-                def _report_progress(i: int, n: int, cap: str) -> None:
-                    if n <= 0:
-                        return
-                    step = max(1, n // 5)
-                    should_log = i == 1 or i == n or (i - report_progress["last_logged"]) >= step
-                    if not should_log:
-                        return
-                    report_progress["last_logged"] = i
-                    log(f"  [Report] LLM analysis {i}/{n}...", "dim")
-
-                html_path = html_reporter.write(
-                    final,
-                    policy=policy,
-                    ollama_url=session.llm_url,
-                    ollama_model=session.llm_model,
-                    progress_fn=_report_progress,
-                )
+                log("  HTML report deferred until requested from the Results tab.", "dim")
                 report_paths["__all__"] = {
                     "csv": str(Path(csv_path).resolve()),
-                    "html": str(Path(html_path).resolve()),
                     "csv_name": Path(csv_path).name,
-                    "html_name": Path(html_path).name,
                 }
                 with session.state_lock:
                     session.report_paths = dict(report_paths)
-                log(f"  OK Report: {Path(html_path).name}", "ok")
+                log(f"  OK Report: {Path(csv_path).name}", "ok")
             except EXPECTED_REPORT_ERRORS as exc:
                 log(f"  [REPORT_GEN] error: {exc}", "err")
 
