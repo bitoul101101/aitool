@@ -71,6 +71,8 @@ class ScanSession:
         self.scan_id: str = ""
         self.project_key: str = ""
         self.repo_slugs: List[str] = []
+        self.scan_source: str = "bitbucket"
+        self.local_repo_path: str = ""
         self.scan_scope: str = "full"
         self.compare_ref: str = ""
         self.llm_url: str = "http://localhost:11434"
@@ -167,6 +169,8 @@ class ScanSession:
                 "state": self.state,
                 "scan_id": self.scan_id,
                 "project_key": self.project_key,
+                "scan_source": self.scan_source,
+                "local_repo_path": self.local_repo_path,
                 "scan_scope": self.scan_scope,
                 "compare_ref": self.compare_ref,
                 "operator": self.operator,
@@ -260,6 +264,20 @@ class ScanJobService:
         self._git_head_commit = git_head_commit
         self._ollama_ping = ollama_ping
         self._ensure_db()
+
+    @staticmethod
+    def _git_branch_name(repo_dir: Path) -> str:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(repo_dir), "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=True,
+            )
+            return result.stdout.strip()
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return ""
 
     @staticmethod
     def _scan_workspace_name(scan_id: str) -> str:
@@ -358,6 +376,8 @@ class ScanJobService:
             "date": session.scan_id[:8],
             "time": session.scan_id[9:] if len(session.scan_id) > 8 else "",
             "project_key": session.project_key,
+            "scan_source": session.scan_source,
+            "local_repo_path": session.local_repo_path,
             "repos": session.repo_slugs,
             "scan_scope": session.scan_scope,
             "compare_ref": session.compare_ref,
@@ -781,6 +801,8 @@ class ScanJobService:
         log(f"Scan ID  : {session.scan_id}", "hd")
         log(f"Project  : {session.project_key}", "dim")
         log(f"Repos    : {session.total}", "dim")
+        if session.scan_source == "local" and session.local_repo_path:
+            log(f"Local Path: {session.local_repo_path}", "dim")
         scope_labels = {
             "full": "full scan",
             "changed_files": "changed-files scan",
@@ -818,9 +840,21 @@ class ScanJobService:
 
         repo_meta: Dict[str, dict] = {}
         git_env = client.build_git_auth_env() if client is not None else {}
+        local_root = Path(session.local_repo_path).expanduser() if session.local_repo_path else None
         for slug in session.repo_slugs:
             if stop.is_set():
                 break
+            if session.scan_source == "local" and local_root is not None:
+                branch = self._git_branch_name(local_root) or "local"
+                owner = session.operator or "User"
+                per_branch[slug] = branch
+                repo_meta[slug] = {
+                    "branch": branch,
+                    "owner": owner,
+                    "url": str(local_root),
+                }
+                log(f"  {slug}  branch:{branch}  owner:{owner}  source:local", "dim")
+                continue
             try:
                 if client is None:
                     raise RuntimeError("Bitbucket client unavailable")
@@ -932,33 +966,42 @@ class ScanJobService:
             owner = meta.get("owner", "User")
             clone_url = meta.get("url", "")
             clone_dir = scan_temp_root / slug
+            repo_root = clone_dir
+            cleanup_required = True
             try:
-                shallow_clone(
-                    clone_url,
-                    clone_dir,
-                    depth=2 if str(session.scan_scope or "full").lower() == "changed_files" else 1,
-                    branch=branch,
-                    verbose=False,
-                    stop_event=stop,
-                    proc_holder=session.proc_holder,
-                    proc_lock=session.proc_lock,
-                    git_env=git_env,
-                    verify_ssl=bool(getattr(client, "verify_ssl", True)),
-                    ca_bundle=str(getattr(client, "ca_bundle", "") or ""),
-                )
-                meta["commit"] = self._git_head_commit(clone_dir)
+                if session.scan_source == "local":
+                    if not local_root or not local_root.exists() or not local_root.is_dir():
+                        return slug, None, owner, 0, f"local repo path not found: {session.local_repo_path}"
+                    repo_root = local_root
+                    cleanup_required = False
+                else:
+                    shallow_clone(
+                        clone_url,
+                        clone_dir,
+                        depth=2 if str(session.scan_scope or "full").lower() == "changed_files" else 1,
+                        branch=branch,
+                        verbose=False,
+                        stop_event=stop,
+                        proc_holder=session.proc_holder,
+                        proc_lock=session.proc_lock,
+                        git_env=git_env,
+                        verify_ssl=bool(getattr(client, "verify_ssl", True)),
+                        ca_bundle=str(getattr(client, "ca_bundle", "") or ""),
+                    )
+                meta["commit"] = self._git_head_commit(repo_root)
             except RuntimeError as exc:
                 return slug, None, owner, 0, f"clone failed: {exc}"
             except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
                 return slug, None, owner, 0, f"clone error: {exc}"
 
             if stop.is_set():
-                cleanup_clone(clone_dir)
+                if cleanup_required:
+                    cleanup_clone(clone_dir)
                 return slug, None, owner, 0, "scan stopped"
 
             try:
                 last_pct = [-1]
-                scoped_files = _resolve_scoped_files(slug, clone_dir)
+                scoped_files = _resolve_scoped_files(slug, repo_root)
                 with session.state_lock:
                     session.scoped_files_by_repo[slug] = list(scoped_files or [])
 
@@ -977,7 +1020,7 @@ class ScanJobService:
                         log(f"  [{slug}] Scanning: {pct}% ({idx+1}/{total} files)", "dim")
 
                 raw, file_contents = detector.scan(
-                    clone_dir,
+                    repo_root,
                     repo_name=slug,
                     stop_event=stop,
                     return_file_contents=True,
@@ -986,7 +1029,7 @@ class ScanJobService:
                 )
                 if not scoped_files:
                     try:
-                        history_findings = scan_history(clone_dir, detector, slug, stop_event=stop)
+                        history_findings = scan_history(repo_root, detector, slug, stop_event=stop)
                         if history_findings:
                             raw.extend(history_findings)
                     except Exception as hist_err:
@@ -1014,7 +1057,8 @@ class ScanJobService:
             except (OSError, ValueError, TypeError, KeyError, JSONDecodeError) as exc:
                 return slug, None, owner, 0, f"scan error: {exc}"
             finally:
-                cleanup_clone(clone_dir)
+                if cleanup_required:
+                    cleanup_clone(clone_dir)
 
         total_pre_llm = 0
         total_post_llm = 0

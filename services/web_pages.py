@@ -158,6 +158,7 @@ def render_scan_page(
     phase_timeline: list[tuple[str, str]],
     selected_scan_scope: str = "full",
     selected_compare_ref: str = "",
+    selected_local_repo_path: str = "",
     force_selection: bool = False,
     scan_id: str = "",
     workspace_tab: str = "activity",
@@ -324,6 +325,7 @@ def render_scan_page(
     selected = set(selected_repos)
     scope_value = str(selected_scan_scope or "full").strip().lower() or "full"
     compare_ref_value = str(selected_compare_ref or "").strip()
+    local_repo_path_value = str(selected_local_repo_path or "").strip()
     repo_count = len(repos)
     repo_cols = "cols-2" if repo_count <= 18 else "cols-3"
     project_links = "".join(
@@ -484,7 +486,12 @@ def render_scan_page(
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
-        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked or not selected else ""}>Start Scan</button></div>
+        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked or (not selected and not local_repo_path_value) else ""}>Start Scan</button></div>
+      </div>
+      <div class="repo-toolbar">
+        <div><label>Local Repository Path</label><input type="text" name="local_repo_path" id="local-repo-path-input" value="{_esc(local_repo_path_value)}" placeholder="e.g. C:\\repo or /home/user/repo"></div>
+        <div class="muted" style="align-self:end">If a local path is provided, the tool scans that repository instead of the selected Bitbucket repos.</div>
+        <div></div>
       </div>
       <div class="repo-toolbar">
         <div><label>Scan Scope</label><select name="scan_scope" id="scan-scope-select">{scope_options}</select></div>

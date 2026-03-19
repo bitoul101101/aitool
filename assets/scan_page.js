@@ -9,6 +9,7 @@
   const scanScopeSelect = document.getElementById("scan-scope-select");
   const compareRefWrap = document.getElementById("compare-ref-wrap");
   const compareRefInput = document.getElementById("compare-ref-input");
+  const localRepoPathInput = document.getElementById("local-repo-path-input");
   const logEl = document.getElementById("scan-log");
   const textEl = document.getElementById("scan-state-text");
   const timelineEl = document.getElementById("phase-timeline");
@@ -53,11 +54,12 @@
 
   function updateRepoCount() {
     const selectedCount = repoCheckboxes().filter(function (cb) { return cb.checked; }).length;
+    const hasLocalPath = Boolean(localRepoPathInput && localRepoPathInput.value.trim());
     if (repoCount) {
-      repoCount.textContent = selectedCount + " selected";
+      repoCount.textContent = hasLocalPath ? "Local path selected" : selectedCount + " selected";
     }
     if (startScanBtn && !startScanBtn.dataset.blockedByRun) {
-      startScanBtn.disabled = selectedCount === 0;
+      startScanBtn.disabled = !hasLocalPath && selectedCount === 0;
     }
   }
 
@@ -105,6 +107,22 @@
         compareRefInput.value = "";
       }
     }
+  }
+
+  function updateTargetMode() {
+    if (!localRepoPathInput) {
+      return;
+    }
+    const usingLocal = Boolean(localRepoPathInput.value.trim());
+    repoCheckboxes().forEach(function (cb) {
+      cb.disabled = usingLocal;
+    });
+    if (repoSearch) {
+      repoSearch.disabled = usingLocal;
+    }
+    document.getElementById("select-all-repos-btn")?.toggleAttribute("disabled", usingLocal);
+    document.getElementById("select-none-repos-btn")?.toggleAttribute("disabled", usingLocal);
+    updateRepoCount();
   }
 
   function setModelOptions(models) {
@@ -363,6 +381,7 @@
   repoSearch?.addEventListener("input", filterRepos);
   modelSelect?.addEventListener("change", updateModelWarning);
   scanScopeSelect?.addEventListener("change", updateScopeFields);
+  localRepoPathInput?.addEventListener("input", updateTargetMode);
   newScanForm?.addEventListener("submit", function () {
     submitInFlight = true;
     if (startScanBtn) {
@@ -375,6 +394,7 @@
   filterRepos();
   updateModelWarning();
   updateScopeFields();
+  updateTargetMode();
   refreshModels();
   startLogStream();
   pollStatus();

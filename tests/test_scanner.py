@@ -661,6 +661,39 @@ def test_start_scan_requires_compare_ref_for_branch_diff():
         raise AssertionError("branch_diff scans should require compare_ref")
 
 
+def test_start_scan_accepts_local_repo_without_bitbucket_client():
+    from services.api_actions import start_scan
+    from services.scan_jobs import ScanSession
+
+    repo_dir = Path(tempfile.mkdtemp())
+    (repo_dir / "app.py").write_text("print('hello')\n", encoding="utf-8")
+
+    class DummyOperatorState:
+        client = None
+
+        class Ctx:
+            username = "tester"
+
+        ctx = Ctx()
+
+    session = start_scan(
+        body={
+            "local_repo_path": str(repo_dir),
+            "llm_model": "demo-model",
+        },
+        session_factory=ScanSession,
+        current_session=ScanSession(),
+        operator_state=DummyOperatorState(),
+        save_llm_config=lambda cfg: None,
+        audit_event=lambda *args, **kwargs: None,
+    )
+
+    assert session.scan_source == "local"
+    assert session.local_repo_path == str(repo_dir.resolve())
+    assert session.project_key == "LOCAL"
+    assert session.repo_slugs == [repo_dir.name]
+
+
 def test_build_inventory_aggregates_ai_usage_profiles():
     from services.inventory import build_inventory
 
@@ -1206,6 +1239,7 @@ def test_scan_page_renders_incremental_scope_controls():
     assert 'value="branch_diff" selected' in html
     assert 'id="compare-ref-input"' in html
     assert 'value="master"' in html
+    assert 'id="local-repo-path-input"' in html
     assert "Baseline-Aware Rescan" in html
 
 

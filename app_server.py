@@ -602,6 +602,8 @@ def _report_record_for_scan(scan_id: str) -> dict | None:
         return {
             "scan_id": snapshot["scan_id"],
             "project_key": snapshot["project_key"],
+            "scan_source": snapshot["session"].scan_source,
+            "local_repo_path": snapshot["session"].local_repo_path,
             "repo_slugs": list(snapshot["repo_slugs"]),
             "state": snapshot["state"],
             "started_at_utc": snapshot["started_at_utc"],
@@ -618,6 +620,8 @@ def _scan_record_for_id(scan_id: str) -> dict | None:
         return {
             "scan_id": snapshot["scan_id"],
             "project_key": snapshot["project_key"],
+            "scan_source": snapshot["session"].scan_source,
+            "local_repo_path": snapshot["session"].local_repo_path,
             "repo_slugs": list(snapshot["repo_slugs"]),
             "state": snapshot["state"],
             "started_at_utc": snapshot["started_at_utc"],
@@ -676,6 +680,8 @@ def _current_session_history_record() -> dict | None:
     return {
         "scan_id": snapshot["scan_id"],
         "project_key": snapshot["project_key"],
+        "scan_source": snapshot["session"].scan_source,
+        "local_repo_path": snapshot["session"].local_repo_path,
         "repo_slugs": list(snapshot["repo_slugs"]),
         "state": snapshot["state"],
         "started_at_utc": snapshot["started_at_utc"],
@@ -1407,6 +1413,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         selected_repos: list[str] | None = None,
         selected_scan_scope: str | None = None,
         selected_compare_ref: str | None = None,
+        selected_local_repo_path: str | None = None,
     ):
         if _require_role(self, ROLE_VIEWER):
             return
@@ -1419,6 +1426,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         status = dict(snapshot.get("status") or {})
         session_scan_scope = str(status.get("scan_scope", snapshot["session"].scan_scope) or "full")
         session_compare_ref = str(status.get("compare_ref", snapshot["session"].compare_ref) or "")
+        session_local_repo_path = str(status.get("local_repo_path", snapshot["session"].local_repo_path) or "")
         if _is_connected():
             status["hardware"] = _hardware_snapshot(snapshot["session"])
             status["llm_stats"] = _llm_stats(
@@ -1440,6 +1448,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             effective_selected_repos = list(session_repo_slugs) if project_key and project_key == session_project_key else []
         effective_scan_scope = selected_scan_scope if selected_scan_scope is not None else session_scan_scope
         effective_compare_ref = selected_compare_ref if selected_compare_ref is not None else session_compare_ref
+        effective_local_repo_path = (
+            selected_local_repo_path if selected_local_repo_path is not None else session_local_repo_path
+        )
         html = render_scan_page(
             projects=filter_projects(_operator_state.projects_cache, _operator_state.ctx),
             selected_project=project_key,
@@ -1453,6 +1464,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             log_text=_format_log_text(session_log_lines),
             phase_timeline=_phase_timeline(session_log_lines, session_state),
             force_selection=fresh_scan,
+            selected_local_repo_path=effective_local_repo_path,
             show_scan_results=_has_scan_results(),
             csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
@@ -1551,6 +1563,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 selected_repos=repo_slugs,
                 selected_scan_scope=str(record.get("scan_scope", "full") or "full"),
                 selected_compare_ref=str(record.get("compare_ref", "") or ""),
+                selected_local_repo_path=str(record.get("local_repo_path", "") or ""),
                 status=status,
                 llm_cfg=load_llm_config(),
                 llm_models=_ollama_snapshot(load_llm_config().get("base_url", "http://localhost:11434"), refresh=False).get("models", []),
@@ -1662,7 +1675,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if isinstance(repo_slugs, str):
             repo_slugs = [repo_slugs]
         project_key = body.get("project_key", "").strip()
-        if _require_project_access(self, project_key):
+        local_repo_path = str(body.get("local_repo_path", "") or "").strip()
+        if not local_repo_path and _require_project_access(self, project_key):
             return
         page_body = dict(body)
         page_body["repo_slugs"] = repo_slugs
@@ -1686,6 +1700,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 selected_repos=repo_slugs,
                 selected_scan_scope=page_body["scan_scope"],
                 selected_compare_ref=page_body["compare_ref"],
+                selected_local_repo_path=local_repo_path,
             )
         threading.Thread(target=_run_scan, args=(new_session,), daemon=True).start()
         self._redirect(_with_query(f"/scan/{new_session.scan_id}", tab="activity", notice="Scan started"))
@@ -1813,7 +1828,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_SCANNER):
             return
         project_key = body.get("project_key", "").strip()
-        if _require_project_access(self, project_key):
+        local_repo_path = str(body.get("local_repo_path", "") or "").strip()
+        if not local_repo_path and _require_project_access(self, project_key):
             return
         current_session = _current_session()
         try:

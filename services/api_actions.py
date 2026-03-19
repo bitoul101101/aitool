@@ -77,6 +77,7 @@ def start_scan(
 ):
     project_key = body.get("project_key", "").strip()
     repo_slugs = body.get("repo_slugs", [])
+    local_repo_path = str(body.get("local_repo_path", "") or "").strip()
     llm_url = body.get("llm_url", "http://localhost:11434").strip()
     llm_model = body.get("llm_model", "qwen2.5-coder:7b-instruct").strip()
     scan_scope = str(body.get("scan_scope", "full") or "full").strip().lower()
@@ -88,9 +89,21 @@ def start_scan(
     if scan_scope == "branch_diff" and not compare_ref:
         raise ValueError("compare_ref required for branch diff scans")
 
-    if not project_key or not repo_slugs:
+    local_mode = bool(local_repo_path)
+    if isinstance(repo_slugs, str):
+        repo_slugs = [repo_slugs]
+    if local_mode:
+        repo_path = Path(local_repo_path).expanduser()
+        if not repo_path.exists():
+            raise ValueError("local_repo_path not found")
+        if not repo_path.is_dir():
+            raise ValueError("local_repo_path must be a directory")
+        project_key = project_key or "LOCAL"
+        repo_slugs = [repo_path.resolve().name or "local-repo"]
+    elif not project_key or not repo_slugs:
         raise ValueError("project_key and repo_slugs required")
-    if not operator_state.client:
+
+    if not local_mode and not operator_state.client:
         raise PermissionError("Not connected")
     if current_session.state == "running":
         raise RuntimeError("Scan already running")
@@ -101,6 +114,8 @@ def start_scan(
     session.scan_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     session.project_key = project_key
     session.repo_slugs = repo_slugs
+    session.scan_source = "local" if local_mode else "bitbucket"
+    session.local_repo_path = str(Path(local_repo_path).expanduser().resolve()) if local_mode else ""
     session.total = len(repo_slugs)
     session.scan_scope = scan_scope
     session.compare_ref = compare_ref
