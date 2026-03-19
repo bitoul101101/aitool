@@ -1245,7 +1245,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
           <tr><td>Analysis</td><td>Applies context-aware severity scoring, production relevance, evidence quality scoring, and policy mapping before optional LLM review.</td></tr>
           <tr><td>Review Workflow</td><td>Supports finding triage, suppressions, accepted risk, reviewed state, central findings management, scan history, and trend analysis.</td></tr>
           <tr><td>Reporting</td><td>Produces CSV, JSON, SARIF, and on-demand HTML reports, plus logs, inventory views, threat-model sections, and trend summaries.</td></tr>
-          <tr><td>Execution Modes</td><td>Supports browser-driven scans and a minimal CLI for local-repo scans that writes machine-readable artifacts.</td></tr>
+          <tr><td>Execution Modes</td><td>Supports browser-driven scans plus a minimal CLI for both local-repo and Bitbucket project/repo scans that writes machine-readable artifacts.</td></tr>
         </tbody>
       </table>
     </section>
@@ -1258,7 +1258,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
           <tr><td>Python</td><td>Use Python 3.13 on Windows for the current desktop workflow.</td></tr>
           <tr><td>Install Dependencies</td><td>Preferred: <code>python -m pip install -r requirements.txt</code></td></tr>
           <tr><td>Launch Web App</td><td><code>python C:\\aitool\\main_web.py</code></td></tr>
-          <tr><td>Launch CLI</td><td><code>python C:\\aitool\\scan_cli.py C:\\path\\to\\repo</code></td></tr>
+          <tr><td>Launch CLI</td><td><code>python C:\\aitool\\scan_cli.py C:\\path\\to\\repo</code> or <code>python C:\\aitool\\scan_cli.py --project COGI --repo repo1</code></td></tr>
           <tr><td>Optional LLM Runtime</td><td>Install and run Ollama if you want LLM review and report enrichment.</td></tr>
           <tr><td>Enterprise TLS</td><td>Configure the Bitbucket CA bundle in Settings when using an internal PKI.</td></tr>
         </tbody>
@@ -1359,7 +1359,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <tbody>
           <tr><td>Bitbucket</td><td>PAT-authenticated project/repo discovery and cloning over TLS with custom CA bundle support.</td></tr>
           <tr><td>Ollama</td><td>Optional local LLM review and report enrichment with model discovery, runtime checks, and timeout controls.</td></tr>
-          <tr><td>CLI</td><td>Headless local-repo scans via <code>scan_cli.py</code> producing CSV, JSON, SARIF, and logs.</td></tr>
+          <tr><td>CLI</td><td>Headless local-repo or Bitbucket scans via <code>scan_cli.py</code> producing CSV, JSON, SARIF, and logs.</td></tr>
           <tr><td>Downstream Tools</td><td>JSON and SARIF exports are intended as the first integration layer for pipelines and external systems.</td></tr>
         </tbody>
       </table>
@@ -1369,8 +1369,9 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
       <h3>CLI Usage</h3>
       <pre><code>python C:\\aitool\\scan_cli.py C:\\path\\to\\repo
 python C:\\aitool\\scan_cli.py C:\\path\\to\\repo --output-dir C:\\tmp\\scan-out
-python C:\\aitool\\scan_cli.py C:\\path\\to\\repo --scope branch_diff --compare-ref master</code></pre>
-      <p>The CLI is intentionally minimal and currently focuses on local-repo scans. It writes machine-readable artifacts and a log file to the selected output directory.</p>
+python C:\\aitool\\scan_cli.py --project COGI --repo repo1
+python C:\\aitool\\scan_cli.py --project COGI --repo repo1 --repo repo2 --scope branch_diff --compare-ref master</code></pre>
+      <p>The CLI is intentionally minimal but now supports both local-repo scans and Bitbucket project/repo scans. For Bitbucket mode, provide <code>--project</code> and one or more <code>--repo</code> values, plus a PAT through <code>--token</code>, <code>AI_SCANNER_PAT</code>, <code>BITBUCKET_PAT</code>, or the saved credential store.</p>
     </section>
 
     <section id="security" class="wiki-section">

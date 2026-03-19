@@ -3552,6 +3552,47 @@ def test_scan_cli_reports_json_and_sarif_paths(tmp_path, capsys, monkeypatch):
     assert (tmp_path / "logs").exists()
 
 
+def test_scan_cli_supports_bitbucket_project_repo_mode(tmp_path, capsys, monkeypatch):
+    import scan_cli
+
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = dict(kwargs)
+
+    def fake_run_scan(self, session, client=None, save_history_record=None):
+        captured["project_key"] = session.project_key
+        captured["repo_slugs"] = list(session.repo_slugs)
+        captured["scan_source"] = session.scan_source
+        captured["client_type"] = type(client).__name__
+        session.state = "done"
+        session.findings = []
+        session.report_paths = {
+            "__all__": {
+                "csv": str(tmp_path / "scan.csv"),
+                "json": str(tmp_path / "scan.json"),
+                "sarif": str(tmp_path / "scan.sarif"),
+            }
+        }
+
+    monkeypatch.setattr(scan_cli, "BitbucketClient", FakeClient)
+    monkeypatch.setattr(scan_cli, "load_pat", lambda: "saved-token")
+    monkeypatch.setattr(scan_cli.ScanJobService, "run_scan", fake_run_scan)
+    monkeypatch.setattr(sys, "argv", ["scan_cli.py", "--project", "COGI", "--repo", "repo1", "--repo", "repo2", "--output-dir", str(tmp_path)])
+
+    rc = scan_cli.main()
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert captured["project_key"] == "COGI"
+    assert captured["repo_slugs"] == ["repo1", "repo2"]
+    assert captured["scan_source"] == "bitbucket"
+    assert captured["client_type"] == "FakeClient"
+    assert captured["client_kwargs"]["token"] == "saved-token"
+    assert "Scan mode    : bitbucket" in out
+
+
 def test_sse_write_returns_false_on_client_disconnect():
     import app_server as srv
 
