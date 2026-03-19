@@ -1240,6 +1240,7 @@ def test_scan_page_renders_incremental_scope_controls():
     assert 'id="compare-ref-input"' in html
     assert 'value="master"' in html
     assert 'id="local-repo-path-input"' in html
+    assert 'id="local-repo-browse-btn"' in html
     assert "Baseline-Aware Rescan" in html
 
 

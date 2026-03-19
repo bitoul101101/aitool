@@ -247,6 +247,37 @@ def _allowed_origin(origin: str) -> str | None:
     return origin if origin in allowed else None
 
 
+def _pick_local_repo_path() -> str:
+    if os.name != "nt":
+        raise RuntimeError("Native folder picker is only supported on Windows")
+    ps_script = r"""
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = 'Select Local Repository'
+$dialog.ShowNewFolderButton = $false
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    Write-Output $dialog.SelectedPath
+}
+""".strip()
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command", ps_script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError("Unable to open the Windows folder picker") from exc
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        raise RuntimeError(stderr or "Unable to open the Windows folder picker")
+    return (proc.stdout or "").strip()
+
+
 def _with_query(path: str, **params: str) -> str:
     clean = {key: value for key, value in params.items() if value}
     if not clean:
@@ -1362,6 +1393,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._api_connect(body)
         elif p == "/api/scan/start":
             self._api_scan_start(body)
+        elif p == "/api/local-repo/pick":
+            self._api_local_repo_pick()
         elif p == "/api/scan/stop":
             self._api_scan_stop()
         elif p == "/api/ollama/start":
@@ -1861,6 +1894,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             stop_scan_fn=_stop_active_scan,
             audit_event=_audit_event,
         ))
+
+    def _api_local_repo_pick(self):
+        if _require_role(self, ROLE_SCANNER):
+            return
+        try:
+            selected = _pick_local_repo_path()
+        except RuntimeError as e:
+            self._err(500, str(e))
+            return
+        self._json({"ok": True, "path": selected})
 
     def _api_app_shutdown(self):
         if _require_role(self, ROLE_ADMIN):

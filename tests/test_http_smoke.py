@@ -155,3 +155,46 @@ def test_live_results_navigation_renders_report_frame_for_completed_scan():
         srv._browser_sessions.update(original_sessions)
         srv._operator_state = orig_state
         srv._replace_current_session(orig_session)
+
+
+def test_live_local_repo_picker_returns_selected_path():
+    import app_server as srv
+
+    orig_state = srv._operator_state
+    original_sessions = install_browser_session(srv, csrf_token="csrf-demo")
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Scanner",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Scanner",
+                roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_ADMIN),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+    server, thread = start_live_server(srv)
+    try:
+        with patch.object(srv, "_pick_local_repo_path", return_value=r"C:\repo\demo"):
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+            body = urllib.parse.urlencode({"csrf_token": "csrf-demo"})
+            conn.request(
+                "POST",
+                "/api/local-repo/pick",
+                body=body,
+                headers={
+                    "Cookie": "ai_scanner_session=valid-session",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
+            resp = conn.getresponse()
+            payload = json.loads(resp.read().decode("utf-8"))
+            assert resp.status == 200
+            assert payload == {"ok": True, "path": r"C:\repo\demo"}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state

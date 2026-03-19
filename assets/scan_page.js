@@ -10,6 +10,8 @@
   const compareRefWrap = document.getElementById("compare-ref-wrap");
   const compareRefInput = document.getElementById("compare-ref-input");
   const localRepoPathInput = document.getElementById("local-repo-path-input");
+  const localRepoBrowseBtn = document.getElementById("local-repo-browse-btn");
+  const localRepoPickerStatus = document.getElementById("local-repo-picker-status");
   const logEl = document.getElementById("scan-log");
   const textEl = document.getElementById("scan-state-text");
   const timelineEl = document.getElementById("phase-timeline");
@@ -125,6 +127,15 @@
     updateRepoCount();
   }
 
+  function setLocalRepoPickerStatus(message, isError) {
+    if (!localRepoPickerStatus) {
+      return;
+    }
+    localRepoPickerStatus.textContent = message || "If a local path is provided, the tool scans that repository instead of the selected Bitbucket repos.";
+    localRepoPickerStatus.classList.toggle("error", Boolean(isError));
+    localRepoPickerStatus.classList.toggle("muted", !isError);
+  }
+
   function setModelOptions(models) {
     if (!modelSelect || !Array.isArray(models) || !models.length) {
       return;
@@ -158,6 +169,44 @@
       const data = await res.json();
       setModelOptions(data.models || []);
     } catch (_err) {
+    }
+  }
+
+  async function browseLocalRepoPath() {
+    if (!localRepoBrowseBtn || !localRepoPathInput || !newScanForm) {
+      return;
+    }
+    const csrfInput = newScanForm.querySelector('input[name="csrf_token"]');
+    const csrfToken = csrfInput ? csrfInput.value : "";
+    const originalText = localRepoBrowseBtn.textContent;
+    localRepoBrowseBtn.disabled = true;
+    localRepoBrowseBtn.textContent = "Choosing...";
+    setLocalRepoPickerStatus("Opening folder picker...", false);
+    try {
+      const res = await fetch("/api/local-repo/pick", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams({ csrf_token: csrfToken }),
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to open folder picker.");
+      }
+      if (!data.path) {
+        setLocalRepoPickerStatus("Folder selection was cancelled.", false);
+        return;
+      }
+      localRepoPathInput.value = String(data.path);
+      updateTargetMode();
+      setLocalRepoPickerStatus("Selected local repository: " + String(data.path), false);
+    } catch (err) {
+      setLocalRepoPickerStatus(String(err && err.message ? err.message : "Unable to open folder picker."), true);
+    } finally {
+      localRepoBrowseBtn.disabled = false;
+      localRepoBrowseBtn.textContent = originalText;
     }
   }
 
@@ -382,6 +431,7 @@
   modelSelect?.addEventListener("change", updateModelWarning);
   scanScopeSelect?.addEventListener("change", updateScopeFields);
   localRepoPathInput?.addEventListener("input", updateTargetMode);
+  localRepoBrowseBtn?.addEventListener("click", browseLocalRepoPath);
   newScanForm?.addEventListener("submit", function () {
     submitInFlight = true;
     if (startScanBtn) {

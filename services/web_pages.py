@@ -489,8 +489,14 @@ def render_scan_page(
         <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked or (not selected and not local_repo_path_value) else ""}>Start Scan</button></div>
       </div>
       <div class="repo-toolbar">
-        <div><label>Local Repository Path</label><input type="text" name="local_repo_path" id="local-repo-path-input" value="{_esc(local_repo_path_value)}" placeholder="e.g. C:\\repo or /home/user/repo"></div>
-        <div class="muted" style="align-self:end">If a local path is provided, the tool scans that repository instead of the selected Bitbucket repos.</div>
+        <div>
+          <label>Local Repository Path</label>
+          <div class="inline" style="gap:8px;align-items:center">
+            <input type="text" name="local_repo_path" id="local-repo-path-input" value="{_esc(local_repo_path_value)}" placeholder="e.g. C:\\repo or /home/user/repo">
+            <button type="button" class="ghost" id="local-repo-browse-btn">Browse...</button>
+          </div>
+        </div>
+        <div class="muted" id="local-repo-picker-status" style="align-self:end">If a local path is provided, the tool scans that repository instead of the selected Bitbucket repos.</div>
         <div></div>
       </div>
       <div class="repo-toolbar">
