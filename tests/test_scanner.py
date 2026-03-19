@@ -3671,6 +3671,34 @@ def test_shallow_clone_sets_git_cainfo_when_ca_bundle_is_provided():
     assert "GIT_SSL_NO_VERIFY" not in captured["env"]
 
 
+def test_shallow_clone_polls_without_timeoutexpired_control_flow():
+    from scanner.bitbucket import shallow_clone
+
+    dest = Path(tempfile.mkdtemp()) / "repo"
+
+    class FakeProc:
+        def __init__(self):
+            self.returncode = 0
+            self.stdout = None
+            self.stderr = MagicMock()
+            self.poll_calls = 0
+
+        def poll(self):
+            self.poll_calls += 1
+            return 0 if self.poll_calls >= 3 else None
+
+        def wait(self):
+            return 0
+
+    fake_proc = FakeProc()
+
+    with patch("scanner.bitbucket.subprocess.Popen", return_value=fake_proc), \
+         patch("scanner.bitbucket.time.sleep", return_value=None):
+        shallow_clone("https://example.invalid/repo.git", dest)
+
+    assert fake_proc.poll_calls >= 3
+
+
 def test_load_history_merges_sqlite_and_legacy_records():
     import app_server as srv
 

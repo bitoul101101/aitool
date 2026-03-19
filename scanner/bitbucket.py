@@ -455,6 +455,12 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
         cmd += [clone_url, str(dest)]
         return cmd
 
+    def _proc_finished(process) -> bool:
+        poll = getattr(process, "poll", None)
+        if callable(poll):
+            return poll() is not None
+        return True
+
     cmd = _clone_cmd(branch)
 
     env = os.environ.copy()
@@ -489,11 +495,9 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
                 proc.wait()
                 _best_effort_cleanup()
                 raise RuntimeError("Scan cancelled.")
-            try:
-                proc.wait(timeout=0.5)
+            if _proc_finished(proc):
                 break
-            except subprocess.TimeoutExpired:
-                continue
+            time.sleep(0.5)
     finally:
         if proc_holder is not None:
             if proc_lock is not None:
@@ -523,13 +527,13 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
             try:
                 while True:
                     if stop_event and stop_event.is_set():
-                        proc2.kill(); proc2.wait()
+                        proc2.kill()
+                        proc2.wait()
                         _best_effort_cleanup()
                         raise RuntimeError("Scan cancelled.")
-                    try:
-                        proc2.wait(timeout=0.5); break
-                    except subprocess.TimeoutExpired:
-                        continue
+                    if _proc_finished(proc2):
+                        break
+                    time.sleep(0.5)
             finally:
                 pass
             if proc2.returncode != 0:
