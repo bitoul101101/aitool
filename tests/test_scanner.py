@@ -1424,6 +1424,9 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'href="/scan/20260317_154037?tab=activity"' in html
     assert 'id="hardware-gpu"' in html
     assert 'id="hardware-disk-io"' in html
+    assert 'id="hardware-cpu-graph"' in html
+    assert 'id="hardware-ram-graph"' in html
+    assert 'id="hardware-gpu-graph"' in html
     assert 'id="perf-reviewed-skipped"' in html
     assert 'id="perf-llm-outcomes"' in html
     assert '<div class="workspace-header">' in html

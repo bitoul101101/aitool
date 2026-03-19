@@ -107,7 +107,7 @@ def _current_scan_nav_item(current_scan: dict | None, active: str) -> str:
     scan_id = str(current_scan.get("scan_id", "") or "").strip()
     if not scan_id:
         return ""
-    return f'<a class="nav{" active" if active == "current_scan" else ""}" href="/scan/{_esc(scan_id)}?tab=activity">Current Scan</a>'
+    return f'<a class="nav current-scan-nav{" active" if active == "current_scan" else ""}" href="/scan/{_esc(scan_id)}?tab=activity">Current Scan</a>'
 
 
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
@@ -489,9 +489,9 @@ def render_scan_page(
       <h2 style="margin:0 0 8px;font-size:15px">Performance</h2>
       <div class="baseline-summary" id="hardware-summary">
         <div class="hardware-grid">
-          <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong></div>
-          <div class="hardware-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong></div>
-          <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong></div>
+          <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong><div class="metric-sparkline" id="hardware-cpu-graph" aria-hidden="true"></div></div>
+          <div class="hardware-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong><div class="metric-sparkline" id="hardware-ram-graph" aria-hidden="true"></div></div>
+          <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong><div class="metric-sparkline" id="hardware-gpu-graph" aria-hidden="true"></div></div>
           <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">Findings Reviewed / Skipped</span><strong id="perf-reviewed-skipped">{_esc(llm_stats.get("reviewed", 0))} / {_esc(llm_stats.get("skipped", 0))}</strong></div>
           <div class="hardware-stat"><span class="baseline-label">Dismissed / Downgraded</span><strong id="perf-llm-outcomes">{_esc(llm_stats.get("dismissed", 0))} / {_esc(llm_stats.get("downgraded", 0))}</strong></div>

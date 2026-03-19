@@ -45,6 +45,8 @@
   let statusPollInFlight = false;
   let statusPollAbortController = null;
   let statusPollTimer = null;
+  const metricHistory = { cpu: [], ram: [], gpu: [] };
+  const METRIC_HISTORY_LIMIT = 60;
 
   function escHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, function (ch) {
@@ -352,6 +354,97 @@
         String(llm.dismissed || 0) + " / " +
         String(llm.downgraded || 0);
     }
+    pushMetricSample("cpu", parsePercent(hardware.cpu_percent || ""));
+    pushMetricSample("ram", parseRamPercent(hardware.ram_text || ""));
+    pushMetricSample("gpu", parseGpuPercent(hardware.gpu_text || ""));
+    renderMetricSparkline("cpu");
+    renderMetricSparkline("ram");
+    renderMetricSparkline("gpu");
+  }
+
+  function parsePercent(text) {
+    const match = String(text || "").match(/(\d+(?:\.\d+)?)\s*%/);
+    if (!match) {
+      return null;
+    }
+    return clampPercent(Number(match[1]));
+  }
+
+  function parseRamPercent(text) {
+    const parts = String(text || "").split("/");
+    if (parts.length < 2) {
+      return null;
+    }
+    const used = parseNumericMagnitude(parts[0]);
+    const total = parseNumericMagnitude(parts[1]);
+    if (used == null || total == null || total <= 0) {
+      return null;
+    }
+    return clampPercent((used / total) * 100);
+  }
+
+  function parseGpuPercent(text) {
+    const firstPart = String(text || "").split("|")[0] || "";
+    return parsePercent(firstPart);
+  }
+
+  function parseNumericMagnitude(text) {
+    const match = String(text || "").match(/(\d+(?:\.\d+)?)/);
+    if (!match) {
+      return null;
+    }
+    return Number(match[1]);
+  }
+
+  function clampPercent(value) {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return Math.max(0, Math.min(100, value));
+  }
+
+  function pushMetricSample(metric, value) {
+    if (!(metric in metricHistory) || value == null) {
+      return;
+    }
+    const bucket = metricHistory[metric];
+    bucket.push(value);
+    if (bucket.length > METRIC_HISTORY_LIMIT) {
+      bucket.splice(0, bucket.length - METRIC_HISTORY_LIMIT);
+    }
+  }
+
+  function renderMetricSparkline(metric) {
+    const host = document.getElementById("hardware-" + metric + "-graph");
+    if (!host) {
+      return;
+    }
+    const values = metricHistory[metric] || [];
+    if (!values.length) {
+      host.innerHTML = '<div class="spark-empty">Waiting for samples</div>';
+      return;
+    }
+    const width = 220;
+    const height = 46;
+    const points = values.map(function (value, index) {
+      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
+      const y = height - ((value / 100) * (height - 4)) - 2;
+      return [x, Math.max(2, Math.min(height - 2, y))];
+    });
+    const linePath = points.map(function (point, index) {
+      return (index === 0 ? "M" : "L") + point[0].toFixed(1) + " " + point[1].toFixed(1);
+    }).join(" ");
+    const fillPath = linePath + " L " + width + " " + height + " L 0 " + height + " Z";
+    const gridLines = [0.25, 0.5, 0.75].map(function (ratio) {
+      const y = (height * ratio).toFixed(1);
+      return '<line class="spark-grid" x1="0" y1="' + y + '" x2="' + width + '" y2="' + y + '"></line>';
+    }).join("");
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + width + " " + height + '" preserveAspectRatio="none" aria-hidden="true">' +
+      gridLines +
+      '<path class="spark-fill" d="' + fillPath + '"></path>' +
+      '<path class="spark-line" d="' + linePath + '"></path>' +
+      "</svg>";
   }
 
   function updateSelectionStatus(data) {
