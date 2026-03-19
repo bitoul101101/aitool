@@ -1446,9 +1446,34 @@ def test_scan_page_renders_incremental_scope_controls():
     assert 'value="branch_diff" selected' in html
     assert 'id="compare-ref-input"' in html
     assert 'value="master"' in html
+    assert html.index('Search Repositories') < html.index('Scan Scope') < html.index('LLM Model')
+    assert 'id="local-repo-toggle-btn"' in html
+    assert 'class="inline hidden" id="local-repo-row"' in html
     assert 'id="local-repo-path-input"' in html
     assert 'id="local-repo-browse-btn"' in html
+    assert html.index('id="local-repo-row"') < html.index('>Start Scan</button>')
     assert "Baseline-Aware Rescan" in html
+    assert "Changed-file and baseline-aware scans reduce traversal and LLM work on repeated runs." not in html
+
+
+def test_new_scan_hides_repo_actions_until_project_is_selected():
+    import app_server as srv
+
+    html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="",
+        repos=[],
+        selected_repos=[],
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["qwen2.5-coder:7b-instruct"],
+        status={"state": "idle", "delta": {}, "inventory": {}, "report": {}},
+        log_text="",
+        phase_timeline=[],
+        force_selection=True,
+    ).decode("utf-8")
+
+    assert 'class="repo-actions hidden" id="repo-actions"' in html
+    assert 'class="muted hidden" id="no-repos-message"' in html
 
 
 def test_llm_stats_are_derived_from_log_entries():

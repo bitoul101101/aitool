@@ -343,10 +343,15 @@ def render_scan_page(
         f'<a class="project-link{" active" if p.get("key","") == selected_project else ""}" href="/scan?project={_esc(p.get("key",""))}{project_query_suffix}">{_esc(p.get("key",""))}</a>'
         for p in projects
     ) or '<div class="muted">No projects loaded.</div>'
+    has_selected_project = bool(selected_project)
     repo_rows = "".join(
         f'<label class="repo-row" data-repo-name="{_esc(repo.get("slug","").lower())}"><input type="checkbox" class="repo-checkbox" name="repo_slugs" value="{_esc(repo.get("slug",""))}"{" checked" if repo.get("slug","") in selected else ""}><span>{_esc(repo.get("slug","").lower())}</span></label>'
         for repo in repos
-    ) or '<div class="muted" id="no-repos-message">No repositories available for the selected project.</div>'
+    ) or (
+        '<div class="muted hidden" id="no-repos-message">No repositories available for the selected project.</div>'
+        if not has_selected_project
+        else '<div class="muted" id="no-repos-message">No repositories available for the selected project.</div>'
+    )
     models = list(dict.fromkeys([m for m in llm_models if m] + ([llm_cfg.get("model", "")] if llm_cfg.get("model") else [])))
     model_options = "".join(
         f'<option value="{_esc(model)}"{" selected" if model == llm_cfg.get("model", "") else ""}>{_esc(model)}</option>'
@@ -552,30 +557,28 @@ def render_scan_page(
       <input type="hidden" name="project_key" value="{_esc(selected_project)}">
       <div class="repo-toolbar">
         <div><label>Search Repositories</label><input type="search" id="repo-search" placeholder="Search by repo name"></div>
+        <div><label>Scan Scope</label><select name="scan_scope" id="scan-scope-select">{scope_options}</select></div>
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
-        <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked or (not selected and not local_repo_path_value) else ""}>Start Scan</button></div>
-      </div>
-      <div class="repo-toolbar">
-        <div>
-          <label>Local Repository Path</label>
-          <div class="inline" style="gap:8px;align-items:center">
-            <input type="text" name="local_repo_path" id="local-repo-path-input" value="{_esc(local_repo_path_value)}" placeholder="e.g. C:\\repo or /home/user/repo">
+        <div class="inline repo-action-bar" style="justify-content:flex-start;align-items:end;gap:8px">
+          <div class="inline{" hidden" if not local_repo_path_value else ""}" id="local-repo-row" style="gap:8px;align-items:center;flex:1 1 auto">
+            <input type="text" name="local_repo_path" id="local-repo-path-input" value="{_esc(local_repo_path_value)}" placeholder="Local Repository Path e.g. C:\\repo or /home/user/repo">
             <button type="button" class="ghost" id="local-repo-browse-btn">Browse...</button>
           </div>
+          <button type="button" class="ghost" id="local-repo-toggle-btn">Local Repo</button>
+          <button type="submit" id="start-scan-btn"{" disabled" if start_blocked or (not selected and not local_repo_path_value) else ""}>Start Scan</button>
         </div>
-        <div></div>
-        <div></div>
       </div>
       <div class="repo-toolbar">
-        <div><label>Scan Scope</label><select name="scan_scope" id="scan-scope-select">{scope_options}</select><div class="muted" id="scan-scope-help" style="display:block;margin-top:6px">Changed-file and baseline-aware scans reduce traversal and LLM work on repeated runs.</div></div>
         <div id="compare-ref-wrap"{" class=\"hidden\"" if scope_value != "branch_diff" else ""}><label>Compare Branch</label><input type="text" name="compare_ref" id="compare-ref-input" value="{_esc(compare_ref_value)}" placeholder="e.g. master"></div>
+        <div></div>
+        <div></div>
         <div></div>
       </div>
       <div class="repo-notices">
         <div class="warn-box{" hidden" if not running_notice else ""}" id="running-scan-notice">{_esc(running_notice)}</div>
         <div class="warn-box{" hidden" if not model_warning else ""}" id="model-size-warning">{_esc(model_warning)}</div>
       </div>
-      <div class="repo-actions" id="repo-actions">
+      <div class="repo-actions{" hidden" if not has_selected_project else ""}" id="repo-actions">
         <span class="muted" id="repo-selection-count"></span>
         <button type="button" class="ghost" id="select-all-repos-btn">All</button>
         <button type="button" class="ghost" id="select-none-repos-btn">None</button>

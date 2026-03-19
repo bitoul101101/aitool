@@ -9,11 +9,14 @@
   const scanScopeSelect = document.getElementById("scan-scope-select");
   const compareRefWrap = document.getElementById("compare-ref-wrap");
   const compareRefInput = document.getElementById("compare-ref-input");
+  const localRepoRow = document.getElementById("local-repo-row");
   const localRepoPathInput = document.getElementById("local-repo-path-input");
   const localRepoBrowseBtn = document.getElementById("local-repo-browse-btn");
+  const localRepoToggleBtn = document.getElementById("local-repo-toggle-btn");
   const localRepoPickerStatus = document.getElementById("local-repo-picker-status");
   const repoActions = document.getElementById("repo-actions");
   const noReposMessage = document.getElementById("no-repos-message");
+  const projectKeyInput = document.querySelector('#new-scan-form input[name="project_key"]');
   const logEl = document.getElementById("scan-log");
   const textEl = document.getElementById("scan-state-text");
   const timelineEl = document.getElementById("phase-timeline");
@@ -118,6 +121,7 @@
       return;
     }
     const usingLocal = Boolean(localRepoPathInput.value.trim());
+    const hasProject = Boolean(projectKeyInput && projectKeyInput.value.trim());
     repoCheckboxes().forEach(function (cb) {
       cb.disabled = usingLocal;
     });
@@ -127,10 +131,10 @@
     document.getElementById("select-all-repos-btn")?.toggleAttribute("disabled", usingLocal);
     document.getElementById("select-none-repos-btn")?.toggleAttribute("disabled", usingLocal);
     if (repoActions) {
-      repoActions.classList.toggle("hidden", usingLocal);
+      repoActions.classList.toggle("hidden", usingLocal || !hasProject);
     }
     if (noReposMessage) {
-      noReposMessage.classList.toggle("hidden", usingLocal);
+      noReposMessage.classList.toggle("hidden", usingLocal || !hasProject);
     }
     updateRepoCount();
   }
@@ -139,9 +143,28 @@
     if (!localRepoPickerStatus) {
       return;
     }
-    localRepoPickerStatus.textContent = message || "If a local path is provided, the tool scans that repository instead of the selected Bitbucket repos.";
+    localRepoPickerStatus.textContent = message || "";
     localRepoPickerStatus.classList.toggle("error", Boolean(isError));
     localRepoPickerStatus.classList.toggle("muted", !isError);
+  }
+
+  function showLocalRepoRow() {
+    if (localRepoRow) {
+      localRepoRow.classList.remove("hidden");
+    }
+    if (localRepoPathInput) {
+      localRepoPathInput.focus();
+    }
+  }
+
+  function hideLocalRepoRow() {
+    if (localRepoPathInput) {
+      localRepoPathInput.value = "";
+    }
+    if (localRepoRow) {
+      localRepoRow.classList.add("hidden");
+    }
+    setLocalRepoPickerStatus("", false);
   }
 
   function setModelOptions(models) {
@@ -439,7 +462,18 @@
   repoSearch?.addEventListener("input", filterRepos);
   modelSelect?.addEventListener("change", updateModelWarning);
   scanScopeSelect?.addEventListener("change", updateScopeFields);
-  localRepoPathInput?.addEventListener("input", updateTargetMode);
+  localRepoPathInput?.addEventListener("input", function () {
+    updateTargetMode();
+    setLocalRepoPickerStatus("", false);
+  });
+  localRepoToggleBtn?.addEventListener("click", function () {
+    if (localRepoRow?.classList.contains("hidden")) {
+      showLocalRepoRow();
+    } else {
+      hideLocalRepoRow();
+    }
+    updateTargetMode();
+  });
   localRepoBrowseBtn?.addEventListener("click", browseLocalRepoPath);
   newScanForm?.addEventListener("submit", function () {
     submitInFlight = true;
