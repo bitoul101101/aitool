@@ -43,6 +43,8 @@
   let replaceInitialLog = Boolean(logEl && logEl.textContent.trim());
   let stream = null;
   let statusPollInFlight = false;
+  let statusPollAbortController = null;
+  let statusPollTimer = null;
 
   function escHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, function (ch) {
@@ -437,10 +439,12 @@
       return;
     }
     statusPollInFlight = true;
+    statusPollAbortController = new AbortController();
     try {
       const res = await fetch("/api/scan/status?_ts=" + Date.now(), {
         headers: { Accept: "application/json" },
-        cache: "no-store"
+        cache: "no-store",
+        signal: statusPollAbortController.signal
       });
       if (!res.ok) {
         return;
@@ -450,7 +454,26 @@
       updateRunningStatus(data);
     } catch (_err) {
     } finally {
+      statusPollAbortController = null;
       statusPollInFlight = false;
+    }
+  }
+
+  function cleanupPageActivity() {
+    if (statusPollTimer) {
+      window.clearInterval(statusPollTimer);
+      statusPollTimer = null;
+    }
+    if (statusPollAbortController) {
+      try {
+        statusPollAbortController.abort();
+      } catch (_err) {
+      }
+      statusPollAbortController = null;
+    }
+    if (stream) {
+      stream.close();
+      stream = null;
     }
   }
 
@@ -502,5 +525,7 @@
   refreshModels();
   startLogStream();
   pollStatus();
-  window.setInterval(pollStatus, 3000);
+  statusPollTimer = window.setInterval(pollStatus, 3000);
+  window.addEventListener("pagehide", cleanupPageActivity);
+  window.addEventListener("beforeunload", cleanupPageActivity);
 })();
