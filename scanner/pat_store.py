@@ -119,6 +119,12 @@ def delete_pat() -> bool:
     if kr is None:
         return True   # nothing was persisted anyway
     try:
+        existing = kr.get_password(_SERVICE, _USERNAME)
+    except Exception:
+        existing = None
+    if not existing:
+        return True
+    try:
         kr.delete_password(_SERVICE, _USERNAME)
         return True
     except Exception:

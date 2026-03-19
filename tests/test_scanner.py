@@ -3591,6 +3591,26 @@ def test_get_pat_owner_swallows_requests_jsondecodeerror_and_falls_back():
     assert len(calls) == 2
 
 
+def test_delete_pat_skips_delete_call_when_no_stored_value():
+    from scanner import pat_store
+
+    class FakeKeyring:
+        def __init__(self):
+            self.delete_calls = 0
+
+        def get_password(self, service, username):
+            return ""
+
+        def delete_password(self, service, username):
+            self.delete_calls += 1
+            raise AssertionError("delete_password should not be called when nothing is stored")
+
+    fake = FakeKeyring()
+    with patch.object(pat_store, "_get_keyring", return_value=fake):
+        assert pat_store.delete_pat() is True
+    assert fake.delete_calls == 0
+
+
 def test_bitbucket_client_uses_ca_bundle_for_tls_verification():
     from scanner.bitbucket import BitbucketClient
 
