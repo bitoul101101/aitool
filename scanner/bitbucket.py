@@ -156,22 +156,35 @@ class BitbucketClient:
         and /rest/api/1.0/users/~/profile endpoints.
         Falls back to 'User' if the endpoint is unavailable.
         """
-        try:
-            # Bitbucket Server: current user info
-            data = self._get(f"{self.base_url}/rest/api/1.0/users/myself")
-            return (data.get("displayName")
-                    or data.get("name")
-                    or data.get("slug")
-                    or "User")
-        except (RequestException, ValueError, TypeError):
-            pass
-        try:
-            # Alternative endpoint for some Bitbucket Server versions
-            data = self._get(f"{self.base_url}/plugins/servlet/applinks/whoami")
-            if isinstance(data, str):
-                return data
-        except (RequestException, ValueError, TypeError):
-            pass
+        endpoints = [
+            (f"{self.base_url}/rest/api/1.0/users/myself", "json"),
+            (f"{self.base_url}/plugins/servlet/applinks/whoami", "text"),
+        ]
+        for url, kind in endpoints:
+            try:
+                resp = self.session.get(url, timeout=15)
+            except RequestException:
+                continue
+            if resp.status_code >= 400:
+                continue
+            if kind == "json":
+                try:
+                    data = resp.json()
+                except ValueError:
+                    continue
+                if isinstance(data, dict):
+                    owner = (
+                        data.get("displayName")
+                        or data.get("name")
+                        or data.get("slug")
+                        or ""
+                    )
+                    if owner:
+                        return str(owner)
+            else:
+                owner = str(resp.text or "").strip()
+                if owner:
+                    return owner
         return "User"
 
     def list_repos(self, project_key: str) -> List[dict]:

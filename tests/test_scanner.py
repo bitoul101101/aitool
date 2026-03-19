@@ -3498,6 +3498,37 @@ def test_bitbucket_owner_fallbacks_use_user_label():
     assert state.connected_owner == "User"
 
 
+def test_get_pat_owner_falls_back_cleanly_when_myself_endpoint_returns_404():
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient("https://bitbucket.example", token="pat-123")
+
+    class _Resp:
+        def __init__(self, status_code, *, payload=None, text=""):
+            self.status_code = status_code
+            self._payload = payload
+            self.text = text
+
+        def json(self):
+            if self._payload is None:
+                raise ValueError("no json")
+            return self._payload
+
+    calls = []
+
+    def fake_get(url, timeout=0, params=None):
+        calls.append(url)
+        if url.endswith("/rest/api/1.0/users/myself"):
+            return _Resp(404)
+        if url.endswith("/plugins/servlet/applinks/whoami"):
+            return _Resp(200, text="Segal, Sarit")
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    with patch.object(client.session, "get", side_effect=fake_get):
+        assert client.get_pat_owner() == "Segal, Sarit"
+    assert len(calls) == 2
+
+
 def test_bitbucket_client_uses_ca_bundle_for_tls_verification():
     from scanner.bitbucket import BitbucketClient
 
