@@ -2496,6 +2496,8 @@ def test_help_page_is_server_rendered():
     assert "Import / Export" in html
     assert "Known Limitations" in html
     assert "AI Inventory" in html
+    assert 'id="connection-banner"' in html
+    assert "Trying to reconnect to the local AI Scanner server" in html
 
 
 def test_inventory_page_is_server_rendered():

@@ -77,5 +77,5 @@ class BrowserSessionStore:
     @staticmethod
     def queue_session_cookie(handler, session_id: str) -> None:
         handler._response_cookies = [
-            f"ai_scanner_session={session_id}; Path=/; HttpOnly; SameSite=Strict"
+            f"ai_scanner_session={session_id}; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200"
         ]

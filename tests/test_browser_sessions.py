@@ -31,5 +31,5 @@ def test_browser_session_store_sets_cookie_header():
     handler = DummyHandler()
     store.queue_session_cookie(handler, "session-123")
     assert handler._response_cookies == [
-        "ai_scanner_session=session-123; Path=/; HttpOnly; SameSite=Strict"
+        "ai_scanner_session=session-123; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200"
     ]

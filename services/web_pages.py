@@ -129,6 +129,9 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 </head>
 <body class="{body_class}">
 <header><h1>AI Security & Compliance Scanner</h1>{nav if nav else ""}</header>
+<div id="connection-banner" class="connection-banner hidden" role="status" aria-live="polite">
+  <strong>Connection lost.</strong> Trying to reconnect to the local AI Scanner server...
+</div>
 <main>{body}</main>
 <script src="/assets/layout.js" defer></script>
 </body>

@@ -15,6 +15,7 @@ main{max-width:1340px;margin:0 auto;padding:16px 18px}
 .warn-box{padding:10px 12px;border-radius:10px;background:#fff3d8;border:1px solid #e1bf77;color:#7a5310}
 .toast-wrap{position:fixed;left:14px;bottom:14px;display:grid;gap:8px;z-index:1000}
 .toast{min-width:260px;max-width:420px;box-shadow:0 10px 24px rgba(0,0,0,.14);animation:fadein .2s ease}
+.connection-banner{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:1100;padding:10px 14px;border-radius:10px;background:#2f1b12;color:#fff3e8;border:1px solid #8d4d20;box-shadow:0 10px 24px rgba(0,0,0,.18)}
 .muted{color:#705333}
 button,.btn{border:0;border-radius:8px;padding:9px 13px;background:#6d3514;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 button.alt,.btn.alt{background:#8a6c50}
