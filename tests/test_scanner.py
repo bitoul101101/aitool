@@ -3448,6 +3448,34 @@ def test_request_app_shutdown_sets_exit_event_and_stops_server():
         srv._app_exit_event.clear()
 
 
+def test_page_app_exit_returns_shutdown_fallback_page():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.sent = None
+
+        def _send(self, status, ct, body):
+            self.sent = (status, ct, body)
+
+    handler = DummyHandler()
+    orig_request_shutdown = srv._request_app_shutdown
+    orig_require_role = srv._require_role
+    try:
+        srv._request_app_shutdown = lambda: None
+        srv._require_role = lambda _handler, _role: False
+        srv._Handler._page_app_exit(handler)
+        assert handler.sent[0] == 200
+        html = handler.sent[2].decode("utf-8")
+        assert "AI Scanner stopped" in html
+        assert "Trying to close this tab..." in html
+        assert "window.close()" in html
+        assert "You can close this tab" in html
+    finally:
+        srv._request_app_shutdown = orig_request_shutdown
+        srv._require_role = orig_require_role
+
+
 def test_sse_write_returns_false_on_client_disconnect():
     import app_server as srv
 

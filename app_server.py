@@ -1895,10 +1895,43 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         _audit_event("app_shutdown_requested")
         _request_app_shutdown()
+        body = b"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AI Scanner Stopped</title>
+  <style>
+    body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f6efe6;color:#3b2412;display:grid;place-items:center;min-height:100vh}
+    .card{max-width:480px;background:#fffaf4;border:1px solid #e3c9ad;border-radius:16px;padding:24px;box-shadow:0 18px 42px rgba(50,25,0,.08)}
+    h1{margin:0 0 10px;font-size:22px}
+    p{margin:0 0 10px;line-height:1.45}
+    .muted{color:#7a5a3d}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <h1>AI Scanner stopped</h1>
+    <p>The local server has been shut down.</p>
+    <p class="muted" id="close-note">Trying to close this tab...</p>
+  </section>
+  <script>
+    (function () {
+      window.open('', '_self');
+      window.close();
+      setTimeout(function () {
+        var note = document.getElementById('close-note');
+        if (note) {
+          note.textContent = 'The app has stopped. You can close this tab.';
+        }
+      }, 500);
+    })();
+  </script>
+</body>
+</html>"""
         self._send(
             200,
             "text/html; charset=utf-8",
-            b"<html><body><script>window.open('','_self');window.close();setTimeout(()=>{document.body.innerHTML='';location.replace('about:blank');},250);</script></body></html>",
+            body,
         )
 
     def _page_scan_start(self, body: dict):
