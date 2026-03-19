@@ -476,6 +476,7 @@ class HTMLReporter:
   {self._header(findings)}
   {self._section_delta(findings, delta)}
   {self._section_inventory(findings)}
+  {self._section_threat_model(findings)}
   {self._section_summary(stats, findings, policy)}
   {self._section_findings(findings, delta)}
   {self._section_remediation(findings)}
@@ -1633,6 +1634,198 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
   <div class="card inventory-stack" style="margin-bottom:0">
     <h3>Repository Profiles</h3>
     <div class="inventory-repos">{repo_cards or "<p class='muted'>No repository profiles available.</p>"}</div>
+  </div>
+</div>
+</section>"""
+
+    def _threat_model_data(self, findings):
+        inventory = self.meta.get("inventory") or build_inventory(findings)
+        providers = {str(f.get("provider_or_lib", "") or "").strip() for f in findings if str(f.get("provider_or_lib", "") or "").strip()}
+        contexts = Counter(str(f.get("context", "production") or "production").lower() for f in findings)
+        repo_profiles = list(inventory.get("repo_profiles") or [])
+
+        observed_signals = []
+        if inventory.get("repos_using_ai_count", 0):
+            observed_signals.append(f"{inventory.get('repos_using_ai_count', 0)} repo(s) show active AI usage")
+        if inventory.get("provider_count", 0):
+            observed_signals.append(f"{inventory.get('provider_count', 0)} provider(s) detected")
+        if inventory.get("model_count", 0):
+            observed_signals.append(f"{inventory.get('model_count', 0)} model reference(s) detected")
+        if inventory.get("prompt_handling_repos", 0):
+            observed_signals.append(f"{inventory.get('prompt_handling_repos', 0)} repo(s) handle prompts or model input/output")
+        if inventory.get("embeddings_vector_db_repos", 0):
+            observed_signals.append(f"{inventory.get('embeddings_vector_db_repos', 0)} repo(s) use embeddings or vector retrieval")
+        if inventory.get("model_serving_repos", 0):
+            observed_signals.append(f"{inventory.get('model_serving_repos', 0)} repo(s) expose model-serving behavior")
+        if inventory.get("agent_tool_use_repos", 0):
+            observed_signals.append(f"{inventory.get('agent_tool_use_repos', 0)} repo(s) show agent or tool-use patterns")
+
+        assets = [
+            "Application secrets and provider credentials",
+            "User prompts, retrieved content, and model outputs",
+            "Internal source code, configuration, and operational data",
+        ]
+        if inventory.get("embeddings_vector_db_repos", 0):
+            assets.append("Embedding stores and retrieved knowledge bases")
+        if inventory.get("model_serving_repos", 0):
+            assets.append("Served model endpoints and inference infrastructure")
+
+        trust_boundaries = []
+        if inventory.get("repos_using_ai_count", 0):
+            trust_boundaries.append("Application code ↔ external or local AI provider APIs")
+        if inventory.get("prompt_handling_repos", 0):
+            trust_boundaries.append("User-controlled or document-controlled content ↔ prompt construction")
+        if inventory.get("embeddings_vector_db_repos", 0):
+            trust_boundaries.append("Retrieved context sources ↔ generation pipeline")
+        if inventory.get("agent_tool_use_repos", 0):
+            trust_boundaries.append("Model decisions ↔ tool execution or privileged actions")
+        if inventory.get("model_serving_repos", 0):
+            trust_boundaries.append("Remote callers ↔ model-serving endpoints")
+        if not trust_boundaries:
+            trust_boundaries.append("Repository code ↔ AI-related dependencies and configuration")
+
+        scenarios = []
+
+        def add_scenario(title, severity, why, evidence, mitigation):
+            scenarios.append({
+                "title": title,
+                "severity": severity,
+                "why": why,
+                "evidence": evidence,
+                "mitigation": mitigation,
+            })
+
+        secret_signal_count = sum(1 for f in findings if str(f.get("provider_or_lib", "")).strip() in {
+            "hardcoded_key", "openai_key_pattern", "anthropic_key_pattern", "entropy_secret", "cross_file_secret", "secret_ai_correlation"
+        })
+        if secret_signal_count:
+            add_scenario(
+                "Secret leakage into AI workflows",
+                "Critical",
+                "Credentials or secret-like material appear near AI usage, increasing the chance of exfiltration to model providers or logs.",
+                f"{secret_signal_count} secret-related finding(s) including correlated secret-to-AI signals.",
+                "Move credentials to secure secret stores, block secret-bearing prompts, and add outbound prompt redaction for sensitive fields.",
+            )
+
+        if inventory.get("prompt_handling_repos", 0):
+            add_scenario(
+                "Prompt injection from untrusted content",
+                "High",
+                "Prompt handling was detected, so user input, documents, or remote content may be able to steer model behavior.",
+                f"Prompt-handling signals in {inventory.get('prompt_handling_repos', 0)} repo(s).",
+                "Isolate system instructions, treat retrieved/user content as untrusted, and add prompt-injection filtering plus tool-call confirmation boundaries.",
+            )
+
+        if inventory.get("embeddings_vector_db_repos", 0) or {"rag_pattern", "faiss", "chromadb", "qdrant", "weaviate", "milvus", "pgvector", "pinecone"} & providers:
+            add_scenario(
+                "RAG poisoning or malicious retrieval influence",
+                "High",
+                "Retrieved context can become a control channel if ingestion or retrieval trust is weak.",
+                "Embeddings/vector retrieval patterns were observed in the scan.",
+                "Validate ingestion sources, attach provenance to retrieved chunks, and constrain what retrieved text can influence in downstream prompts.",
+            )
+
+        if inventory.get("agent_tool_use_repos", 0):
+            add_scenario(
+                "Unsafe tool execution from agent decisions",
+                "Critical",
+                "Agent or tool-use patterns create a path from model output to action, which can amplify prompt injection or bad reasoning into real changes.",
+                f"Agent/tool-use signals in {inventory.get('agent_tool_use_repos', 0)} repo(s).",
+                "Require allowlisted tools, explicit confirmation for destructive actions, argument validation, and audit trails for model-triggered operations.",
+            )
+
+        exfil_signals = {"file_content_to_llm", "dataframe_to_llm", "env_vars_to_llm", "db_results_to_llm", "http_response_to_llm", "direct_http_ai"}
+        exfil_count = sum(1 for f in findings if str(f.get("provider_or_lib", "") or "") in exfil_signals)
+        if exfil_count:
+            add_scenario(
+                "Sensitive data exfiltration to model endpoints",
+                "High",
+                "The repository contains patterns where application data may be sent directly to model endpoints.",
+                f"{exfil_count} data-to-LLM/external-endpoint finding(s) were flagged.",
+                "Minimize outbound data, classify fields before prompt assembly, and add explicit policy checks before sending internal records to models.",
+            )
+
+        unsafe_model_count = sum(1 for f in findings if str(f.get("provider_or_lib", "") or "") in {
+            "unsafe_torch_load", "unsafe_pickle_model", "remote_model_load", "unsafe_tf_load"
+        })
+        if unsafe_model_count or inventory.get("model_serving_repos", 0):
+            add_scenario(
+                "Model or artifact supply-chain compromise",
+                "High" if unsafe_model_count else "Medium",
+                "Unsafe model loading or model-serving paths can turn model artifacts into code-execution or integrity risks.",
+                f"{unsafe_model_count} unsafe model-loading finding(s); model serving observed in {inventory.get('model_serving_repos', 0)} repo(s).",
+                "Pin trusted model sources, require signed artifacts where possible, and load models with the safest available APIs and sandboxing controls.",
+            )
+
+        if not scenarios:
+            add_scenario(
+                "AI component misuse remains possible despite low observed signal",
+                "Medium",
+                "The scan found limited direct AI threat evidence, but any future prompt handling, model calls, or agent execution would introduce new boundaries.",
+                "Low observed AI threat surface in this scan.",
+                "Retain AI usage inventory and re-run the scanner when new model providers, prompt flows, or serving endpoints are introduced.",
+            )
+
+        open_questions = [
+            "Which prompts or retrieved documents can contain untrusted external content?",
+            "Which model calls are allowed to receive internal business or customer data?",
+            "Are model/tool actions gated by approval, allowlists, and audit logging?",
+        ]
+        if contexts.get("production", 0):
+            open_questions.append("Which of the flagged AI paths are reachable in production deployments versus docs/tests only?")
+        if repo_profiles:
+            open_questions.append("Which repository profiles represent internet-facing services versus internal-only utilities?")
+
+        return {
+            "observed_signals": observed_signals[:8],
+            "assets": assets[:6],
+            "trust_boundaries": trust_boundaries[:6],
+            "scenarios": scenarios[:5],
+            "open_questions": open_questions[:5],
+        }
+
+    def _section_threat_model(self, findings):
+        model = self._threat_model_data(findings)
+
+        def chips(items):
+            return "".join(f'<span class="inventory-chip">{html_mod.escape(item)}</span>' for item in items) or "<span class='muted'>No observed signals.</span>"
+
+        scenario_cards = "".join(
+            '<div class="card inventory-stack" style="margin-bottom:0">'
+            f'<div class="inline" style="justify-content:space-between;align-items:flex-start"><h3 style="margin:0">{html_mod.escape(item["title"])}</h3><span class="pill">{html_mod.escape(item["severity"])}</span></div>'
+            f'<div class="muted" style="font-size:12px">{html_mod.escape(item["why"])}</div>'
+            f'<div><strong style="font-size:12px">Evidence</strong><div class="inventory-repo-meta" style="margin-top:4px">{html_mod.escape(item["evidence"])}</div></div>'
+            f'<div><strong style="font-size:12px">Recommended Control</strong><div class="inventory-repo-meta" style="margin-top:4px">{html_mod.escape(item["mitigation"])}</div></div>'
+            '</div>'
+            for item in model["scenarios"]
+        )
+
+        open_questions = "".join(f"<li>{html_mod.escape(item)}</li>" for item in model["open_questions"])
+
+        return f"""<section id="threat-model">
+<h2>🛡️ Threat Model</h2>
+<div class="inventory-layout">
+  <div class="card inventory-stack" style="margin-bottom:0">
+    <div>
+      <h3>Observed Signals</h3>
+      <div class="inventory-list">{chips(model["observed_signals"])}</div>
+    </div>
+    <div>
+      <h3>Assets at Risk</h3>
+      <div class="inventory-list">{chips(model["assets"])}</div>
+    </div>
+    <div>
+      <h3>Trust Boundaries</h3>
+      <div class="inventory-list">{chips(model["trust_boundaries"])}</div>
+    </div>
+  </div>
+  <div class="inventory-stack">
+    {scenario_cards}
+  </div>
+  <div class="card inventory-stack" style="margin-bottom:0">
+    <h3>Review Gaps / Open Questions</h3>
+    <ul style="margin:0;padding-left:18px;line-height:1.7">{open_questions}</ul>
+    <div class="muted" style="font-size:12px">This threat model is evidence-backed by scan results and repository signals, but it is still a first-pass model rather than a substitute for a full architecture review.</div>
   </div>
 </div>
 </section>"""

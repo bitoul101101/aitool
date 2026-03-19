@@ -36,6 +36,85 @@ def test_html_report_header_excludes_triage_summary_stats():
     assert "Suppressed" not in html
 
 
+def test_html_report_includes_evidence_backed_threat_model_section():
+    reporter = HTMLReporter(
+        output_dir=tempfile.mkdtemp(),
+        scan_id="20260319_140000",
+        meta={
+            "inventory": {
+                "repos_total": 1,
+                "repos_using_ai_count": 1,
+                "provider_count": 4,
+                "model_count": 2,
+                "embeddings_vector_db_repos": 1,
+                "prompt_handling_repos": 1,
+                "model_serving_repos": 1,
+                "agent_tool_use_repos": 1,
+                "repo_profiles": [
+                    {
+                        "repo": "cogi-rag-agent",
+                        "provider_labels": ["OpenAI", "LangChain"],
+                        "embeddings_vector_db": True,
+                        "prompt_handling": True,
+                        "model_serving": True,
+                        "agent_tool_use": True,
+                    }
+                ],
+            }
+        },
+    )
+    findings = [
+        {
+            "severity": 1,
+            "ai_category": "Secrets",
+            "repo": "cogi-rag-agent",
+            "project_key": "COGI",
+            "file": "app.py",
+            "line": 12,
+            "policy_status": "BANNED",
+            "provider_or_lib": "secret_ai_correlation",
+            "capability": "api key",
+            "description": "Hardcoded credential near AI call",
+            "context": "production",
+        },
+        {
+            "severity": 2,
+            "ai_category": "RAG/Vector DB",
+            "repo": "cogi-rag-agent",
+            "project_key": "COGI",
+            "file": "rag.py",
+            "line": 30,
+            "policy_status": "REVIEW",
+            "provider_or_lib": "rag_pattern",
+            "capability": "retrieval",
+            "description": "RAG pipeline",
+            "context": "production",
+        },
+        {
+            "severity": 2,
+            "ai_category": "External AI API",
+            "repo": "cogi-rag-agent",
+            "project_key": "COGI",
+            "file": "agent.py",
+            "line": 41,
+            "policy_status": "REVIEW",
+            "provider_or_lib": "file_content_to_llm",
+            "capability": "prompt",
+            "description": "File content sent to model",
+            "context": "production",
+        },
+    ]
+
+    html = reporter._render(findings, policy={})
+
+    assert "Threat Model" in html
+    assert "Secret leakage into AI workflows" in html
+    assert "Prompt injection from untrusted content" in html
+    assert "RAG poisoning or malicious retrieval influence" in html
+    assert "Unsafe tool execution from agent decisions" in html
+    assert "Review Gaps / Open Questions" in html
+
+
 def test_html_report_llm_enrichment_deduplicates_repeated_findings():
     import urllib.request
 
