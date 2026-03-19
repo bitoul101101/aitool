@@ -840,6 +840,7 @@ class ScanJobService:
         findings: list[dict] | None = None,
         *,
         progress_fn: Callable[[int, int, str], None] | None = None,
+        detail_mode: str = "detailed",
     ) -> dict:
         record = self._load_db_history_record(scan_id)
         if not record:
@@ -848,8 +849,10 @@ class ScanJobService:
         if not findings:
             raise RuntimeError("This scan does not have stored findings to build an HTML report")
         reports = dict((record.get("reports") or {}).get("__all__", {}) or {})
+        detail_mode = "fast" if str(detail_mode or "").strip().lower() == "fast" else "detailed"
         existing_html = str(reports.get("html", "") or "")
-        if existing_html and Path(existing_html).exists():
+        existing_mode = str(reports.get("html_detail_mode", "detailed") or "detailed").strip().lower()
+        if existing_html and Path(existing_html).exists() and existing_mode == detail_mode:
             return record
 
         base_name = self._report_base_name(record)
@@ -869,9 +872,11 @@ class ScanJobService:
             ollama_url=ollama_url,
             ollama_model=ollama_model,
             progress_fn=progress_fn,
+            detail_mode=detail_mode,
         )
         reports["html"] = str(Path(html_path).resolve())
         reports["html_name"] = Path(html_path).name
+        reports["html_detail_mode"] = detail_mode
         updated = dict(record)
         updated["reports"] = {"__all__": reports}
         self._upsert_job_record(updated)

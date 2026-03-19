@@ -831,6 +831,8 @@ def render_results_page(
     html_generation = dict(html_generation or {})
     generation_state = str(html_generation.get("state", "") or "").lower()
     generation_active = generation_state in {"queued", "running"}
+    generation_mode = str(html_generation.get("detail_mode", "") or "").strip().lower()
+    generation_mode_label = "Fast" if generation_mode == "fast" else "Detailed"
     toolbar_actions = []
     if html_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
@@ -838,11 +840,19 @@ def render_results_page(
         toolbar_actions.append(
             f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
             f'{_csrf_field(csrf_token)}'
-            '<button type="submit" class="btn alt">Generate HTML Report</button>'
+            '<input type="hidden" name="html_detail_mode" value="fast" />'
+            '<button type="submit" class="btn alt">Generate Fast HTML</button>'
+            '</form>'
+        )
+        toolbar_actions.append(
+            f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
+            f'{_csrf_field(csrf_token)}'
+            '<input type="hidden" name="html_detail_mode" value="detailed" />'
+            '<button type="submit" class="btn alt">Generate Detailed HTML</button>'
             '</form>'
         )
     elif generation_active:
-        toolbar_actions.append('<button type="button" class="btn alt disabled" disabled>Generating HTML Report...</button>')
+        toolbar_actions.append(f'<button type="button" class="btn alt disabled" disabled>Generating {generation_mode_label} HTML...</button>')
     if csv_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
     if json_name:
@@ -875,7 +885,7 @@ def render_results_page(
         progress_card = (
             f'<section class="card report-progress-card" id="report-progress-card" data-scan-id="{_esc(scan_id)}" '
             f'data-report-generation-active="{"1" if generation_active else "0"}">'
-            f'<div class="report-progress-head"><strong>HTML Report Generation</strong><span class="pill">{_esc(state_label)}</span></div>'
+            f'<div class="report-progress-head"><strong>{_esc(generation_mode_label)} HTML Report Generation</strong><span class="pill">{_esc(state_label)}</span></div>'
             f'<div class="muted" id="report-progress-message">{_esc(progress_text or "Preparing report generation...")}</div>'
             f'<div class="report-progress-bar"><div class="report-progress-fill" id="report-progress-fill" style="width:{pct}%"></div></div>'
             f'<div class="report-progress-meta" id="report-progress-meta">{_esc(meta_text)}</div>'
@@ -885,8 +895,8 @@ def render_results_page(
         results_body = f'<iframe class="results-frame" src="/reports/{_esc(html_name)}" title="Detailed Report"></iframe>'
     elif can_generate_html:
         results_body = (
-            '<section class="card empty-state"><strong>Detailed HTML report has not been generated yet.</strong>'
-            '<div class="muted" style="margin-top:6px">Generate it when you need the full exported report. CSV and log artifacts remain available immediately.</div>'
+            '<section class="card empty-state"><strong>HTML report has not been generated yet.</strong>'
+            '<div class="muted" style="margin-top:6px">Generate a fast or detailed HTML report when you need it. CSV and log artifacts remain available immediately.</div>'
             '</section>'
         )
     else:

@@ -2185,9 +2185,12 @@ def test_results_page_offers_on_demand_html_generation_when_findings_exist():
         csrf_token="csrf-demo",
     ).decode("utf-8")
 
-    assert "Detailed HTML report has not been generated yet." in html
+    assert "HTML report has not been generated yet." in html
     assert 'action="/scan/20260318_140208/generate-html"' in html
-    assert "Generate HTML Report" in html
+    assert 'name="html_detail_mode" value="fast"' in html
+    assert 'name="html_detail_mode" value="detailed"' in html
+    assert "Generate Fast HTML" in html
+    assert "Generate Detailed HTML" in html
     assert "Download CSV File" in html
     assert "Download Threat Dragon" in html
     assert "Replay Threat Model" in html
@@ -2206,15 +2209,78 @@ def test_results_page_shows_html_generation_progress_card():
         csv_name="scan.csv",
         log_url="/api/history/log/20260318_140208",
         can_generate_html=True,
-        html_generation={"state": "running", "message": "Generating LLM analysis 3/12...", "current": 3, "total": 12},
+        html_generation={"state": "running", "message": "Generating LLM analysis 3/12...", "current": 3, "total": 12, "detail_mode": "detailed"},
         csrf_token="csrf-demo",
     ).decode("utf-8")
 
-    assert "HTML Report Generation" in html
+    assert "Detailed HTML Report Generation" in html
     assert "Generating LLM analysis 3/12..." in html
     assert 'data-report-generation-active="1"' in html
     assert 'src="/assets/results_page.js"' in html
-    assert "Generating HTML Report..." in html
+    assert "Generating Detailed HTML..." in html
+
+
+def test_html_report_fast_mode_skips_llm_detail_fetch(tmp_path):
+    reporter = HTMLReporter(str(tmp_path), "demo")
+    called = {"fetch": False}
+    original_fetch = reporter._fetch_llm_details
+    original_render = reporter._render
+    try:
+        def _fake_fetch(*args, **kwargs):
+            called["fetch"] = True
+            return {}
+        reporter._render = lambda findings, policy, llm_details: "<html></html>"
+        reporter._fetch_llm_details = _fake_fetch
+        out = reporter.write(
+            [{"file": "a.py", "line": 1, "provider_or_lib": "openai", "severity": 4}],
+            policy={},
+            ollama_url="http://localhost:11434",
+            ollama_model="demo",
+            detail_mode="fast",
+        )
+    finally:
+        reporter._fetch_llm_details = original_fetch
+        reporter._render = original_render
+    assert Path(out).exists()
+    assert called["fetch"] is False
+
+
+def test_html_report_detail_cache_reuses_saved_llm_response(tmp_path):
+    reporter = HTMLReporter(str(tmp_path), "demo")
+    original_render = reporter._render
+    findings = [{
+        "file": "a.py",
+        "line": 1,
+        "provider_or_lib": "openai",
+        "capability": "chat",
+        "ai_category": "provider",
+        "severity": 2,
+        "description": "demo",
+        "snippet": "client.chat()",
+    }]
+    calls = {"count": 0}
+    original_urlopen = __import__("urllib.request").request.urlopen
+
+    class _Resp:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+        def read(self):
+            return json.dumps({"message": {"content": "## Why\nTest\n## How\n- Fix\n## Secure\n```python\npass\n```\n## References\nhttps://owasp.org"}}).encode("utf-8")
+
+    try:
+        reporter._render = lambda findings, policy, llm_details: "<html></html>"
+        def _fake_urlopen(req, timeout=0):
+            calls["count"] += 1
+            return _Resp()
+        __import__("urllib.request").request.urlopen = _fake_urlopen
+        reporter.write(findings, policy={}, ollama_url="http://localhost:11434", ollama_model="demo", detail_mode="detailed")
+        reporter.write(findings, policy={}, ollama_url="http://localhost:11434", ollama_model="demo", detail_mode="detailed")
+    finally:
+        __import__("urllib.request").request.urlopen = original_urlopen
+        reporter._render = original_render
+    assert calls["count"] == 1
 
 
 def test_json_report_includes_structured_threat_model(tmp_path):
@@ -2352,6 +2418,28 @@ def test_render_results_page_resolves_current_session_report():
         assert handler.redirected == "/scan/20260318_150000?tab=results"
     finally:
         srv._session = orig_session
+
+
+def test_report_access_matches_json_sarif_and_threat_dragon_exports():
+    from services.report_access import find_history_record_by_report_name
+
+    record = {
+        "scan_id": "20260319_191549",
+        "reports": {
+            "__all__": {
+                "json": r"C:\aitool\output\ai_scan_demo.json",
+                "json_name": "ai_scan_demo.json",
+                "sarif": r"C:\aitool\output\ai_scan_demo.sarif",
+                "sarif_name": "ai_scan_demo.sarif",
+                "threat_dragon": r"C:\aitool\output\ai_scan_demo_threat_dragon.json",
+                "threat_dragon_name": "ai_scan_demo_threat_dragon.json",
+            }
+        },
+    }
+
+    assert find_history_record_by_report_name([record], "ai_scan_demo.json") == record
+    assert find_history_record_by_report_name([record], "ai_scan_demo.sarif") == record
+    assert find_history_record_by_report_name([record], "ai_scan_demo_threat_dragon.json") == record
 
 
 def test_asset_route_serves_main_css():

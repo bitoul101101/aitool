@@ -3,6 +3,7 @@ HTML Report Generator
 AI Security & Compliance Monitoring
 """
 
+import hashlib
 import json
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -189,13 +190,35 @@ class HTMLReporter:
         self.include_snippets = include_snippets
         self.meta = meta or {}   # repo, project_key, owner, scan_id
 
+    def _llm_cache_path(self) -> Path:
+        return self.output_dir / "ai_report_llm_cache.json"
+
+    def _load_llm_cache(self) -> dict[str, str]:
+        path = self._llm_cache_path()
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {str(k): str(v) for k, v in data.items()}
+
+    def _save_llm_cache(self, cache: dict[str, str]) -> None:
+        path = self._llm_cache_path()
+        try:
+            path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
     def write(self, findings: List[Dict[str, Any]], policy: dict = None,
               ollama_url: str = "", ollama_model: str = "",
-              progress_fn=None) -> str:
+              progress_fn=None, detail_mode: str = "detailed") -> str:
         path = self.output_dir / f"ai_scan_{self.scan_id}.html"
         # Pre-bake LLM detail answers at report-write time if Ollama is available
         llm_details = {}
-        if ollama_url and ollama_model:
+        if detail_mode == "detailed" and ollama_url and ollama_model:
             try:
                 timeout_s = int(self.meta.get("report_detail_timeout_s", 180) or 180)
                 llm_details = self._fetch_llm_details(
@@ -377,6 +400,22 @@ class HTMLReporter:
         def _key(f: dict) -> str:
             return f"{f.get('file','')}:{f.get('line','')}:{f.get('provider_or_lib','')}"
 
+        def _cache_key(f: dict) -> str:
+            material = {
+                "model": model,
+                "file": f.get("file", ""),
+                "line": f.get("line", ""),
+                "provider_or_lib": f.get("provider_or_lib", ""),
+                "capability": f.get("capability", ""),
+                "ai_category": f.get("ai_category", ""),
+                "severity": f.get("severity", ""),
+                "description": f.get("description", ""),
+                "snippet": str(f.get("snippet", "") or "")[:300],
+            }
+            return hashlib.sha1(
+                json.dumps(material, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
+
         def _placeholder_html(message: str) -> str:
             return _render_html("", message)
 
@@ -429,34 +468,58 @@ class HTMLReporter:
         if not work_items:
             return results
 
-        max_workers = max(1, min(REPORT_LLM_MAX_WORKERS, total_work))
-        if max_workers == 1:
-            for i, finding in enumerate(work_items, 1):
-                key, html = _fetch_one(finding)
-                results[key] = html
-                if progress_fn:
-                    try:
-                        progress_fn(i, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
-                    except (TypeError, ValueError):
-                        pass
-            return results
-
-        future_meta = {}
+        cache = self._load_llm_cache()
+        uncached_items: list[dict] = []
         completed = 0
-        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="report-llm") as executor:
-            for finding in work_items:
-                future = executor.submit(_fetch_one, finding)
-                future_meta[future] = finding
-            for future in as_completed(future_meta):
-                finding = future_meta[future]
-                key, html = future.result()
-                results[key] = html
+        for finding in work_items:
+            key = _key(finding)
+            cached_html = cache.get(_cache_key(finding))
+            if cached_html:
+                results[key] = cached_html
                 completed += 1
                 if progress_fn:
                     try:
                         progress_fn(completed, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
                     except (TypeError, ValueError):
                         pass
+            else:
+                uncached_items.append(finding)
+
+        if not uncached_items:
+            return results
+
+        max_workers = max(1, min(REPORT_LLM_MAX_WORKERS, len(uncached_items)))
+        if max_workers == 1:
+            for finding in uncached_items:
+                key, html = _fetch_one(finding)
+                results[key] = html
+                cache[_cache_key(finding)] = html
+                completed += 1
+                if progress_fn:
+                    try:
+                        progress_fn(completed, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
+                    except (TypeError, ValueError):
+                        pass
+            self._save_llm_cache(cache)
+            return results
+
+        future_meta = {}
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="report-llm") as executor:
+            for finding in uncached_items:
+                future = executor.submit(_fetch_one, finding)
+                future_meta[future] = finding
+            for future in as_completed(future_meta):
+                finding = future_meta[future]
+                key, html = future.result()
+                results[key] = html
+                cache[_cache_key(finding)] = html
+                completed += 1
+                if progress_fn:
+                    try:
+                        progress_fn(completed, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
+                    except (TypeError, ValueError):
+                        pass
+        self._save_llm_cache(cache)
         return results
 
     def _render(self, findings, policy, llm_details=None):

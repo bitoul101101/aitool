@@ -729,16 +729,19 @@ def _generate_html_report_for_scan(scan_id: str) -> dict:
     return updated
 
 
-def _start_html_report_generation(scan_id: str) -> dict[str, Any]:
+def _start_html_report_generation(scan_id: str, detail_mode: str = "detailed") -> dict[str, Any]:
     safe_scan_id = Path(scan_id).name
     record = _scan_record_for_id(safe_scan_id)
     if not record:
         raise RuntimeError("Scan results not found")
     report = dict((record.get("reports") or {}).get("__all__", {}) or {})
+    detail_mode = "fast" if str(detail_mode or "").strip().lower() == "fast" else "detailed"
+    mode_label = "Fast" if detail_mode == "fast" else "Detailed"
     html_path = str(report.get("html", "") or "")
-    if html_path and Path(html_path).exists():
+    existing_mode = str(report.get("html_detail_mode", "detailed") or "detailed").strip().lower()
+    if html_path and Path(html_path).exists() and existing_mode == detail_mode:
         _clear_report_generation_status(safe_scan_id)
-        return {"state": "done", "message": "HTML report already generated.", "current": 1, "total": 1}
+        return {"state": "done", "message": f"{mode_label} HTML report already generated.", "current": 1, "total": 1, "detail_mode": detail_mode}
 
     existing = _report_generation_status(safe_scan_id)
     if str(existing.get("state", "") or "").lower() in {"queued", "running"}:
@@ -747,9 +750,10 @@ def _start_html_report_generation(scan_id: str) -> dict[str, Any]:
     _set_report_generation_status(
         safe_scan_id,
         state="queued",
-        message="Queued for HTML report generation...",
+        message=f"Queued {detail_mode} HTML report generation...",
         current=0,
         total=0,
+        detail_mode=detail_mode,
     )
 
     def _worker():
@@ -760,19 +764,26 @@ def _start_html_report_generation(scan_id: str) -> dict[str, Any]:
                 message=f"Generating LLM analysis {i}/{n}...",
                 current=i,
                 total=n,
+                detail_mode=detail_mode,
             )
 
         try:
             _set_report_generation_status(
                 safe_scan_id,
                 state="running",
-                message="Building HTML report...",
+                message=f"Building {detail_mode} HTML report...",
                 current=0,
                 total=0,
+                detail_mode=detail_mode,
             )
             snapshot = _current_session_snapshot()
             findings = list(snapshot["findings"]) if snapshot["scan_id"] == safe_scan_id else None
-            updated = _scan_service.generate_html_report(safe_scan_id, findings=findings, progress_fn=_progress)
+            updated = _scan_service.generate_html_report(
+                safe_scan_id,
+                findings=findings,
+                progress_fn=_progress,
+                detail_mode=detail_mode,
+            )
             if snapshot["scan_id"] == safe_scan_id:
                 with _state_lock:
                     current = _current_session()
@@ -780,9 +791,10 @@ def _start_html_report_generation(scan_id: str) -> dict[str, Any]:
             _set_report_generation_status(
                 safe_scan_id,
                 state="done",
-                message="HTML report generated.",
+                message=f"{mode_label} HTML report generated.",
                 current=1,
                 total=1,
+                detail_mode=detail_mode,
             )
         except Exception as exc:
             _set_report_generation_status(
@@ -791,6 +803,7 @@ def _start_html_report_generation(scan_id: str) -> dict[str, Any]:
                 message=str(exc),
                 current=0,
                 total=0,
+                detail_mode=detail_mode,
             )
 
     threading.Thread(target=_worker, daemon=True).start()
@@ -1544,7 +1557,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif p == "/scan/stop":
             return self._page_scan_stop()
         elif p.startswith("/scan/") and p.endswith("/generate-html"):
-            return self._page_generate_html_report(p[6:-14])
+            return self._page_generate_html_report(p[6:-14], body)
         elif p.startswith("/scan/") and p.endswith("/replay-threat-model"):
             return self._page_replay_threat_model(p[6:-20], body)
         elif p == "/history/delete":
@@ -1991,7 +2004,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         extra = {"tab": "activity"} if current_session.scan_id else {"new": "1"}
         self._redirect(_with_query(target, notice="Stop requested", **extra))
 
-    def _page_generate_html_report(self, scan_id: str):
+    def _page_generate_html_report(self, scan_id: str, body: dict):
         if _require_role(self, ROLE_VIEWER):
             return
         safe_scan_id = Path(scan_id).name
@@ -2001,12 +2014,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         project_key = str(record.get("project_key", "") or "")
         if project_key and _require_project_access(self, project_key):
             return
+        detail_mode = "fast" if str((body or {}).get("html_detail_mode", "") or "").strip().lower() == "fast" else "detailed"
+        mode_label = "Fast" if detail_mode == "fast" else "Detailed"
         try:
-            _start_html_report_generation(safe_scan_id)
+            _start_html_report_generation(safe_scan_id, detail_mode=detail_mode)
         except Exception as e:
             self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", error=str(e)))
             return
-        self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice="HTML report generation started"))
+        self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice=f"{mode_label} HTML report generation started"))
 
     def _page_replay_threat_model(self, scan_id: str, body: dict):
         if _require_role(self, ROLE_VIEWER):
