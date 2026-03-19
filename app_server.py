@@ -94,6 +94,7 @@ from services.scan_runtime_views import (
     llm_stats as _llm_stats,
     parse_log_text_entries as _parse_log_text_entries,
     phase_timeline as _phase_timeline,
+    structured_phase_timeline as _structured_phase_timeline,
 )
 from services.trends import compute_history_trends
 from services.web_pages import (
@@ -1441,7 +1442,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             state = snapshot["state"]
             scan_id = snapshot["scan_id"]
             status = dict(snapshot.get("status") or session.to_status())
-            status["phase_timeline"] = _phase_timeline(log_lines, state)
+            status["phase_timeline"] = (
+                _structured_phase_timeline(status.get("phase_metrics"), status.get("duration_s"), state)
+                or _phase_timeline(log_lines, state)
+            )
             status["log_url"] = f"/api/history/log/{scan_id}" if scan_id else ""
             status["hardware"] = _hardware_snapshot(session)
             status["llm_stats"] = _llm_stats(
@@ -1676,7 +1680,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             llm_cfg=load_llm_config(),
             llm_models=_ollama_snapshot(load_llm_config().get("base_url", "http://localhost:11434"), refresh=False).get("models", []),
             log_text=_format_log_text(session_log_lines),
-            phase_timeline=_phase_timeline(session_log_lines, session_state),
+            phase_timeline=(
+                _structured_phase_timeline(snapshot.get("status", {}).get("phase_metrics"), snapshot.get("scan_duration_s"), session_state)
+                or _phase_timeline(session_log_lines, session_state)
+            ),
             force_selection=fresh_scan,
             selected_local_repo_path=effective_local_repo_path,
             show_scan_results=_has_scan_results(),
@@ -1725,11 +1732,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         if is_current:
             log_text = _format_log_text(session_log_lines)
-            phase_timeline = _phase_timeline(session_log_lines, session_state)
+            phase_timeline = (
+                _structured_phase_timeline(snapshot.get("status", {}).get("phase_metrics"), snapshot.get("scan_duration_s"), session_state)
+                or _phase_timeline(session_log_lines, session_state)
+            )
         else:
             log_text = _get_log_text(safe_scan_id)
             parsed_entries = _parse_log_text_entries(log_text)
-            phase_timeline = _phase_timeline(parsed_entries, session_state)
+            phase_timeline = (
+                _structured_phase_timeline(record.get("phase_metrics"), record.get("duration_s"), session_state)
+                or _phase_timeline(parsed_entries, session_state)
+            )
             status = {
                 "scan_id": safe_scan_id,
                 "state": session_state,
@@ -1773,6 +1786,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 repo_label=repo_label,
                 state=session_state or str(record.get("state", "done")),
                 html_name=html_name,
+                html_detail_mode=report.get("html_detail_mode", ""),
                 csv_name=report.get("csv_name", ""),
                 json_name=report.get("json_name", ""),
                 sarif_name=report.get("sarif_name", ""),

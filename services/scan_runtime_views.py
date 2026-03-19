@@ -147,6 +147,35 @@ def phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
     return timeline
 
 
+def structured_phase_timeline(phase_metrics: dict | None, duration_s: int | None = None, state: str = "") -> list[dict]:
+    metrics = {str(k or "").strip().lower(): int(v or 0) for k, v in dict(phase_metrics or {}).items()}
+    if not metrics:
+        return []
+    state = (state or "").lower()
+    order = ["init", "clone", "scan", "llm review", "report"]
+    timeline: list[dict] = []
+    phase_sum = 0
+    started_names = [name for name in order if metrics.get(name, 0) > 0]
+    active_name = started_names[-1] if state == "running" and started_names else ""
+    for name in order:
+        seconds = max(int(metrics.get(name, 0) or 0), 0)
+        phase_sum += seconds
+        phase_state = "done"
+        if state in ("stopped", "error") and name == active_name:
+            phase_state = "stopped"
+        elif state == "running" and name == active_name:
+            phase_state = "running"
+        timeline.append({"name": name, "duration": format_mmss(seconds), "state": phase_state})
+    total_seconds = max(int(metrics.get("total", duration_s or 0) or 0), 0)
+    if total_seconds <= 0:
+        total_seconds = phase_sum
+    elif phase_sum > total_seconds:
+        total_seconds = phase_sum
+    total_state = "running" if state == "running" else "stopped" if state in ("stopped", "error") else "done"
+    timeline.append({"name": "total", "duration": format_mmss(total_seconds), "state": total_state})
+    return timeline
+
+
 def format_mmss(seconds: int) -> str:
     total = max(int(seconds or 0), 0)
     return f"{total // 60:02d}:{total % 60:02d}"

@@ -375,7 +375,8 @@
 
   function updateRunningStatus(data) {
     const state = String(data.state || "").toLowerCase();
-    const justFinished = previousScanState === "running" && state === "done";
+    const terminalState = ["done", "stopped", "skipped", "error"].includes(state);
+    const justFinished = previousScanState === "running" && terminalState;
     if (textEl) {
       textEl.textContent = titleCaseState(data.state);
     }
@@ -391,10 +392,10 @@
       stream.close();
       stream = null;
     }
-    if (!redirectedToResults && justFinished && data.scan_id && data.report && data.report.html_name) {
+    if (!redirectedToResults && justFinished && data.scan_id) {
       redirectedToResults = true;
       window.setTimeout(function () {
-        window.location.assign("/scan/" + encodeURIComponent(data.scan_id) + "?tab=results");
+        window.location.assign("/scan/" + encodeURIComponent(data.scan_id) + "?tab=activity");
       }, 900);
     }
     previousScanState = state;
@@ -432,7 +433,10 @@
 
   async function pollStatus() {
     try {
-      const res = await fetch("/api/scan/status", { headers: { Accept: "application/json" } });
+      const res = await fetch("/api/scan/status?_ts=" + Date.now(), {
+        headers: { Accept: "application/json" },
+        cache: "no-store"
+      });
       if (!res.ok) {
         return;
       }

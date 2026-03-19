@@ -814,6 +814,7 @@ def render_results_page(
     repo_label: str,
     state: str,
     html_name: str,
+    html_detail_mode: str = "",
     csv_name: str = "",
     json_name: str = "",
     sarif_name: str = "",
@@ -833,9 +834,18 @@ def render_results_page(
     generation_active = generation_state in {"queued", "running"}
     generation_mode = str(html_generation.get("detail_mode", "") or "").strip().lower()
     generation_mode_label = "Fast" if generation_mode == "fast" else "Detailed"
+    html_detail_mode = str(html_detail_mode or "").strip().lower()
     toolbar_actions = []
     if html_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
+        if can_generate_html and not generation_active and html_detail_mode == "fast":
+            toolbar_actions.append(
+                f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
+                f'{_csrf_field(csrf_token)}'
+                '<input type="hidden" name="html_detail_mode" value="detailed" />'
+                '<button type="submit" class="btn alt">Generate Detailed HTML</button>'
+                '</form>'
+            )
     elif can_generate_html and not generation_active:
         toolbar_actions.append(
             f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'

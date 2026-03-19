@@ -1417,12 +1417,14 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "repairTimer" not in html
 
 
-def test_scan_page_asset_redirects_only_after_running_to_done_transition():
+def test_scan_page_asset_refreshes_after_running_to_terminal_transition():
     script = Path("C:/aitool/assets/scan_page.js").read_text(encoding="utf-8")
 
     assert "let previousScanState = null;" in script
-    assert 'const justFinished = previousScanState === "running" && state === "done";' in script
+    assert 'const terminalState = ["done", "stopped", "skipped", "error"].includes(state);' in script
+    assert 'const justFinished = previousScanState === "running" && terminalState;' in script
     assert "!redirectedToResults && justFinished" in script
+    assert '?tab=activity' in script
     assert "function renderLlmStats(data)" not in script
 
 
@@ -1886,6 +1888,31 @@ def test_phase_timeline_total_matches_sum_of_displayed_finished_phases():
     assert durations["total"] == phase_total
 
 
+def test_structured_phase_timeline_prefers_persisted_phase_metrics():
+    from services.scan_runtime_views import structured_phase_timeline
+
+    timeline = structured_phase_timeline(
+        {
+            "init": 4,
+            "clone": 0,
+            "scan": 3,
+            "llm review": 37,
+            "report": 3,
+            "total": 47,
+        },
+        duration_s=99,
+        state="done",
+    )
+    durations = {item["name"]: item["duration"] for item in timeline}
+
+    assert durations["init"] == "00:04"
+    assert durations["clone"] == "00:00"
+    assert durations["scan"] == "00:03"
+    assert durations["llm review"] == "00:37"
+    assert durations["report"] == "00:03"
+    assert durations["total"] == "00:47"
+
+
 def test_render_history_page_shows_phase_summary_and_error_code():
     import app_server as srv
 
@@ -2128,6 +2155,7 @@ def test_results_page_is_server_rendered():
         repo_label="repo1",
         state="done",
         html_name="scan.html",
+        html_detail_mode="detailed",
         csv_name="scan.csv",
         json_name="scan.json",
         sarif_name="scan.sarif",
@@ -2149,6 +2177,31 @@ def test_results_page_is_server_rendered():
     assert '<h2>Results</h2>' not in html
     assert "Review the completed scan and download the generated artifacts." not in html
     assert 'repo1' not in html
+
+
+def test_results_page_keeps_detailed_generation_available_after_fast_html():
+    import app_server as srv
+
+    html = srv.render_results_page(
+        scan_id="20260318_140208",
+        project_key="COGI",
+        repo_label="repo1",
+        state="done",
+        html_name="scan_fast.html",
+        html_detail_mode="fast",
+        csv_name="scan.csv",
+        json_name="scan.json",
+        sarif_name="scan.sarif",
+        threat_dragon_name="scan_threat_dragon.json",
+        log_url="/api/history/log/20260318_140208",
+        can_generate_html=True,
+        csrf_token="csrf-demo",
+    ).decode("utf-8")
+
+    assert 'Open Raw HTML' in html
+    assert 'name="html_detail_mode" value="detailed"' in html
+    assert "Generate Detailed HTML" in html
+    assert "Generate Fast HTML" not in html
 
 
 def test_results_page_handles_missing_html_report():
