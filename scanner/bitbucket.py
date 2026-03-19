@@ -168,6 +168,10 @@ class BitbucketClient:
             if resp.status_code >= 400:
                 continue
             if kind == "json":
+                content_type = str(resp.headers.get("Content-Type", "") or "").lower()
+                body = str(resp.text or "").strip()
+                if "json" not in content_type and not body.startswith(("{", "[")):
+                    continue
                 try:
                     data = resp.json()
                 except ValueError:
