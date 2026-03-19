@@ -2363,12 +2363,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _sse_stream(self):
         """Stream log lines as Server-Sent Events."""
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("X-Accel-Buffering", "no")
-        self._cors()
-        self.end_headers()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("X-Accel-Buffering", "no")
+            self._cors()
+            self.end_headers()
+        except Exception as exc:
+            if _Handler._is_client_disconnect(exc):
+                return
+            raise
 
         # Snapshot the backlog and remember its length.
         # The queue may already contain some of these same entries —
@@ -2389,8 +2394,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 try:
                     self.wfile.write(b": keepalive\n\n")
                     self.wfile.flush()
-                except Exception:
-                    break
+                except Exception as exc:
+                    if _Handler._is_client_disconnect(exc):
+                        return
+                    raise
                 if session.state in ("done", "stopped", "error"):
                     break
                 continue

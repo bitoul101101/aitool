@@ -4128,6 +4128,67 @@ def test_sse_stream_empty_queue_uses_keepalive_without_raising():
         srv._current_session_snapshot = orig_snapshot
 
 
+def test_sse_stream_swallows_client_disconnect_during_header_setup():
+    import app_server as srv
+
+    class DummyHandler:
+        def send_response(self, _code):
+            return None
+
+        def send_header(self, _name, _value):
+            raise ConnectionAbortedError(10053, "connection aborted")
+
+        def _cors(self):
+            return None
+
+        def end_headers(self):
+            raise AssertionError("end_headers should not run after send_header failure")
+
+    srv._Handler._sse_stream(DummyHandler())
+
+
+def test_sse_stream_swallows_client_disconnect_during_keepalive():
+    import app_server as srv
+
+    class BrokenWriter:
+        def write(self, _data):
+            raise ConnectionAbortedError(10053, "connection aborted")
+
+        def flush(self):
+            raise AssertionError("flush should not run after keepalive write failure")
+
+    class DummyHandler:
+        def __init__(self):
+            self.wfile = BrokenWriter()
+
+        def send_response(self, _code):
+            return None
+
+        def send_header(self, *_args):
+            return None
+
+        def end_headers(self):
+            return None
+
+        def _cors(self):
+            return None
+
+        _sse_write = srv._Handler._sse_write
+
+    orig_snapshot = srv._current_session_snapshot
+    try:
+        session = srv.ScanSession()
+        session.state = "running"
+        session.log_lines = []
+        srv._current_session_snapshot = lambda *args, **kwargs: {
+            "session": session,
+            "log_lines": [],
+        }
+        srv._Handler._sse_stream(DummyHandler())
+    finally:
+        srv._current_session_snapshot = orig_snapshot
+
+
 def test_gpu_snapshot_returns_unavailable_when_nvidia_smi_hangs(monkeypatch):
     import app_server as srv
 
