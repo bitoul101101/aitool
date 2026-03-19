@@ -1089,20 +1089,38 @@ def _gpu_snapshot() -> str:
     if os.name != "nt":
         return "Unavailable"
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [
                 "nvidia-smi",
                 "--query-gpu=utilization.gpu,memory.used,memory.total",
                 "--format=csv,noheader,nounits",
             ],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=2,
-            check=True,
         )
     except (OSError, subprocess.SubprocessError):
         return "Unavailable"
-    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    deadline = time.monotonic() + 2.0
+    while proc.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if proc.poll() is None:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        try:
+            proc.communicate(timeout=0.2)
+        except (OSError, ValueError):
+            pass
+        return "Unavailable"
+    try:
+        stdout, _stderr = proc.communicate(timeout=0.2)
+    except (OSError, subprocess.SubprocessError):
+        return "Unavailable"
+    if proc.returncode not in (0, None):
+        return "Unavailable"
+    lines = [line.strip() for line in stdout.splitlines() if line.strip()]
     if not lines:
         return "Unavailable"
     first = lines[0]
@@ -2346,6 +2364,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
         # Stream new entries, skipping any that overlap with the backlog
         while True:
+            if session.log_queue.empty():
+                try:
+                    self.wfile.write(b": keepalive\n\n")
+                    self.wfile.flush()
+                except Exception:
+                    break
+                if session.state in ("done", "stopped", "error"):
+                    break
+                continue
             try:
                 entry = session.log_queue.get(timeout=1.0)
                 if queue_skip > 0:
@@ -2366,13 +2393,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                             break
                     break
             except queue.Empty:
-                try:
-                    self.wfile.write(b": keepalive\n\n")
-                    self.wfile.flush()
-                except Exception:
-                    break
                 if session.state in ("done", "stopped", "error"):
                     break
+                continue
 
     def _sse_write(self, entry: dict):
         line = _format_log_entry(entry)

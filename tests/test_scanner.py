@@ -3932,6 +3932,77 @@ def test_sse_write_returns_false_on_client_disconnect():
     assert srv._Handler._sse_write(handler, {"msg": "hello", "ts": 0, "level": "info"}) is False
 
 
+def test_sse_stream_empty_queue_uses_keepalive_without_raising():
+    import app_server as srv
+
+    class Writer:
+        def __init__(self):
+            self.parts = []
+
+        def write(self, data):
+            self.parts.append(data)
+
+        def flush(self):
+            return None
+
+    class DummyHandler:
+        def __init__(self):
+            self.wfile = Writer()
+
+        def send_response(self, code):
+            self.code = code
+
+        def send_header(self, *_args):
+            return None
+
+        def end_headers(self):
+            return None
+
+        def _cors(self):
+            return None
+
+        _sse_write = srv._Handler._sse_write
+
+    orig_snapshot = srv._current_session_snapshot
+    try:
+        session = srv.ScanSession()
+        session.state = "done"
+        session.log_lines = []
+        srv._current_session_snapshot = lambda *args, **kwargs: {
+            "session": session,
+            "log_lines": [],
+        }
+        handler = DummyHandler()
+        srv._Handler._sse_stream(handler)
+        assert handler.code == 200
+        assert any(part == b": keepalive\n\n" for part in handler.wfile.parts)
+    finally:
+        srv._current_session_snapshot = orig_snapshot
+
+
+def test_gpu_snapshot_returns_unavailable_when_nvidia_smi_hangs(monkeypatch):
+    import app_server as srv
+
+    class HangingProc:
+        def __init__(self, *args, **kwargs):
+            self.returncode = None
+            self.killed = False
+
+        def poll(self):
+            return None if not self.killed else -9
+
+        def kill(self):
+            self.killed = True
+
+        def communicate(self, timeout=None):
+            return ("", "")
+
+    monkeypatch.setattr(srv.os, "name", "nt")
+    monkeypatch.setattr(srv.subprocess, "Popen", lambda *args, **kwargs: HangingProc())
+
+    assert srv._gpu_snapshot() == "Unavailable"
+
+
 def test_send_swallows_client_disconnects():
     import app_server as srv
 
