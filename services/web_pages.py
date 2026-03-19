@@ -34,6 +34,16 @@ def _fmt_duration(seconds: object) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def _fmt_phase_summary(phase_metrics: dict | None) -> str:
+    metrics = dict(phase_metrics or {})
+    order = [("init", "I"), ("clone", "C"), ("scan", "S"), ("llm review", "L"), ("report", "R")]
+    parts = []
+    for key, label in order:
+        if key in metrics:
+            parts.append(f"{label} {_fmt_duration(metrics.get(key, 0))}")
+    return " · ".join(parts) or "—"
+
+
 def _fmt_triage_time(value: str) -> str:
     if not value:
         return ""
@@ -387,6 +397,11 @@ def render_scan_page(
     inventory = status.get("inventory") or {}
     hardware = status.get("hardware") or {}
     llm_stats = status.get("llm_stats") or {}
+    phase_metrics = status.get("phase_metrics") or {}
+    repo_metrics = status.get("repo_metrics") or {}
+    llm_batch_metrics = list(status.get("llm_batch_metrics") or [])
+    cache_metrics = status.get("cache_metrics") or {}
+    structured_errors = list(status.get("errors") or [])
     fixed_findings = list(delta.get("fixed_findings") or [])[:8]
     baseline_html = ""
     if scan_complete and delta.get("has_baseline"):
@@ -462,6 +477,57 @@ def render_scan_page(
         </div>
       </div>
     </section>"""
+    timings_html = (
+        '<section class="card" id="timings-card">'
+        '<h2 style="margin:0 0 8px;font-size:15px">Structured Timings</h2>'
+        '<div class="baseline-summary"><div class="hardware-grid">'
+        + "".join(
+            f'<div class="hardware-stat"><span class="baseline-label">{_esc(label)}</span><strong>{_esc(_fmt_duration(phase_metrics.get(key, 0)))}</strong></div>'
+            for key, label in (("init", "Init"), ("clone", "Clone"), ("scan", "Scan"), ("llm review", "LLM"), ("report", "Report"), ("total", "Total"))
+            if key in phase_metrics
+        )
+        + (
+            f'<div class="hardware-stat"><span class="baseline-label">Cache</span><strong>{_esc(str(cache_metrics.get("hits", 0)))} / {_esc(str(cache_metrics.get("misses", 0)))} </strong></div>'
+            if cache_metrics else ""
+        )
+        + '</div></div></section>'
+    )
+    repo_metrics_rows = "".join(
+        f'<div class="hardware-stat"><span class="baseline-label">{_esc(repo)}</span>'
+        f'<strong>{_esc(_fmt_duration(data.get("clone_s", 0)))} / {_esc(_fmt_duration(data.get("scan_s", 0)))} / {_esc(_fmt_duration(data.get("llm_review_s", 0)))}</strong></div>'
+        for repo, data in list(repo_metrics.items())[:6]
+    )
+    repo_metrics_body = repo_metrics_rows or '<div class="muted">No repo timing data yet.</div>'
+    repo_metrics_html = (
+        '<section class="card" id="repo-metrics-card">'
+        '<h2 style="margin:0 0 8px;font-size:15px">Per-Repo Timings</h2>'
+        '<div class="muted" style="font-size:11px;margin-bottom:6px">Clone / Scan / LLM review</div>'
+        f'<div class="baseline-summary"><div class="hardware-grid">{repo_metrics_body}</div></div>'
+        '</section>'
+    )
+    llm_batches_html = (
+        '<section class="card" id="llm-batches-card">'
+        '<h2 style="margin:0 0 8px;font-size:15px">LLM Batch Timings</h2>'
+        '<div class="baseline-summary"><div class="hardware-grid">'
+        + "".join(
+            f'<div class="hardware-stat"><span class="baseline-label">Batch {int(item.get("batch", 0))}/{int(item.get("total_batches", 0))}</span>'
+            f'<strong>{_esc(_fmt_duration(item.get("duration_s", 0)))}{" fail" if item.get("failed") else ""}</strong></div>'
+            for item in llm_batch_metrics[-5:]
+        )
+        + '</div></div></section>'
+        if llm_batch_metrics else ""
+    )
+    errors_html = (
+        '<section class="card" id="scan-errors-card">'
+        '<h2 style="margin:0 0 8px;font-size:15px">Errors</h2>'
+        + "".join(
+            f'<div class="triage-note"><strong>{_esc(item.get("code", ""))}</strong> · {_esc(item.get("stage", ""))}'
+            f'<div class="finding-sub">{_esc(item.get("message", ""))}</div></div>'
+            for item in structured_errors[-4:]
+        )
+        + '</section>'
+        if structured_errors else ""
+    )
     new_scan_button = ""
     if scan_complete:
         project_q = f"?project={quote(selected_project)}&new=1" if selected_project else "?new=1"
@@ -536,6 +602,10 @@ def render_scan_page(
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
     {hardware_html}
+    {timings_html}
+    {repo_metrics_html}
+    {llm_batches_html}
+    {errors_html}
     {baseline_html}
     {inventory_html}
   </aside>
@@ -578,6 +648,8 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         delta_new = delta.get("new_count", 0)
         delta_existing = delta.get("existing_count", delta.get("unchanged_count", 0))
         delta_fixed = delta.get("fixed_count", 0)
+        phase_summary = _fmt_phase_summary(rec.get("phase_metrics") or {})
+        last_error = ((rec.get("errors") or [])[-1] or {}).get("code", "") if rec.get("errors") else ""
         rows.append(
             f'<tr data-project="{_esc(project)}" data-repo="{_esc(repo_label)}" data-status="{_esc(state)}" data-model="{_esc(rec.get("llm_model",""))}" data-ts="{ts}">'
             f'<td><input type="checkbox" class="history-check" name="scan_ids" value="{_esc(rec.get("scan_id",""))}"></td>'
@@ -592,7 +664,9 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             f'<td>{_esc(rec.get("high_prod", 0))}</td>'
             f'<td>{_esc(rec.get("llm_model", ""))}</td>'
             f'<td>{_esc(_fmt_duration(rec.get("duration_s", 0)))}</td>'
+            f'<td>{_esc(phase_summary)}</td>'
             f'<td><span class="pill {status_class}">{_esc(state.title())}</span></td>'
+            f'<td>{_esc(last_error or "—")}</td>'
             f'<td>{details_link}</td></tr>'
         )
     body = f"""
@@ -625,11 +699,13 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             <th data-sort="number">High<br>in Prod</th>
             <th data-sort="text">LLM<br>Model</th>
             <th data-sort="number">Duration</th>
+            <th>Phases</th>
             <th data-sort="text">Status</th>
+            <th>Error</th>
             <th>Details</th>
           </tr>
         </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="14">No scan history available.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="16">No scan history available.</td></tr>'}</tbody>
       </table>
     </div>
     <div class="history-pagination">

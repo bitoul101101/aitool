@@ -32,6 +32,7 @@ from scanner.suppressions import (
     list_triage,
 )
 from services.inventory import build_inventory
+from services.error_codes import make_error
 from services.runtime_support import load_llm_config
 from services.scan_runtime_views import llm_stats
 
@@ -112,6 +113,11 @@ class ScanSession:
         self.scoped_files_by_repo: Dict[str, List[str]] = {}
         self.pre_llm_count: int = 0
         self.post_llm_count: int = 0
+        self.phase_metrics: Dict[str, int] = {}
+        self.repo_metrics: Dict[str, dict] = {}
+        self.llm_batch_metrics: List[dict] = []
+        self.cache_metrics: Dict[str, int] = {}
+        self.errors: List[dict] = []
 
     @staticmethod
     def _finding_detail(finding: dict) -> dict:
@@ -158,6 +164,42 @@ class ScanSession:
                 entry = {"msg": part, "level": level, "ts": time.time()}
                 self.log_lines.append(entry)
                 self.log_queue.put(entry)
+
+    def add_phase_time(self, phase_name: str, seconds: float) -> None:
+        phase = str(phase_name or "").strip().lower()
+        if not phase:
+            return
+        value = max(int(round(float(seconds or 0.0))), 0)
+        with self.state_lock:
+            self.phase_metrics[phase] = int(self.phase_metrics.get(phase, 0) or 0) + value
+
+    def set_phase_time(self, phase_name: str, seconds: float) -> None:
+        phase = str(phase_name or "").strip().lower()
+        if not phase:
+            return
+        value = max(int(round(float(seconds or 0.0))), 0)
+        with self.state_lock:
+            self.phase_metrics[phase] = value
+
+    def record_repo_metric(self, repo_slug: str, **metrics: Any) -> None:
+        slug = str(repo_slug or "").strip()
+        if not slug:
+            return
+        with self.state_lock:
+            current = dict(self.repo_metrics.get(slug) or {})
+            current.update(metrics)
+            self.repo_metrics[slug] = current
+
+    def record_llm_batch(self, batch_data: dict) -> None:
+        if not isinstance(batch_data, dict):
+            return
+        with self.state_lock:
+            self.llm_batch_metrics.append(dict(batch_data))
+
+    def record_error(self, code: str, stage: str, message: str, **details: Any) -> None:
+        error = make_error(code, stage, message, **details)
+        with self.state_lock:
+            self.errors.append(error)
 
     def to_status(self) -> dict:
         with self.state_lock:
@@ -217,6 +259,11 @@ class ScanSession:
                 "llm_model_info": dict(self.llm_model_info),
                 "pre_llm_count": self.pre_llm_count,
                 "post_llm_count": self.post_llm_count,
+                "phase_metrics": dict(self.phase_metrics),
+                "repo_metrics": dict(self.repo_metrics),
+                "llm_batch_metrics": list(self.llm_batch_metrics),
+                "cache_metrics": dict(self.cache_metrics),
+                "errors": list(self.errors[-10:]),
                 "finding_details": [
                     self._finding_detail(f)
                     for f in sorted(
@@ -447,6 +494,11 @@ class ScanJobService:
             "llm_model_info": dict(session.llm_model_info or {}),
             "pre_llm_count": int(session.pre_llm_count or 0),
             "post_llm_count": int(session.post_llm_count or 0),
+            "phase_metrics": dict(session.phase_metrics),
+            "repo_metrics": dict(session.repo_metrics),
+            "llm_batch_metrics": list(session.llm_batch_metrics),
+            "cache_metrics": dict(session.cache_metrics),
+            "errors": list(session.errors[-10:]),
             "critical_prod": critical_prod,
             "high_prod": high_prod,
             "repo_details": session.repo_details,
@@ -984,6 +1036,11 @@ class ScanJobService:
             session.delta = {}
             session.inventory = {}
             session.scoped_files_by_repo = {}
+            session.phase_metrics = {}
+            session.repo_metrics = {}
+            session.llm_batch_metrics = []
+            session.cache_metrics = {}
+            session.errors = []
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
@@ -1017,6 +1074,7 @@ class ScanJobService:
         llm_enabled = True
 
         if not self._ollama_ping(session.llm_url):
+            session.record_error("OLLAMA_UNREACHABLE", "llm_setup", session.llm_url)
             log("  [LLM] Ollama not reachable - running without LLM review", "warn")
             llm_enabled = False
         else:
@@ -1035,9 +1093,11 @@ class ScanJobService:
             except EXPECTED_LLM_ERRORS as exc:
                 with session.state_lock:
                     session.llm_model_info = {"name": session.llm_model}
+                session.record_error("LLM_INFO_FALLBACK", "llm_setup", str(exc), model=session.llm_model)
                 log(f"LLM      : {session.llm_model}  [LLM_INFO_FALLBACK: {exc}]", "dim")
 
         log("=" * 58, "dim")
+        session.set_phase_time("init", time.time() - t_start)
 
         repo_meta: Dict[str, dict] = {}
         git_env = client.build_git_auth_env() if client is not None else {}
@@ -1067,6 +1127,7 @@ class ScanJobService:
                 repo_meta[slug] = {"branch": branch, "owner": owner, "url": url}
                 log(f"  {slug}  branch:{branch or '?'}  owner:{owner}", "dim")
             except EXPECTED_METADATA_ERRORS as exc:
+                session.record_error("META_FETCH_FAILED", "metadata", f"{slug}: {exc}", repo=slug)
                 log(f"  [META_FETCH] {slug}: {exc}", "err")
                 repo_meta[slug] = {"branch": None, "owner": "User", "url": ""}
 
@@ -1082,6 +1143,7 @@ class ScanJobService:
             )
         except EXPECTED_LLM_ERRORS as exc:
             workers = 4
+            session.record_error("WORKER_PLAN_FALLBACK", "planning", str(exc))
             log(f"  [WORKER_PLAN] fallback=4 reason={exc}", "dim")
 
         log(f"Starting parallel scan (workers={workers})...", "info")
@@ -1169,9 +1231,15 @@ class ScanJobService:
             clone_dir = scan_temp_root / slug
             repo_root = clone_dir
             cleanup_required = True
+            repo_started = time.perf_counter()
+            clone_started = time.perf_counter()
+            clone_duration = 0.0
+            scan_duration = 0.0
+            llm_duration = 0.0
             try:
                 if session.scan_source == "local":
                     if not local_root or not local_root.exists() or not local_root.is_dir():
+                        session.record_error("LOCAL_REPO_NOT_FOUND", "clone", session.local_repo_path, repo=slug)
                         return slug, None, owner, 0, f"local repo path not found: {session.local_repo_path}"
                     repo_root = local_root
                     cleanup_required = False
@@ -1189,10 +1257,14 @@ class ScanJobService:
                         verify_ssl=bool(getattr(client, "verify_ssl", True)),
                         ca_bundle=str(getattr(client, "ca_bundle", "") or ""),
                     )
+                clone_duration = max(time.perf_counter() - clone_started, 0.0)
+                session.add_phase_time("clone", clone_duration)
                 meta["commit"] = self._git_head_commit(repo_root)
             except RuntimeError as exc:
+                session.record_error("CLONE_FAILED", "clone", str(exc), repo=slug)
                 return slug, None, owner, 0, f"clone failed: {exc}"
             except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
+                session.record_error("CLONE_ERROR", "clone", str(exc), repo=slug)
                 return slug, None, owner, 0, f"clone error: {exc}"
 
             if stop.is_set():
@@ -1208,6 +1280,13 @@ class ScanJobService:
                     session.scoped_files_by_repo[slug] = list(scoped_files or [])
 
                 if scoped_files == []:
+                    session.record_repo_metric(
+                        slug,
+                        clone_s=round(clone_duration, 2),
+                        scan_s=0.0,
+                        llm_review_s=0.0,
+                        total_s=round(time.perf_counter() - repo_started, 2),
+                    )
                     log(f"  [{slug}] No files matched the selected scan scope", "dim")
                     return slug, [], owner, 0, None
                 if excluded_paths:
@@ -1223,6 +1302,7 @@ class ScanJobService:
                         last_pct[0] = pct
                         log(f"  [{slug}] Scanning: {pct}% ({idx+1}/{total} files)", "dim")
 
+                scan_started = time.perf_counter()
                 raw, file_contents = detector.scan(
                     repo_root,
                     repo_name=slug,
@@ -1232,12 +1312,15 @@ class ScanJobService:
                     include_paths=scoped_files,
                     exclude_paths=excluded_paths,
                 )
+                scan_duration = max(time.perf_counter() - scan_started, 0.0)
+                session.add_phase_time("scan", scan_duration)
                 if not scoped_files:
                     try:
                         history_findings = scan_history(repo_root, detector, slug, stop_event=stop)
                         if history_findings:
                             raw.extend(history_findings)
                     except Exception as hist_err:
+                        session.record_error("HISTORY_SCAN_FAILED", "history", str(hist_err), repo=slug)
                         log(f"  [history] {slug}: {hist_err}", "dim")
 
                 analyzed = analyzer.analyze(raw)
@@ -1245,23 +1328,51 @@ class ScanJobService:
 
                 if llm_enabled and analyzed:
                     try:
+                        def _llm_batch_metric(batch_data: dict) -> None:
+                            session.record_llm_batch({
+                                **dict(batch_data),
+                                "repo": slug,
+                                "model": session.llm_model,
+                            })
+
                         reviewer = LLMReviewer(
                             base_url=session.llm_url,
                             model=session.llm_model,
                             log_fn=log,
                             stop_event=stop,
+                            batch_callback=_llm_batch_metric,
                         )
                         log(f"  [LLM] Evaluating {len(analyzed)} finding(s) for review...", "dim")
+                        llm_started = time.perf_counter()
                         analyzed = reviewer.review(analyzed, file_contents)
+                        llm_duration = max(time.perf_counter() - llm_started, 0.0)
+                        session.add_phase_time("llm review", llm_duration)
                         analyzed = analyzer.refresh_scores(analyzed)
                         log(f"  [LLM] Review stage complete -> {len(analyzed)} finding(s)", "dim")
                     except EXPECTED_LLM_ERRORS as exc:
+                        session.record_error("LLM_REVIEW_FAILED", "llm_review", str(exc), repo=slug, model=session.llm_model)
                         log(f"  [LLM_REVIEW] skipped: {exc}", "dim")
 
+                session.record_repo_metric(
+                    slug,
+                    clone_s=round(clone_duration, 2),
+                    scan_s=round(scan_duration, 2),
+                    llm_review_s=round(llm_duration, 2),
+                    total_s=round(time.perf_counter() - repo_started, 2),
+                )
                 return slug, analyzed, owner, pre_llm_count, None
             except (OSError, ValueError, TypeError, KeyError, JSONDecodeError) as exc:
+                session.record_error("REPO_SCAN_FAILED", "scan", str(exc), repo=slug)
                 return slug, None, owner, 0, f"scan error: {exc}"
             finally:
+                if slug not in session.repo_metrics:
+                    session.record_repo_metric(
+                        slug,
+                        clone_s=round(clone_duration, 2),
+                        scan_s=round(scan_duration, 2),
+                        llm_review_s=round(llm_duration, 2),
+                        total_s=round(time.perf_counter() - repo_started, 2),
+                    )
                 if cleanup_required:
                     cleanup_clone(clone_dir)
 
@@ -1393,6 +1504,7 @@ class ScanJobService:
             log("  No findings - no report generated.", "dim")
         else:
             try:
+                report_started = time.perf_counter()
                 dt_date = datetime.now().strftime("%Y%m%d")
                 dt_time = datetime.now().strftime("%H%M%S")
                 is_multi = len(scanned_slugs) > 1
@@ -1409,12 +1521,16 @@ class ScanJobService:
                 }
                 with session.state_lock:
                     session.report_paths = dict(report_paths)
+                session.add_phase_time("report", time.perf_counter() - report_started)
                 log(f"  OK Report: {Path(csv_path).name}", "ok")
             except EXPECTED_REPORT_ERRORS as exc:
+                session.record_error("REPORT_GEN_FAILED", "report", str(exc))
                 log(f"  [REPORT_GEN] error: {exc}", "err")
 
         with session.state_lock:
             session.scan_duration_s = int(time.time() - t_start)
+            session.cache_metrics = dict(getattr(client, "cache_stats", lambda: {})() if client is not None else {})
+            session.set_phase_time("total", session.scan_duration_s)
             session.completed_at_utc = self._utc_now_iso()
             session.repo_details = {
                 slug: {

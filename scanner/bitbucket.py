@@ -63,6 +63,7 @@ class BitbucketClient:
         self._metadata_cache_ttl = max(0.0, float(metadata_cache_ttl))
         self._metadata_cache: dict[tuple[str, str, str], tuple[float, object]] = {}
         self._metadata_lock = threading.Lock()
+        self._cache_stats = {"hits": 0, "misses": 0}
 
         self.session = requests.Session()
         self.session.verify = self.ca_bundle if self.verify_ssl and self.ca_bundle else self.verify_ssl
@@ -201,16 +202,20 @@ class BitbucketClient:
 
     def _cache_get(self, kind: str, project_key: str, repo_slug: str = ""):
         if self._metadata_cache_ttl <= 0:
+            self._cache_stats["misses"] += 1
             return None
         key = self._cache_key(kind, project_key, repo_slug)
         with self._metadata_lock:
             cached = self._metadata_cache.get(key)
             if not cached:
+                self._cache_stats["misses"] += 1
                 return None
             stored_at, value = cached
             if (time.monotonic() - stored_at) > self._metadata_cache_ttl:
                 self._metadata_cache.pop(key, None)
+                self._cache_stats["misses"] += 1
                 return None
+            self._cache_stats["hits"] += 1
             return value
 
     def _cache_set(self, kind: str, project_key: str, repo_slug: str, value):
@@ -287,6 +292,12 @@ class BitbucketClient:
         }
         self._cache_set("repo_metadata", project_key, repo_slug, metadata)
         return dict(metadata)
+
+    def cache_stats(self) -> dict[str, int]:
+        return {
+            "hits": int(self._cache_stats.get("hits", 0) or 0),
+            "misses": int(self._cache_stats.get("misses", 0) or 0),
+        }
 
     def build_git_auth_env(self) -> dict[str, str]:
         """

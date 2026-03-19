@@ -1856,6 +1856,33 @@ def test_phase_timeline_total_matches_sum_of_displayed_finished_phases():
     assert durations["total"] == phase_total
 
 
+def test_render_history_page_shows_phase_summary_and_error_code():
+    import app_server as srv
+
+    html = srv.render_history_page(
+        history=[{
+            "scan_id": "20260319_120000",
+            "started_at_utc": "2026-03-19T12:00:00Z",
+            "project_key": "LOCAL",
+            "repo_slugs": ["aitool"],
+            "state": "done",
+            "total": 4,
+            "delta": {"new_count": 1, "existing_count": 3, "fixed_count": 0},
+            "critical_prod": 1,
+            "high_prod": 1,
+            "llm_model": "gpt-oss:20b",
+            "duration_s": 55,
+            "phase_metrics": {"init": 4, "clone": 0, "scan": 2, "llm review": 49, "report": 0},
+            "errors": [{"code": "LLM_REVIEW_FAILED", "stage": "llm_review", "message": "timed out"}],
+        }],
+        csrf_token="csrf-demo",
+    ).decode("utf-8")
+
+    assert "I 00:04" in html
+    assert "L 00:49" in html
+    assert "LLM_REVIEW_FAILED" in html
+
+
 def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():
     import app_server as srv
 
@@ -2526,6 +2553,25 @@ def test_scan_session_status_includes_suppressed_details():
     assert status["suppressed_count"] == 1
     assert status["finding_details"][0]["hash"] == "a1"
     assert status["suppressed_details"][0]["reason"] == "Documentation example"
+
+
+def test_scan_session_status_includes_observability_fields():
+    from services.scan_jobs import ScanSession
+
+    session = ScanSession()
+    session.phase_metrics = {"init": 2, "scan": 11, "total": 13}
+    session.repo_metrics = {"repo1": {"clone_s": 1.2, "scan_s": 2.3, "llm_review_s": 0.0}}
+    session.llm_batch_metrics = [{"batch": 1, "total_batches": 2, "duration_s": 4.2, "failed": False}]
+    session.cache_metrics = {"hits": 3, "misses": 1}
+    session.errors = [{"code": "LLM_REVIEW_FAILED", "stage": "llm_review", "message": "timed out"}]
+
+    status = session.to_status()
+
+    assert status["phase_metrics"]["scan"] == 11
+    assert status["repo_metrics"]["repo1"]["clone_s"] == 1.2
+    assert status["llm_batch_metrics"][0]["batch"] == 1
+    assert status["cache_metrics"]["hits"] == 3
+    assert status["errors"][0]["code"] == "LLM_REVIEW_FAILED"
 
 
 def test_get_log_text_reads_from_sqlite_when_file_missing():

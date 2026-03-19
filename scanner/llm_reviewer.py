@@ -942,12 +942,14 @@ class LLMReviewer:
                  base_url: str = DEFAULT_BASE_URL,
                  model: str    = DEFAULT_MODEL,
                  log_fn: Callable[[str], None] = print,
-                 stop_event=None):
+                 stop_event=None,
+                 batch_callback: Optional[Callable[[dict], None]] = None):
         self.base_url           = base_url.rstrip("/")
         self.model              = model
         self.log_fn             = log_fn
         self._model_param_size  = ""   # populated by model_info()
         self._stop_event        = stop_event  # threading.Event or None
+        self._batch_callback    = batch_callback
 
     def is_available(self) -> bool:
         """Return True if Ollama is reachable and the model is present."""
@@ -1048,6 +1050,7 @@ class LLMReviewer:
         for batch_start in range(0, len(eligible), b_size):
             batch     = eligible[batch_start: batch_start + b_size]
             batch_num = batch_start // b_size + 1
+            batch_started = time.perf_counter()
 
             self.log_fn(
                 f"  [LLM] Batch {batch_num}/{total_batches} "
@@ -1072,6 +1075,15 @@ class LLMReviewer:
                 )
                 kept.extend(batch)
                 error_count += len(batch)
+                if self._batch_callback:
+                    self._batch_callback({
+                        "batch": batch_num,
+                        "total_batches": total_batches,
+                        "size": len(batch),
+                        "duration_s": max(time.perf_counter() - batch_started, 0.0),
+                        "failed": True,
+                        "reviewed": 0,
+                    })
                 continue
 
             if len(verdicts) < len(batch):
@@ -1111,6 +1123,16 @@ class LLMReviewer:
                     kept.append(finding)
                 else:
                     kept.append(finding)
+
+            if self._batch_callback:
+                self._batch_callback({
+                    "batch": batch_num,
+                    "total_batches": total_batches,
+                    "size": len(batch),
+                    "duration_s": max(time.perf_counter() - batch_started, 0.0),
+                    "failed": False,
+                    "reviewed": len(verdicts),
+                })
 
         # ── Second pass: challenge each dismissal ──────────────────────
         reinstated_count = 0

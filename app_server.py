@@ -1703,6 +1703,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "llm_model": str(record.get("llm_model", "") or ""),
                 "total": int(record.get("total", record.get("finding_total", 0)) or 0),
                 "suppressed_total": int(record.get("suppressed_total", 0) or 0),
+                "phase_metrics": dict(record.get("phase_metrics") or {}),
+                "repo_metrics": dict(record.get("repo_metrics") or {}),
+                "llm_batch_metrics": list(record.get("llm_batch_metrics") or []),
+                "cache_metrics": dict(record.get("cache_metrics") or {}),
+                "errors": list(record.get("errors") or []),
             }
             status["llm_stats"] = _llm_stats(
                 parsed_entries,
