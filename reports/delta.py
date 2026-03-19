@@ -90,6 +90,7 @@ def build_delta_meta(
     output_dir: str,
     project_key: str,
     repo: str,
+    scanned_files: set[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Full pipeline: find baseline → compute delta → return meta dict
@@ -109,6 +110,17 @@ def build_delta_meta(
         }
 
     baseline_rows = _load_baseline_rows(baseline_path)
+    scoped_files = {
+        str(Path(path)).replace("\\", "/").lstrip("./")
+        for path in (scanned_files or set())
+        if str(path).strip()
+    }
+    if scoped_files:
+        baseline_rows = {
+            finding_id: row
+            for finding_id, row in baseline_rows.items()
+            if str(Path(row.get("file", ""))).replace("\\", "/").lstrip("./") in scoped_files
+        }
     new_findings, fixed_findings, unchanged = compute_delta(
         current_findings, baseline_rows
     )
@@ -125,4 +137,6 @@ def build_delta_meta(
         "new_hashes":      new_hashes,
         "fixed_hashes":    fixed_hashes,
         "fixed_findings":  fixed_findings,
+        "scope_limited":   bool(scoped_files),
+        "scope_file_count": len(scoped_files),
     }

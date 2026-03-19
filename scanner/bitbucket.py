@@ -514,6 +514,91 @@ def shallow_clone(clone_url: str, dest: Path, depth: int = 1,
             f"Git clone failed (rc={proc.returncode}): {stderr_text.strip()}")
 
 
+def _git_env(*, git_env: dict | None = None, verify_ssl: bool = True, ca_bundle: str | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_LFS_SKIP_SMUDGE"] = "1"
+    if not verify_ssl:
+        env["GIT_SSL_NO_VERIFY"] = "1"
+    elif ca_bundle:
+        env["GIT_SSL_CAINFO"] = str(ca_bundle)
+    if git_env:
+        env.update(git_env)
+    return env
+
+
+def _run_git(
+    repo_dir: Path,
+    args: list[str],
+    *,
+    git_env: dict | None = None,
+    verify_ssl: bool = True,
+    ca_bundle: str | None = None,
+) -> str:
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=str(repo_dir),
+        text=True,
+        capture_output=True,
+        env=_git_env(git_env=git_env, verify_ssl=verify_ssl, ca_bundle=ca_bundle),
+        check=False,
+    )
+    if proc.returncode != 0:
+        stderr_text = (proc.stderr or "").strip()
+        stdout_text = (proc.stdout or "").strip()
+        detail = stderr_text or stdout_text or "git command failed"
+        raise RuntimeError(f"git {' '.join(args)} failed: {detail}")
+    return proc.stdout or ""
+
+
+def git_changed_files_since_previous_commit(
+    repo_dir: Path,
+    *,
+    git_env: dict | None = None,
+    verify_ssl: bool = True,
+    ca_bundle: str | None = None,
+) -> list[str]:
+    try:
+        output = _run_git(
+            repo_dir,
+            ["diff", "--name-only", "HEAD~1", "HEAD"],
+            git_env=git_env,
+            verify_ssl=verify_ssl,
+            ca_bundle=ca_bundle,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError("previous-commit diff is unavailable") from exc
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def git_changed_files_against_ref(
+    repo_dir: Path,
+    ref: str,
+    *,
+    git_env: dict | None = None,
+    verify_ssl: bool = True,
+    ca_bundle: str | None = None,
+) -> list[str]:
+    ref = str(ref or "").strip()
+    if not ref:
+        raise RuntimeError("diff reference is required")
+    _run_git(
+        repo_dir,
+        ["fetch", "--depth", "1", "origin", ref],
+        git_env=git_env,
+        verify_ssl=verify_ssl,
+        ca_bundle=ca_bundle,
+    )
+    output = _run_git(
+        repo_dir,
+        ["diff", "--name-only", "FETCH_HEAD", "HEAD"],
+        git_env=git_env,
+        verify_ssl=verify_ssl,
+        ca_bundle=ca_bundle,
+    )
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
 def cleanup_clone(path: Path) -> None:
     """
     Remove a cloned directory, handling read-only files on Windows

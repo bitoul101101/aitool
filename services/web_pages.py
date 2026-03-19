@@ -156,6 +156,8 @@ def render_scan_page(
     status: dict,
     log_text: str,
     phase_timeline: list[tuple[str, str]],
+    selected_scan_scope: str = "full",
+    selected_compare_ref: str = "",
     force_selection: bool = False,
     scan_id: str = "",
     workspace_tab: str = "activity",
@@ -320,6 +322,8 @@ def render_scan_page(
     scan_complete = state in {"done", "stopped", "error"}
     start_blocked = running and force_selection
     selected = set(selected_repos)
+    scope_value = str(selected_scan_scope or "full").strip().lower() or "full"
+    compare_ref_value = str(selected_compare_ref or "").strip()
     repo_count = len(repos)
     repo_cols = "cols-2" if repo_count <= 18 else "cols-3"
     project_links = "".join(
@@ -334,6 +338,15 @@ def render_scan_page(
     model_options = "".join(
         f'<option value="{_esc(model)}"{" selected" if model == llm_cfg.get("model", "") else ""}>{_esc(model)}</option>'
         for model in models
+    )
+    scope_options = "".join(
+        f'<option value="{_esc(value)}"{" selected" if value == scope_value else ""}>{_esc(label)}</option>'
+        for value, label in [
+            ("full", "Full Scan"),
+            ("changed_files", "Changed Files Only"),
+            ("branch_diff", "Branch Diff"),
+            ("baseline_rescan", "Baseline-Aware Rescan"),
+        ]
     )
     all_findings = status.get("finding_details", [])
     current_findings = [f for f in all_findings if f.get("triage_status") not in {"reviewed", "accepted_risk"}][:20]
@@ -473,6 +486,11 @@ def render_scan_page(
         <div><label>LLM Model</label><select name="llm_model" id="llm-model-select">{model_options}</select></div>
         <div class="inline" style="justify-content:flex-start;align-items:end"><button type="submit" id="start-scan-btn"{" disabled" if start_blocked or not selected else ""}>Start Scan</button></div>
       </div>
+      <div class="repo-toolbar">
+        <div><label>Scan Scope</label><select name="scan_scope" id="scan-scope-select">{scope_options}</select></div>
+        <div id="compare-ref-wrap"{" class=\"hidden\"" if scope_value != "branch_diff" else ""}><label>Compare Branch</label><input type="text" name="compare_ref" id="compare-ref-input" value="{_esc(compare_ref_value)}" placeholder="e.g. master"></div>
+        <div class="muted" id="scan-scope-help" style="align-self:end">Changed-file and baseline-aware scans reduce traversal and LLM work on repeated runs.</div>
+      </div>
       <div class="repo-notices">
         <div class="warn-box{" hidden" if not running_notice else ""}" id="running-scan-notice">{_esc(running_notice)}</div>
         <div class="warn-box{" hidden" if not model_warning else ""}" id="model-size-warning">{_esc(model_warning)}</div>
@@ -607,36 +625,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
     </div>
   </form>
 </section>
-<script>
-const hBody=document.querySelector('#history-table tbody');
-const search=document.getElementById('history-search');
-const fp=document.getElementById('filter-project');
-const fr=document.getElementById('filter-repo');
-const fs=document.getElementById('filter-status');
-const fm=document.getElementById('filter-model');
-const delBtn=document.getElementById('delete-selected-btn');
-const prevBtn=document.getElementById('history-prev-btn');
-const nextBtn=document.getElementById('history-next-btn');
-const pageInfo=document.getElementById('history-page-info');
-const PAGE_SIZE=20;
-let currentPage=1;
-function rows(){{return Array.from(hBody.querySelectorAll('tr')).filter(r=>r.querySelectorAll('td').length>1);}}
-function updateDelete(){{delBtn.classList.toggle('hidden',!rows().some(r=>r.querySelector('.history-check')?.checked));}}
-function filteredRows(){{const q=(search.value||'').toLowerCase().trim();return rows().filter(row=>{{const text=row.textContent.toLowerCase();const ok=!q||text.includes(q);const okP=!fp.value||row.dataset.project===fp.value;const okR=!fr.value||row.dataset.repo===fr.value;const okS=!fs.value||row.dataset.status===fs.value;const okM=!fm.value||row.dataset.model===fm.value;return ok&&okP&&okR&&okS&&okM;}});}}
-function renderPage(){{const visible=filteredRows();const totalPages=Math.max(1, Math.ceil(visible.length / PAGE_SIZE));currentPage=Math.min(currentPage,totalPages);const start=(currentPage-1)*PAGE_SIZE;const end=start+PAGE_SIZE;rows().forEach(row=>row.style.display='none');visible.slice(start,end).forEach(row=>row.style.display='');if(pageInfo) pageInfo.textContent=`Page ${{totalPages ? currentPage : 1}} of ${{totalPages}}`;if(prevBtn) prevBtn.disabled=currentPage<=1; if(nextBtn) nextBtn.disabled=currentPage>=totalPages; updateDelete();}}
-function applyFilters(){{currentPage=1;renderPage();}}
-let sortState={{index:null,dir:-1,kind:'datetime'}};
-function cellValue(row,index,kind){{if(kind==='datetime') return Number(row.dataset.ts)||0; const text=(row.children[index]?.innerText||'').trim(); if(kind==='number') return Number(text.replace(':','.'))||0; return text.toLowerCase();}}
-function sortHistory(index,kind){{const rs=rows(); if(sortState.index===index) sortState.dir*=-1; else sortState={{index,dir:kind==='datetime'?-1:1,kind}}; rs.sort((a,b)=>{{const av=cellValue(a,sortState.index,sortState.kind); const bv=cellValue(b,sortState.index,sortState.kind); if(av<bv) return -1*sortState.dir; if(av>bv) return 1*sortState.dir; return 0;}}); rs.forEach(r=>hBody.appendChild(r)); currentPage=1; renderPage();}}
-document.querySelectorAll('#history-table thead th[data-sort]').forEach((th,index)=>th.addEventListener('click',()=>sortHistory(index+1,th.dataset.sort)));
-[search,fp,fr,fs,fm].forEach(el=>el?.addEventListener('input',applyFilters));
-[fp,fr,fs,fm].forEach(el=>el?.addEventListener('change',applyFilters));
-document.getElementById('reset-history-filters')?.addEventListener('click',()=>{{search.value='';fp.value='';fr.value='';fs.value='';fm.value='';applyFilters();}});
-rows().forEach(r=>r.querySelector('.history-check')?.addEventListener('change',updateDelete));
-prevBtn?.addEventListener('click',()=>{{if(currentPage>1){{currentPage-=1;renderPage();}}}});
-nextBtn?.addEventListener('click',()=>{{const totalPages=Math.max(1, Math.ceil(filteredRows().length / PAGE_SIZE)); if(currentPage<totalPages){{currentPage+=1;renderPage();}}}});
-sortHistory(1,'datetime');
-</script>"""
+<script src="/assets/history_page.js" defer></script>"""
     return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 

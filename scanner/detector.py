@@ -595,7 +595,8 @@ class AIUsageDetector:
     def scan(self, root: Path, repo_name: str = "",
              stop_event=None,
              return_file_contents: bool = False,
-             on_file=None):
+             on_file=None,
+             include_paths: List[str] | None = None):
         """
         Scan root and return findings.
 
@@ -617,6 +618,17 @@ class AIUsageDetector:
         file_contents: Dict[str, str]        = {}
 
         all_files = list(self._iter_files(root))
+        include_set = None
+        if include_paths:
+            include_set = {
+                str(Path(path)).replace("\\", "/").lstrip("./")
+                for path in include_paths
+                if str(path).strip()
+            }
+            all_files = [
+                fpath for fpath in all_files
+                if str(fpath.relative_to(root)).replace("\\", "/") in include_set
+            ]
         total_files = len(all_files)
 
         for file_index, fpath in enumerate(all_files):

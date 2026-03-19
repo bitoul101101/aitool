@@ -71,6 +71,8 @@ class ScanSession:
         self.scan_id: str = ""
         self.project_key: str = ""
         self.repo_slugs: List[str] = []
+        self.scan_scope: str = "full"
+        self.compare_ref: str = ""
         self.llm_url: str = "http://localhost:11434"
         self.llm_model: str = "qwen2.5-coder:7b-instruct"
         self.operator: str = "User"
@@ -103,6 +105,7 @@ class ScanSession:
         self.llm_model_info: dict = {}
         self.delta: dict = {}
         self.inventory: dict = {}
+        self.scoped_files_by_repo: Dict[str, List[str]] = {}
 
     @staticmethod
     def _finding_detail(finding: dict) -> dict:
@@ -164,6 +167,8 @@ class ScanSession:
                 "state": self.state,
                 "scan_id": self.scan_id,
                 "project_key": self.project_key,
+                "scan_scope": self.scan_scope,
+                "compare_ref": self.compare_ref,
                 "operator": self.operator,
                 "started_at_utc": self.started_at_utc,
                 "completed_at_utc": self.completed_at_utc,
@@ -188,6 +193,7 @@ class ScanSession:
                 },
                 "delta": delta,
                 "inventory": inventory,
+                "scoped_files_by_repo": dict(self.scoped_files_by_repo),
                 "per_repo": {
                     slug: {
                         "skipped": data is None,
@@ -353,6 +359,8 @@ class ScanJobService:
             "time": session.scan_id[9:] if len(session.scan_id) > 8 else "",
             "project_key": session.project_key,
             "repos": session.repo_slugs,
+            "scan_scope": session.scan_scope,
+            "compare_ref": session.compare_ref,
             "operator": session.operator,
             "state": session.state,
             "duration_s": session.scan_duration_s,
@@ -376,6 +384,7 @@ class ScanJobService:
             "critical_prod": critical_prod,
             "high_prod": high_prod,
             "repo_details": session.repo_details,
+            "scoped_files_by_repo": dict(session.scoped_files_by_repo),
             "log_file": log_file,
             "reports": session.report_paths,
         }
@@ -386,6 +395,7 @@ class ScanJobService:
         *,
         project_key: str,
         repo_slugs: list[str],
+        scoped_files_by_repo: dict[str, list[str]] | None = None,
     ) -> dict:
         def _serialise_delta(delta: dict) -> dict:
             return {
@@ -410,7 +420,13 @@ class ScanJobService:
 
         if len(repo_slugs) == 1:
             return _serialise_delta(
-                build_delta_meta(findings, self.paths.output_dir, project_key, repo_slugs[0])
+                build_delta_meta(
+                    findings,
+                    self.paths.output_dir,
+                    project_key,
+                    repo_slugs[0],
+                    scanned_files=set((scoped_files_by_repo or {}).get(repo_slugs[0], []) or []),
+                )
             )
 
         new_hashes = set()
@@ -424,7 +440,13 @@ class ScanJobService:
 
         for slug in repo_slugs:
             repo_findings = [f for f in findings if f.get("repo") == slug]
-            repo_delta = build_delta_meta(repo_findings, self.paths.output_dir, project_key, slug)
+            repo_delta = build_delta_meta(
+                repo_findings,
+                self.paths.output_dir,
+                project_key,
+                slug,
+                scanned_files=set((scoped_files_by_repo or {}).get(slug, []) or []),
+            )
             if repo_delta.get("has_baseline"):
                 has_baseline = True
             new_count += repo_delta.get("new_count", 0)
@@ -524,6 +546,17 @@ class ScanJobService:
         if not isinstance(repo_slugs, list):
             return False
         return any(str(slug).strip() for slug in repo_slugs)
+
+    def _latest_repo_record(self, project_key: str, repo_slug: str, *, exclude_scan_id: str = "") -> dict | None:
+        for record in reversed(self.load_history()):
+            if str(record.get("scan_id", "")) == str(exclude_scan_id or ""):
+                continue
+            if str(record.get("project_key", "") or "") != str(project_key or ""):
+                continue
+            repo_slugs = list(record.get("repo_slugs", record.get("repos", [])) or [])
+            if repo_slug in repo_slugs:
+                return record
+        return None
 
     def _read_legacy_history(self) -> list:
         try:
@@ -729,6 +762,7 @@ class ScanJobService:
             session.suppressed_findings = []
             session.delta = {}
             session.inventory = {}
+            session.scoped_files_by_repo = {}
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
@@ -747,6 +781,13 @@ class ScanJobService:
         log(f"Scan ID  : {session.scan_id}", "hd")
         log(f"Project  : {session.project_key}", "dim")
         log(f"Repos    : {session.total}", "dim")
+        scope_labels = {
+            "full": "full scan",
+            "changed_files": "changed-files scan",
+            "branch_diff": f"branch-diff scan vs {session.compare_ref}",
+            "baseline_rescan": "baseline-aware rescan",
+        }
+        log(f"Scope    : {scope_labels.get(session.scan_scope, 'full scan')}", "dim")
 
         with session.state_lock:
             session.llm_model_info = {}
@@ -810,7 +851,78 @@ class ScanJobService:
 
         log(f"Starting parallel scan (workers={workers})...", "info")
 
-        from scanner.bitbucket import cleanup_clone, shallow_clone
+        from scanner.bitbucket import (
+            cleanup_clone,
+            git_changed_files_against_ref,
+            git_changed_files_since_previous_commit,
+            shallow_clone,
+        )
+
+        def _resolve_scoped_files(slug: str, clone_dir: Path) -> list[str] | None:
+            scope = str(session.scan_scope or "full").strip().lower()
+            compare_ref = str(session.compare_ref or "").strip()
+            verify_ssl = bool(getattr(client, "verify_ssl", True))
+            ca_bundle = str(getattr(client, "ca_bundle", "") or "")
+            if scope == "full":
+                return None
+            if scope == "changed_files":
+                try:
+                    changed = git_changed_files_since_previous_commit(
+                        clone_dir,
+                        git_env=git_env,
+                        verify_ssl=verify_ssl,
+                        ca_bundle=ca_bundle,
+                    )
+                    log(f"  [{slug}] Scope: {len(changed)} file(s) changed since previous commit", "dim")
+                    return changed
+                except RuntimeError as exc:
+                    log(f"  [{slug}] Scope fallback to full scan [changed-files]: {exc}", "warn")
+                    return None
+            if scope == "branch_diff":
+                if not compare_ref:
+                    log(f"  [{slug}] Scope fallback to full scan [branch-diff]: compare branch missing", "warn")
+                    return None
+                try:
+                    changed = git_changed_files_against_ref(
+                        clone_dir,
+                        compare_ref,
+                        git_env=git_env,
+                        verify_ssl=verify_ssl,
+                        ca_bundle=ca_bundle,
+                    )
+                    log(f"  [{slug}] Scope: {len(changed)} file(s) changed vs {compare_ref}", "dim")
+                    return changed
+                except RuntimeError as exc:
+                    log(f"  [{slug}] Scope fallback to full scan [branch-diff]: {exc}", "warn")
+                    return None
+            if scope == "baseline_rescan":
+                baseline_record = self._latest_repo_record(
+                    session.project_key,
+                    slug,
+                    exclude_scan_id=session.scan_id,
+                )
+                baseline_commit = str(
+                    ((baseline_record or {}).get("repo_details") or {}).get(slug, {}).get("commit", "")
+                    or ""
+                ).strip()
+                if not baseline_commit:
+                    log(f"  [{slug}] Scope fallback to full scan [baseline]: no previous commit baseline", "warn")
+                    return None
+                try:
+                    changed = git_changed_files_against_ref(
+                        clone_dir,
+                        baseline_commit,
+                        git_env=git_env,
+                        verify_ssl=verify_ssl,
+                        ca_bundle=ca_bundle,
+                    )
+                    log(f"  [{slug}] Scope: {len(changed)} file(s) changed since baseline commit {baseline_commit[:12]}", "dim")
+                    return changed
+                except RuntimeError as exc:
+                    log(f"  [{slug}] Scope fallback to full scan [baseline]: {exc}", "warn")
+                    return None
+            log(f"  [{slug}] Scope fallback to full scan [unknown scope: {scope}]", "warn")
+            return None
 
         def _scan_one(slug: str) -> tuple:
             if stop.is_set():
@@ -824,6 +936,7 @@ class ScanJobService:
                 shallow_clone(
                     clone_url,
                     clone_dir,
+                    depth=2 if str(session.scan_scope or "full").lower() == "changed_files" else 1,
                     branch=branch,
                     verbose=False,
                     stop_event=stop,
@@ -845,6 +958,13 @@ class ScanJobService:
 
             try:
                 last_pct = [-1]
+                scoped_files = _resolve_scoped_files(slug, clone_dir)
+                with session.state_lock:
+                    session.scoped_files_by_repo[slug] = list(scoped_files or [])
+
+                if scoped_files == []:
+                    log(f"  [{slug}] No files matched the selected scan scope", "dim")
+                    return slug, [], owner, 0, None
 
                 def _on_file(rel, idx, total):
                     with session.state_lock:
@@ -862,13 +982,15 @@ class ScanJobService:
                     stop_event=stop,
                     return_file_contents=True,
                     on_file=_on_file,
+                    include_paths=scoped_files,
                 )
-                try:
-                    history_findings = scan_history(clone_dir, detector, slug, stop_event=stop)
-                    if history_findings:
-                        raw.extend(history_findings)
-                except Exception as hist_err:
-                    log(f"  [history] {slug}: {hist_err}", "dim")
+                if not scoped_files:
+                    try:
+                        history_findings = scan_history(clone_dir, detector, slug, stop_event=stop)
+                        if history_findings:
+                            raw.extend(history_findings)
+                    except Exception as hist_err:
+                        log(f"  [history] {slug}: {hist_err}", "dim")
 
                 analyzed = analyzer.analyze(raw)
                 pre_llm_count = len(analyzed)
@@ -980,6 +1102,7 @@ class ScanJobService:
             final,
             project_key=session.project_key,
             repo_slugs=scanned_slugs,
+            scoped_files_by_repo=dict(session.scoped_files_by_repo),
         )
         inventory_meta = build_inventory(final, repo_slugs=scanned_slugs)
         with session.state_lock:

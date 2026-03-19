@@ -555,6 +555,38 @@ def test_delta_with_baseline():
     assert meta["fixed_findings"][0]["file"] == "app.py"
 
 
+def test_delta_with_baseline_scoped_to_changed_files():
+    from reports.delta import build_delta_meta
+    import csv
+
+    findings_scan2 = [
+        {"_hash": "bbb", "finding_id": "bbb", "provider_or_lib": "anthropic", "file": "app.py"},
+    ]
+
+    d = Path(tempfile.mkdtemp())
+    baseline = d / "AI_Scan_Report_PROJ_my-repo_20250101_120000.csv"
+    with open(baseline, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["finding_id", "repo", "file", "line"])
+        writer.writeheader()
+        writer.writerow({"finding_id": "bbb", "repo": "my-repo", "file": "app.py", "line": "8"})
+        writer.writerow({"finding_id": "aaa", "repo": "my-repo", "file": "old.py", "line": "12"})
+
+    meta = build_delta_meta(
+        findings_scan2,
+        str(d),
+        "PROJ",
+        "my-repo",
+        scanned_files={"app.py"},
+    )
+
+    assert meta["has_baseline"] is True
+    assert meta["scope_limited"] is True
+    assert meta["scope_file_count"] == 1
+    assert meta["new_count"] == 0
+    assert meta["existing_count"] == 1
+    assert meta["fixed_count"] == 0
+
+
 def test_csv_reporter_writes_stable_finding_id_for_baselines():
     import csv
     from reports.csv_report import CSVReporter
@@ -583,6 +615,50 @@ def test_csv_reporter_writes_stable_finding_id_for_baselines():
 
     assert rows[0]["finding_id"] == "hash-123"
     assert rows[0]["delta_status"] == "new"
+
+
+def test_detector_scan_include_paths_limits_files():
+    root = Path(tempfile.mkdtemp())
+    (root / "keep.py").write_text("import openai\nclient = openai.OpenAI()\n", encoding="utf-8")
+    (root / "skip.py").write_text("import openai\nclient = openai.OpenAI()\n", encoding="utf-8")
+
+    detector = AIUsageDetector()
+    findings, _ = detector.scan(root, repo_name="repo1", return_file_contents=True, include_paths=["keep.py"])
+
+    files = {finding.get("file") for finding in findings}
+    assert "keep.py" in files
+    assert "skip.py" not in files
+
+
+def test_start_scan_requires_compare_ref_for_branch_diff():
+    from services.api_actions import start_scan
+    from services.scan_jobs import ScanSession
+
+    class DummyOperatorState:
+        client = object()
+
+        class Ctx:
+            username = "tester"
+
+        ctx = Ctx()
+
+    try:
+        start_scan(
+            body={
+                "project_key": "PROJ",
+                "repo_slugs": ["repo1"],
+                "scan_scope": "branch_diff",
+            },
+            session_factory=ScanSession,
+            current_session=ScanSession(),
+            operator_state=DummyOperatorState(),
+            save_llm_config=lambda cfg: None,
+            audit_event=lambda *args, **kwargs: None,
+        )
+    except ValueError as exc:
+        assert "compare_ref required" in str(exc)
+    else:
+        raise AssertionError("branch_diff scans should require compare_ref")
 
 
 def test_build_inventory_aggregates_ai_usage_profiles():
@@ -1108,6 +1184,31 @@ def test_scan_page_asset_redirects_only_after_running_to_done_transition():
     assert "function renderLlmStats(data)" not in script
 
 
+def test_scan_page_renders_incremental_scope_controls():
+    import app_server as srv
+
+    html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}, {"slug": "repo2"}],
+        selected_repos=["repo1"],
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["qwen2.5-coder:7b-instruct"],
+        status={"state": "idle", "delta": {}, "inventory": {}, "report": {}},
+        log_text="",
+        phase_timeline=[],
+        force_selection=True,
+        selected_scan_scope="branch_diff",
+        selected_compare_ref="master",
+    ).decode("utf-8")
+
+    assert 'id="scan-scope-select"' in html
+    assert 'value="branch_diff" selected' in html
+    assert 'id="compare-ref-input"' in html
+    assert 'value="master"' in html
+    assert "Baseline-Aware Rescan" in html
+
+
 def test_llm_stats_are_derived_from_log_entries():
     import app_server as srv
 
@@ -1558,6 +1659,8 @@ def test_history_page_is_server_rendered():
     assert 'id="history-prev-btn"' in html
     assert 'id="history-next-btn"' in html
     assert 'href="/assets/main.css"' in html
+    assert 'src="/assets/history_page.js"' in html
+    assert "function sortHistory" not in html
     assert "Page 1 of 1" in html
     assert "New" in html
     assert "Existing" in html
@@ -1702,6 +1805,29 @@ def test_asset_route_serves_layout_js():
     assert handler.payload[0] == 200
     assert handler.payload[1] == "application/javascript; charset=utf-8"
     assert b"history.replaceState" in handler.payload[2]
+
+
+def test_asset_route_serves_history_page_js():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/assets/history_page.js"
+
+        def __init__(self):
+            self.payload = None
+
+        def _send(self, status, content_type, body):
+            self.payload = (status, content_type, body)
+
+        def _404(self):
+            self.payload = ("404", None, None)
+
+    handler = DummyHandler()
+    srv._Handler.do_GET(handler)
+
+    assert handler.payload[0] == 200
+    assert handler.payload[1] == "application/javascript; charset=utf-8"
+    assert b"sortHistory" in handler.payload[2]
 
 
 def test_scan_workspace_results_page_handles_missing_report():

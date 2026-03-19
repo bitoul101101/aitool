@@ -79,6 +79,14 @@ def start_scan(
     repo_slugs = body.get("repo_slugs", [])
     llm_url = body.get("llm_url", "http://localhost:11434").strip()
     llm_model = body.get("llm_model", "qwen2.5-coder:7b-instruct").strip()
+    scan_scope = str(body.get("scan_scope", "full") or "full").strip().lower()
+    compare_ref = str(body.get("compare_ref", "") or "").strip()
+
+    valid_scopes = {"full", "changed_files", "branch_diff", "baseline_rescan"}
+    if scan_scope not in valid_scopes:
+        raise ValueError("invalid scan_scope")
+    if scan_scope == "branch_diff" and not compare_ref:
+        raise ValueError("compare_ref required for branch diff scans")
 
     if not project_key or not repo_slugs:
         raise ValueError("project_key and repo_slugs required")
@@ -94,6 +102,8 @@ def start_scan(
     session.project_key = project_key
     session.repo_slugs = repo_slugs
     session.total = len(repo_slugs)
+    session.scan_scope = scan_scope
+    session.compare_ref = compare_ref
     session.llm_url = llm_url
     session.llm_model = llm_model
     session.operator = operator_state.ctx.username

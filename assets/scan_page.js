@@ -6,6 +6,9 @@
   const runningNotice = document.getElementById("running-scan-notice");
   const modelSelect = document.getElementById("llm-model-select");
   const modelWarning = document.getElementById("model-size-warning");
+  const scanScopeSelect = document.getElementById("scan-scope-select");
+  const compareRefWrap = document.getElementById("compare-ref-wrap");
+  const compareRefInput = document.getElementById("compare-ref-input");
   const logEl = document.getElementById("scan-log");
   const textEl = document.getElementById("scan-state-text");
   const timelineEl = document.getElementById("phase-timeline");
@@ -88,6 +91,20 @@
     const under4b = size > 0 && size < 4;
     modelWarning.textContent = "Selected model is below 4B and may be unreliable for LLM review.";
     modelWarning.classList.toggle("hidden", !under4b);
+  }
+
+  function updateScopeFields() {
+    if (!scanScopeSelect || !compareRefWrap) {
+      return;
+    }
+    const needsCompareRef = scanScopeSelect.value === "branch_diff";
+    compareRefWrap.classList.toggle("hidden", !needsCompareRef);
+    if (compareRefInput) {
+      compareRefInput.required = needsCompareRef;
+      if (!needsCompareRef) {
+        compareRefInput.value = "";
+      }
+    }
   }
 
   function setModelOptions(models) {
@@ -345,6 +362,7 @@
   });
   repoSearch?.addEventListener("input", filterRepos);
   modelSelect?.addEventListener("change", updateModelWarning);
+  scanScopeSelect?.addEventListener("change", updateScopeFields);
   newScanForm?.addEventListener("submit", function () {
     submitInFlight = true;
     if (startScanBtn) {
@@ -356,6 +374,7 @@
 
   filterRepos();
   updateModelWarning();
+  updateScopeFields();
   refreshModels();
   startLogStream();
   pollStatus();
