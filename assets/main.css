@@ -71,7 +71,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .wiki-section{scroll-margin-top:82px}
 .wiki-section + .wiki-section{margin-top:18px}
 .wiki-callout{margin-top:10px;padding:10px 12px;border-radius:10px;background:#f7efe5;border:1px solid #e6cfb4;color:#5c3a18}
-.wiki-toc{position:sticky;top:78px;align-self:start}
+.wiki-toc{grid-column:2;position:sticky;top:78px;align-self:start;justify-self:stretch}
 .wiki-toc-links{display:grid;gap:6px}
 .wiki-toc-links a{display:block;padding:6px 8px;border-radius:8px;text-decoration:none;color:#5d3612;background:#f9f1e8}
 .wiki-toc-links a:hover{background:#efdfcd}

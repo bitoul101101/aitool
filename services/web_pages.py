@@ -1390,7 +1390,7 @@ python C:\\aitool\\scan_cli.py --project COGI --repo repo1 --repo repo2 --scope 
         <li>LLM review quality and speed depend heavily on the selected local model and available hardware.</li>
         <li>This is still a single-operator desktop-oriented architecture, not a hardened multi-user service.</li>
         <li>Static scanning identifies likely issues and suspicious patterns but does not prove exploitability by itself.</li>
-        <li>HTML reports reflect the state at generation time; later triage changes do not rewrite previously generated report files.</li>
+        <li>Generated HTML reports are cached snapshots of the finding state at generation time; later triage changes do not automatically rewrite an already generated report file.</li>
         <li>JSON and SARIF exports are first-step integration outputs, not yet full issue-tracker or webhook pipelines.</li>
       </ul>
     </section>
