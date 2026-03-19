@@ -3476,6 +3476,78 @@ def test_page_app_exit_returns_shutdown_fallback_page():
         srv._require_role = orig_require_role
 
 
+def test_json_reporter_writes_meta_and_findings(tmp_path):
+    from reports.json_report import JSONReporter
+
+    path = JSONReporter(str(tmp_path), "scan-demo").write_json(
+        [{"_hash": "hash-1", "repo": "repo1", "description": "demo"}],
+        meta={"scan_id": "scan-demo", "tool_version": "19.1"},
+    )
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+
+    assert payload["scan_id"] == "scan-demo"
+    assert payload["finding_count"] == 1
+    assert payload["meta"]["tool_version"] == "19.1"
+    assert payload["findings"][0]["_hash"] == "hash-1"
+
+
+def test_sarif_reporter_writes_valid_run_structure(tmp_path):
+    from reports.sarif_report import SARIFReporter
+
+    path = SARIFReporter(str(tmp_path), "scan-demo").write_sarif(
+        [{
+            "_hash": "hash-1",
+            "repo": "repo1",
+            "project_key": "LOCAL",
+            "file": "app.py",
+            "line": 7,
+            "severity": 1,
+            "severity_label": "Critical",
+            "provider_or_lib": "openai_key",
+            "description": "Hardcoded key",
+            "delta_status": "new",
+        }],
+        meta={"scan_id": "scan-demo", "tool_version": "19.1"},
+    )
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+
+    assert payload["version"] == "2.1.0"
+    run = payload["runs"][0]
+    assert run["tool"]["driver"]["name"] == "AI Security & Compliance Scanner"
+    assert run["results"][0]["ruleId"] == "openai_key"
+    assert run["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "app.py"
+
+
+def test_scan_cli_reports_json_and_sarif_paths(tmp_path, capsys, monkeypatch):
+    import scan_cli
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    def fake_run_scan(self, session, client=None, save_history_record=None):
+        session.state = "done"
+        session.findings = [{"_hash": "hash-1"}]
+        session.report_paths = {
+            "__all__": {
+                "csv": str(tmp_path / "scan.csv"),
+                "json": str(tmp_path / "scan.json"),
+                "sarif": str(tmp_path / "scan.sarif"),
+            }
+        }
+        session.log("CLI run complete")
+
+    monkeypatch.setattr(scan_cli.ScanJobService, "run_scan", fake_run_scan)
+    monkeypatch.setattr(sys, "argv", ["scan_cli.py", str(repo_dir), "--output-dir", str(tmp_path)])
+
+    rc = scan_cli.main()
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "JSON report" in out
+    assert "SARIF report" in out
+    assert (tmp_path / "logs").exists()
+
+
 def test_sse_write_returns_false_on_client_disconnect():
     import app_server as srv
 
@@ -3536,7 +3608,11 @@ def test_run_scan_with_no_repos_completes_cleanly():
     assert session.state == "done"
     assert session.findings == []
     assert session.repo_details == {}
-    assert any(msg["msg"] == "  No findings - no report generated." for msg in session.log_lines)
+    assert any(msg["msg"] == "  No findings - HTML report skipped." for msg in session.log_lines)
+    report = dict((session.report_paths or {}).get("__all__", {}) or {})
+    assert report.get("csv_name", "").endswith(".csv")
+    assert report.get("json_name", "").endswith(".json")
+    assert report.get("sarif_name", "").endswith(".sarif")
     assert all(ord(ch) < 128 for entry in session.log_lines for ch in entry["msg"])
 
 

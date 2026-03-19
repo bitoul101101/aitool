@@ -23,6 +23,8 @@ from analyzer.security import SecurityAnalyzer
 from reports.csv_report import CSVReporter
 from reports.delta import build_delta_meta
 from reports.html_report import HTMLReporter
+from reports.json_report import JSONReporter
+from reports.sarif_report import SARIFReporter
 from scanner.detector import AIUsageDetector
 from scanner.suppressions import (
     TRIAGE_ACCEPTED_RISK,
@@ -769,6 +771,34 @@ class ScanJobService:
             "accepted_risk_count": int(record.get("accepted_risk_count", 0) or 0),
         }
 
+    def _report_meta_from_session(self, session: ScanSession, findings: list[dict]) -> dict:
+        repo_slugs = [str(slug).strip() for slug in list(session.repo_slugs or []) if str(slug).strip()]
+        record = {
+            "scan_id": session.scan_id,
+            "project_key": session.project_key,
+            "repo_slugs": repo_slugs,
+            "repos": repo_slugs,
+            "repo_details": dict(session.repo_details or {}),
+            "operator": session.operator,
+            "started_at_utc": session.started_at_utc,
+            "completed_at_utc": session.completed_at_utc,
+            "policy_version": session.policy_version,
+            "tool_version": session.tool_version,
+            "delta": dict(session.delta or {}),
+            "inventory": dict(session.inventory or {}),
+            "llm_model_info": dict(session.llm_model_info or {}),
+            "duration_s": session.scan_duration_s,
+            "pre_llm_count": session.pre_llm_count,
+            "post_llm_count": session.post_llm_count or len(findings),
+            "suppressed_total": len(session.suppressed_findings),
+            "reviewed_count": sum(1 for f in findings if str(f.get("triage_status", "") or "") == TRIAGE_REVIEWED),
+            "accepted_risk_count": sum(1 for f in findings if str(f.get("triage_status", "") or "") == TRIAGE_ACCEPTED_RISK),
+            "report_detail_timeout_s": int((session.llm_model_info or {}).get("report_detail_timeout_s", 180) or 180),
+            "total": len(findings),
+            "llm_model": (session.llm_model_info or {}).get("name", session.llm_model),
+        }
+        return self._report_meta_from_record(record)
+
     def generate_html_report(
         self,
         scan_id: str,
@@ -1500,32 +1530,43 @@ class ScanJobService:
             elif not [f for f in final if f.get("repo") == slug]:
                 log(f"  {slug}: clean - no findings", "ok")
 
-        if not final:
-            log("  No findings - no report generated.", "dim")
-        else:
-            try:
-                report_started = time.perf_counter()
-                dt_date = datetime.now().strftime("%Y%m%d")
-                dt_time = datetime.now().strftime("%H%M%S")
-                is_multi = len(scanned_slugs) > 1
-                label = "ALL" if is_multi else (scanned_slugs[0] if scanned_slugs else session.repo_slugs[0])
-                safe_name = f"AI_Scan_Report_{session.project_key}_{label}_{dt_date}_{dt_time}"
+        try:
+            report_started = time.perf_counter()
+            dt_date = datetime.now().strftime("%Y%m%d")
+            dt_time = datetime.now().strftime("%H%M%S")
+            is_multi = len(scanned_slugs) > 1
+            label = "ALL" if is_multi else (scanned_slugs[0] if scanned_slugs else (session.repo_slugs[0] if session.repo_slugs else "results"))
+            safe_name = f"AI_Scan_Report_{session.project_key}_{label}_{dt_date}_{dt_time}"
+            report_meta = self._report_meta_from_session(session, final)
 
-                log("  Writing CSV report...", "dim")
-                csv_reporter = CSVReporter(output_dir=self.paths.output_dir, scan_id=safe_name)
-                csv_path = csv_reporter.write_csv(final)
+            log("  Writing CSV report...", "dim")
+            csv_reporter = CSVReporter(output_dir=self.paths.output_dir, scan_id=safe_name)
+            csv_path = csv_reporter.write_csv(final)
+            log("  Writing JSON report...", "dim")
+            json_reporter = JSONReporter(output_dir=self.paths.output_dir, scan_id=safe_name)
+            json_path = json_reporter.write_json(final, meta=report_meta)
+            log("  Writing SARIF report...", "dim")
+            sarif_reporter = SARIFReporter(output_dir=self.paths.output_dir, scan_id=safe_name)
+            sarif_path = sarif_reporter.write_sarif(final, meta=report_meta)
+            if final:
                 log("  HTML report deferred until requested from the Results tab.", "dim")
-                report_paths["__all__"] = {
-                    "csv": str(Path(csv_path).resolve()),
-                    "csv_name": Path(csv_path).name,
-                }
-                with session.state_lock:
-                    session.report_paths = dict(report_paths)
-                session.add_phase_time("report", time.perf_counter() - report_started)
-                log(f"  OK Report: {Path(csv_path).name}", "ok")
-            except EXPECTED_REPORT_ERRORS as exc:
-                session.record_error("REPORT_GEN_FAILED", "report", str(exc))
-                log(f"  [REPORT_GEN] error: {exc}", "err")
+            else:
+                log("  No findings - HTML report skipped.", "dim")
+            report_paths["__all__"] = {
+                "csv": str(Path(csv_path).resolve()),
+                "csv_name": Path(csv_path).name,
+                "json": str(Path(json_path).resolve()),
+                "json_name": Path(json_path).name,
+                "sarif": str(Path(sarif_path).resolve()),
+                "sarif_name": Path(sarif_path).name,
+            }
+            with session.state_lock:
+                session.report_paths = dict(report_paths)
+            session.add_phase_time("report", time.perf_counter() - report_started)
+            log(f"  OK Reports: {Path(csv_path).name}, {Path(json_path).name}, {Path(sarif_path).name}", "ok")
+        except EXPECTED_REPORT_ERRORS as exc:
+            session.record_error("REPORT_GEN_FAILED", "report", str(exc))
+            log(f"  [REPORT_GEN] error: {exc}", "err")
 
         with session.state_lock:
             session.scan_duration_s = int(time.time() - t_start)
