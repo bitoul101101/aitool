@@ -668,7 +668,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
       <table id="history-table">
         <thead>
           <tr>
-            <th></th>
+            <th><input type="checkbox" id="history-select-page" aria-label="Select all displayed scans"></th>
             <th data-sort="datetime">Date/<br>Time</th>
             <th data-sort="text">Project</th>
             <th data-sort="text">Repo</th>

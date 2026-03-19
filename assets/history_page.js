@@ -14,6 +14,7 @@
   const prevBtn = document.getElementById("history-prev-btn");
   const nextBtn = document.getElementById("history-next-btn");
   const pageInfo = document.getElementById("history-page-info");
+  const selectPage = document.getElementById("history-select-page");
   const PAGE_SIZE = 20;
   let currentPage = 1;
   let sortState = { index: null, dir: -1, kind: "datetime" };
@@ -22,8 +23,19 @@
     return Array.from(hBody.querySelectorAll("tr")).filter((r) => r.querySelectorAll("td").length > 1);
   }
 
+  function visiblePageRows() {
+    return rows().filter((row) => row.style.display !== "none");
+  }
+
   function updateDelete() {
     delBtn?.classList.toggle("hidden", !rows().some((r) => r.querySelector(".history-check")?.checked));
+    if (!selectPage) {
+      return;
+    }
+    const visible = visiblePageRows();
+    const selectedVisible = visible.filter((r) => r.querySelector(".history-check")?.checked);
+    selectPage.checked = visible.length > 0 && selectedVisible.length === visible.length;
+    selectPage.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visible.length;
   }
 
   function filteredRows() {
@@ -116,6 +128,15 @@
     applyFilters();
   });
   rows().forEach((r) => r.querySelector(".history-check")?.addEventListener("change", updateDelete));
+  selectPage?.addEventListener("change", () => {
+    visiblePageRows().forEach((row) => {
+      const check = row.querySelector(".history-check");
+      if (check) {
+        check.checked = selectPage.checked;
+      }
+    });
+    updateDelete();
+  });
   form?.addEventListener("submit", (event) => {
     const selected = rows().filter((r) => r.querySelector(".history-check")?.checked).length;
     if (!selected) {

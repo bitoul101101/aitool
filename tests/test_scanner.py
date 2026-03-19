@@ -2098,6 +2098,7 @@ def test_history_page_is_server_rendered():
     assert 'id="history-search"' in html
     assert 'id="history-prev-btn"' in html
     assert 'id="history-next-btn"' in html
+    assert 'id="history-select-page"' in html
     assert 'href="/assets/main.css"' in html
     assert 'src="/assets/history_page.js"' in html
     assert "function sortHistory" not in html
