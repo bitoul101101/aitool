@@ -1447,12 +1447,14 @@ def test_scan_page_renders_incremental_scope_controls():
     assert 'id="compare-ref-input"' in html
     assert 'value="master"' in html
     assert html.index('Search Repositories') < html.index('Scan Scope') < html.index('LLM Model')
+    assert 'class="repo-toolbar repo-controls-row"' in html
+    assert 'class="repo-toolbar repo-local-row"' in html
     assert 'id="local-repo-toggle-btn"' in html
     assert 'class="inline hidden" id="local-repo-row"' in html
     assert 'id="local-repo-path-input"' in html
     assert 'id="local-repo-browse-btn"' in html
-    assert html.index('id="local-repo-toggle-btn"') < html.index('id="scan-scope-select"')
-    assert html.index('id="local-repo-row"') < html.index('id="scan-scope-select"')
+    assert html.index('id="repo-search"') < html.index('id="scan-scope-select"') < html.index('id="llm-model-select"') < html.index('id="start-scan-btn"')
+    assert html.index('id="start-scan-btn"') < html.index('id="local-repo-toggle-btn"') < html.index('id="local-repo-row"')
     assert "Baseline-Aware Rescan" in html
     assert "Changed-file and baseline-aware scans reduce traversal and LLM work on repeated runs." not in html
 

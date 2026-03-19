@@ -42,14 +42,19 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .scan-shell{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
 .selection-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px;align-items:start}
 .project-panel,.repo-panel,.activity-panel{min-height:calc(100vh - 132px)}
+.project-panel,.repo-panel{height:calc(100vh - 132px);overflow:hidden}
 .project-list{display:grid;gap:2px;max-height:calc(100vh - 200px);overflow:auto;padding-right:4px}
 .project-link{display:block;padding:5px 8px;border-radius:8px;text-decoration:none;background:#f6ebdc;color:#5e3b16;font-size:14px}
 .project-link.active{background:#6d3514;color:#fff;font-weight:700}
 .repo-toolbar{display:grid;grid-template-columns:minmax(260px,1fr) 220px 240px auto;gap:8px;align-items:end;margin-bottom:8px}
+.repo-controls-row{grid-template-columns:minmax(260px,1fr) 220px 240px auto}
+.repo-local-row{grid-template-columns:minmax(320px,1fr)}
 .repo-actions{display:flex;align-items:center;gap:8px;margin:8px 0 10px}
 .repo-notices{display:grid;gap:8px;margin-bottom:8px}
-.repo-shell{border:1px solid #ead4ba;border-radius:12px;background:#fcf6ee;padding:8px}
-.repo-grid{display:grid;gap:2px 12px;max-height:calc(100vh - 205px);overflow:auto;padding-right:4px;align-content:start}
+.repo-panel{display:flex;flex-direction:column}
+.repo-panel form{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+.repo-shell{border:1px solid #ead4ba;border-radius:12px;background:#fcf6ee;padding:8px;overflow:hidden;flex:1 1 auto;min-height:0}
+.repo-grid{display:grid;gap:2px 12px;height:100%;overflow:auto;padding-right:4px;align-content:start}
 .repo-action-bar{flex-wrap:nowrap}
 #local-repo-row{min-width:0}
 #local-repo-row input{min-width:260px;flex:1 1 auto}
