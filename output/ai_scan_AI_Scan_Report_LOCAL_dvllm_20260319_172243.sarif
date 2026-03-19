@@ -1,0 +1,611 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "AI Security & Compliance Scanner",
+          "version": "19.1",
+          "informationUri": "https://example.invalid/local-ai-scanner",
+          "rules": [
+            {
+              "id": "sql_injection_direct",
+              "name": "sql_injection_direct",
+              "shortDescription": {
+                "text": "SQL query built with an f-string passed directly to cursor.execute() — user-controlled input without parameterisation enables SQL injection; use parameterised queries with ? placeholders."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "debug_mode",
+              "name": "debug_mode",
+              "shortDescription": {
+                "text": "Debug or verbose mode is enabled — this may expose full prompts, API keys, or internal data in logs; disable before deploying to production."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "unsafe_output_rendering",
+              "name": "unsafe_output_rendering",
+              "shortDescription": {
+                "text": "LLM output rendered as raw HTML — without sanitisation this enables stored XSS; always escape or sanitise LLM output before rendering."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "llm_output_file_write",
+              "name": "llm_output_file_write",
+              "shortDescription": {
+                "text": "LLM output written directly to a file without validation — an attacker could inject path traversal sequences; validate and sanitise before writing."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "cross_context_injection",
+              "name": "cross_context_injection",
+              "shortDescription": {
+                "text": "Conversation history or session memory injected into the active prompt context without a trust boundary — a poisoned prior turn can carry instructions into future interactions (cross-context injection). Validate and sanitise stored context before reuse."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "llm_tool_no_authz",
+              "name": "llm_tool_no_authz",
+              "shortDescription": {
+                "text": "LLM agent tool defined — verify that tool functions enforce authorization checks; without them an LLM can be manipulated into accessing arbitrary users' data (excessive agency / IDOR)."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "sql_in_tool_description",
+              "name": "sql_in_tool_description",
+              "shortDescription": {
+                "text": "Raw SQL query in an LLM tool description — leaking query structure to the LLM enables prompt injection: an attacker can craft inputs that manipulate the query to target different records or users."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "hardcoded_credential_db",
+              "name": "hardcoded_credential_db",
+              "shortDescription": {
+                "text": "Plaintext credentials inserted directly into the database — passwords must be hashed (bcrypt/argon2) before storage; never store or commit plaintext passwords in seed data or fixtures."
+              },
+              "properties": {
+                "severity_label": "Sev-1 (Critical)",
+                "policy_status": "CRITICAL"
+              }
+            },
+            {
+              "id": "langchain",
+              "name": "langchain",
+              "shortDescription": {
+                "text": "LangChain framework is used — review which underlying providers are invoked and whether each is approved."
+              },
+              "properties": {
+                "severity_label": "Sev-2 (High)",
+                "policy_status": "REVIEW"
+              }
+            },
+            {
+              "id": "litellm",
+              "name": "litellm",
+              "shortDescription": {
+                "text": "LiteLLM proxy/gateway is used — verify the routing config does not silently forward requests to unapproved providers."
+              },
+              "properties": {
+                "severity_label": "Sev-3 (Medium)",
+                "policy_status": "REVIEW"
+              }
+            },
+            {
+              "id": "model_name_in_config",
+              "name": "model_name_in_config",
+              "shortDescription": {
+                "text": "A specific AI model name is hardcoded in a config file — move model selection to an environment variable so it can be changed without a code deployment."
+              },
+              "properties": {
+                "severity_label": "Sev-4 (Low)",
+                "policy_status": "REVIEW"
+              }
+            }
+          ]
+        }
+      },
+      "automationDetails": {
+        "id": "20260319_172146"
+      },
+      "results": [
+        {
+          "ruleId": "sql_injection_direct",
+          "level": "error",
+          "message": {
+            "text": "SQL query built with an f-string passed directly to cursor.execute() — user-controlled input without parameterisation enables SQL injection; use parameterised queries with ? placeholders."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "transaction_db.py"
+                },
+                "region": {
+                  "startLine": 62
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "510927e2cf6bf74d6423f57eba99f574",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "debug_mode",
+          "level": "error",
+          "message": {
+            "text": "Debug or verbose mode is enabled — this may expose full prompts, API keys, or internal data in logs; disable before deploying to production."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 69
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "c5d1e07553ffa9a12ec906176d679ba8",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "unsafe_output_rendering",
+          "level": "error",
+          "message": {
+            "text": "LLM output rendered as raw HTML — without sanitisation this enables stored XSS; always escape or sanitise LLM output before rendering."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 36
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "af968febe19299d331336c8e28d16e54",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "llm_output_file_write",
+          "level": "error",
+          "message": {
+            "text": "LLM output written directly to a file without validation — an attacker could inject path traversal sequences; validate and sanitise before writing."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 83
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "1fa56941402e17bf06562b752b59f818",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "cross_context_injection",
+          "level": "error",
+          "message": {
+            "text": "Conversation history or session memory injected into the active prompt context without a trust boundary — a poisoned prior turn can carry instructions into future interactions (cross-context injection). Validate and sanitise stored context before reuse."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 84
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "b876520450c6e374b1e8b24d384bc1ec",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "llm_tool_no_authz",
+          "level": "error",
+          "message": {
+            "text": "LLM agent tool defined — verify that tool functions enforce authorization checks; without them an LLM can be manipulated into accessing arbitrary users' data (excessive agency / IDOR)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tools.py"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "63356c23a8ec19c8f62c02489c6981e2",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "llm_tool_no_authz",
+          "level": "error",
+          "message": {
+            "text": "LLM agent tool defined — verify that tool functions enforce authorization checks; without them an LLM can be manipulated into accessing arbitrary users' data (excessive agency / IDOR)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tools.py"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "dfb5dc2f98504db2bccbd0f614085791",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "llm_tool_no_authz",
+          "level": "error",
+          "message": {
+            "text": "LLM agent tool defined — verify that tool functions enforce authorization checks; without them an LLM can be manipulated into accessing arbitrary users' data (excessive agency / IDOR)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tools.py"
+                },
+                "region": {
+                  "startLine": 22
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "d9cd5de4b7e46223075a03a74a165a26",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "sql_in_tool_description",
+          "level": "error",
+          "message": {
+            "text": "Raw SQL query in an LLM tool description — leaking query structure to the LLM enables prompt injection: an attacker can craft inputs that manipulate the query to target different records or users."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tools.py"
+                },
+                "region": {
+                  "startLine": 43
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "f2f7ca79377f723bb35743988e19c2f1",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "sql_injection_direct",
+          "level": "error",
+          "message": {
+            "text": "SQL query built with an f-string passed directly to cursor.execute() — user-controlled input without parameterisation enables SQL injection; use parameterised queries with ? placeholders."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "transaction_db.py"
+                },
+                "region": {
+                  "startLine": 76
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "9664892c21eb867ebcc4a03b4805c654",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "hardcoded_credential_db",
+          "level": "error",
+          "message": {
+            "text": "Plaintext credentials inserted directly into the database — passwords must be hashed (bcrypt/argon2) before storage; never store or commit plaintext passwords in seed data or fixtures."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "transaction_db.py"
+                },
+                "region": {
+                  "startLine": 44
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "dc9cf6bea9b691ab6af2b185170770e8",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "unsafe_output_rendering",
+          "level": "error",
+          "message": {
+            "text": "LLM output rendered as raw HTML — without sanitisation this enables stored XSS; always escape or sanitise LLM output before rendering."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "utils.py"
+                },
+                "region": {
+                  "startLine": 19
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "71faf26aa7c0f570e2ae8117f053f9b2",
+            "delta_status": "new",
+            "severity_label": "Sev-1 (Critical)"
+          }
+        },
+        {
+          "ruleId": "langchain",
+          "level": "error",
+          "message": {
+            "text": "LangChain framework is used — review which underlying providers are invoked and whether each is approved."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "0e29e4a5d7c49d081e22b283a0ceb124",
+            "delta_status": "new",
+            "severity_label": "Sev-2 (High)"
+          }
+        },
+        {
+          "ruleId": "langchain",
+          "level": "error",
+          "message": {
+            "text": "LangChain framework is used — review which underlying providers are invoked and whether each is approved."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "c3990975da93d82f237afc20bf3a589c",
+            "delta_status": "new",
+            "severity_label": "Sev-2 (High)"
+          }
+        },
+        {
+          "ruleId": "langchain",
+          "level": "warning",
+          "message": {
+            "text": "LangChain framework is used — review which underlying providers are invoked and whether each is approved."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tools.py"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "6f5ed1c59ba64a94e0220bbbf40a81df",
+            "delta_status": "new",
+            "severity_label": "Sev-3 (Medium)"
+          }
+        },
+        {
+          "ruleId": "litellm",
+          "level": "warning",
+          "message": {
+            "text": "LiteLLM proxy/gateway is used — verify the routing config does not silently forward requests to unapproved providers."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startLine": 63
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "5461eb853a6b8847ed15f383f1d4a17e",
+            "delta_status": "new",
+            "severity_label": "Sev-3 (Medium)"
+          }
+        },
+        {
+          "ruleId": "model_name_in_config",
+          "level": "note",
+          "message": {
+            "text": "A specific AI model name is hardcoded in a config file — move model selection to an environment variable so it can be changed without a code deployment."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "llm-config.yaml"
+                },
+                "region": {
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "7b9332729d93662833344c5c01917f9c",
+            "delta_status": "new",
+            "severity_label": "Sev-4 (Low)"
+          }
+        },
+        {
+          "ruleId": "model_name_in_config",
+          "level": "note",
+          "message": {
+            "text": "A specific AI model name is hardcoded in a config file — move model selection to an environment variable so it can be changed without a code deployment."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "llm-config.yaml"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "properties": {
+            "repo": "dvllm",
+            "project_key": "LOCAL",
+            "finding_hash": "8b276f97cf8a0550fa18151b5908f9b2",
+            "delta_status": "new",
+            "severity_label": "Sev-4 (Low)"
+          }
+        }
+      ]
+    }
+  ]
+}

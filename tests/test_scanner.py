@@ -2488,8 +2488,12 @@ def test_help_page_is_server_rendered():
     assert 'href="/help"' in html
     assert 'href="/inventory"' in html
     assert '<a class="nav active" href="/help">Help</a>' in html
-    assert "Reference documentation for the AI Security &amp; Compliance Scanner." in html
-    assert "Main Components" in html
+    assert "AI Security &amp; Compliance Scanner Wiki" in html
+    assert "On This Page" in html
+    assert 'href="#installation"' in html
+    assert "Capabilities" in html
+    assert "CLI Usage" in html
+    assert "Import / Export" in html
     assert "Known Limitations" in html
     assert "AI Inventory" in html
 

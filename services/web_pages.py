@@ -1218,113 +1218,200 @@ def render_settings_page(
 def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
     body = f"""
 {_flash(notice, error)}
-<section class="card stack" style="max-width:1080px">
-  <h2 style="margin:0">Help</h2>
-  <p class="muted" style="margin:0">Reference documentation for the AI Security &amp; Compliance Scanner.</p>
+<section class="wiki-shell">
+  <section class="card wiki-doc">
+    <div class="wiki-header">
+      <div>
+        <h2 style="margin:0">AI Security &amp; Compliance Scanner Wiki</h2>
+        <p class="muted" style="margin:6px 0 0">Reference documentation for the AI Security &amp; Compliance Scanner, including architecture, workflows, exports, integrations, and operating guidance.</p>
+      </div>
+    </div>
 
-  <section>
-    <h3 style="margin:0 0 8px">Purpose</h3>
-    <p>This tool scans Bitbucket repositories to identify AI usage, insecure AI patterns, policy-relevant findings, and related code or configuration risks. It is optimized for internal review workflows where signal quality matters more than broad coverage.</p>
-  </section>
+    <section id="overview" class="wiki-section">
+      <h3>Tool Description</h3>
+      <p>This tool scans Bitbucket and local repositories to identify AI usage, insecure AI implementation patterns, secrets, risky integrations, model-serving exposure, and policy-relevant findings. It combines deterministic detection, policy-aware analysis, optional local LLM review, history tracking, triage workflows, findings management, and export artifacts for engineering and AppSec teams.</p>
+      <div class="wiki-callout">
+        <strong>Primary use case:</strong> internal AI/security review workflows where explainability, triage, and repeatable evidence matter more than raw detection volume.
+      </div>
+    </section>
 
-  <section>
-    <h3 style="margin:0 0 8px">Main Components</h3>
-    <table>
-      <thead><tr><th>Component</th><th>Role</th></tr></thead>
-      <tbody>
-        <tr><td>Bitbucket Access</td><td>Connects to the on-prem Bitbucket server, validates the PAT, lists visible projects and repositories, fetches repository metadata, and clones the selected repositories into a temporary workspace for local analysis.</td></tr>
-        <tr><td>Detector</td><td>Parses repository content and identifies AI-related patterns, secrets, local model usage, model-serving indicators, risky AI data flows, and context such as documentation, tests, deleted files, and production-relevant paths.</td></tr>
-        <tr><td>Security Analyzer</td><td>Applies internal policy logic, context-aware severity adjustments, provider classification, and remediation mapping so raw detections become prioritized security findings with better precision.</td></tr>
-        <tr><td>LLM Review</td><td>Uses a local model through Ollama to review eligible findings, attempt structured adjudication, and downgrade, dismiss, or keep them with model-assisted reasoning when the selected model is reliable enough.</td></tr>
-        <tr><td>Triage Store</td><td>Persists To Mitigate, Accept Risk, and Suppress decisions with actor, timestamp, and reason so analyst decisions survive page refreshes, report review, and later scan sessions.</td></tr>
-        <tr><td>Reporting</td><td>Generates CSV and HTML reports, records scan history, exposes logs for review and download, and provides a durable artifact for engineers, AppSec reviewers, and management summaries.</td></tr>
-      </tbody>
-    </table>
-  </section>
+    <section id="capabilities" class="wiki-section">
+      <h3>Capabilities</h3>
+      <table>
+        <thead><tr><th>Area</th><th>What the Tool Does</th></tr></thead>
+        <tbody>
+          <tr><td>Repository Scanning</td><td>Scans Bitbucket repositories and local folders, including full scans, changed-files scans, branch diffs, and baseline-aware rescans.</td></tr>
+          <tr><td>Detection</td><td>Finds AI provider usage, prompt handling risks, model-serving exposure, RAG/vector patterns, secret-to-AI correlation, policy violations, and suspicious flows.</td></tr>
+          <tr><td>Analysis</td><td>Applies context-aware severity scoring, production relevance, evidence quality scoring, and policy mapping before optional LLM review.</td></tr>
+          <tr><td>Review Workflow</td><td>Supports finding triage, suppressions, accepted risk, reviewed state, central findings management, scan history, and trend analysis.</td></tr>
+          <tr><td>Reporting</td><td>Produces CSV, JSON, SARIF, and on-demand HTML reports, plus logs, inventory views, threat-model sections, and trend summaries.</td></tr>
+          <tr><td>Execution Modes</td><td>Supports browser-driven scans and a minimal CLI for local-repo scans that writes machine-readable artifacts.</td></tr>
+        </tbody>
+      </table>
+    </section>
 
-  <section>
-    <h3 style="margin:0 0 8px">Technology Stack</h3>
-    <table>
-      <thead><tr><th>Area</th><th>Technology</th><th>Usage</th></tr></thead>
-      <tbody>
-        <tr><td>Backend</td><td>Python 3</td><td>Core scan orchestration, report generation, persistence, and HTTP server behavior.</td></tr>
-        <tr><td>Web Server</td><td>Built-in `http.server`</td><td>Serves the local internal web UI, APIs, and SSE activity-log stream.</td></tr>
-        <tr><td>Frontend</td><td>Server-rendered HTML, CSS, and targeted JavaScript</td><td>Implements the local web interface without a full SPA framework.</td></tr>
-        <tr><td>Source Control Access</td><td>Git + Bitbucket REST API</td><td>Lists repositories, resolves metadata, and performs local shallow clones for scanning.</td></tr>
-        <tr><td>LLM Runtime</td><td>Ollama</td><td>Provides local LLM-based review and report enrichment without external cloud dependency.</td></tr>
-        <tr><td>Persistence</td><td>SQLite + JSON files</td><td>Stores scan history, logs, triage state, configuration, and generated artifacts.</td></tr>
-        <tr><td>Reports</td><td>HTML + CSV</td><td>Produces analyst-friendly and export-friendly scan outputs.</td></tr>
-      </tbody>
-    </table>
-  </section>
+    <section id="installation" class="wiki-section">
+      <h3>Installation</h3>
+      <table>
+        <thead><tr><th>Step</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Python</td><td>Use Python 3.13 on Windows for the current desktop workflow.</td></tr>
+          <tr><td>Install Dependencies</td><td>Preferred: <code>python -m pip install -r requirements.txt</code></td></tr>
+          <tr><td>Launch Web App</td><td><code>python C:\\aitool\\main_web.py</code></td></tr>
+          <tr><td>Launch CLI</td><td><code>python C:\\aitool\\scan_cli.py C:\\path\\to\\repo</code></td></tr>
+          <tr><td>Optional LLM Runtime</td><td>Install and run Ollama if you want LLM review and report enrichment.</td></tr>
+          <tr><td>Enterprise TLS</td><td>Configure the Bitbucket CA bundle in Settings when using an internal PKI.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted" style="margin:8px 0 0">Runtime state is stored in the OS state directory, not in the repo root.</p>
+    </section>
 
-  <section>
-    <h3 style="margin:0 0 8px">Detection Engine</h3>
-    <p>The detection engine is regex- and context-driven. It scans repository content for known AI usage patterns, secret exposure, risky AI integrations, model-serving indicators, and unsafe data flows, then applies context-aware filtering before policy analysis and optional LLM review.</p>
-    <p><strong>Pattern categories:</strong> provider and SDK usage, secrets and tokens, prompt and output handling risks, local model and serving patterns, vector/RAG components, configuration exposure, CI/CD and infrastructure references, and agent or gateway frameworks.</p>
-    <p><strong>Scanned file types:</strong> common source files, configuration files, notebooks, scripts, markup, manifests, dependency files, environment files, and selected structured text formats such as JSON, YAML, TOML, INI, Docker-related files, and CI definitions.</p>
-  </section>
+    <section id="architecture" class="wiki-section">
+      <h3>Architecture</h3>
+      <table>
+        <thead><tr><th>Module</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td>Web Server</td><td>Local server-rendered HTTP app in <code>app_server.py</code> with pages, APIs, session handling, and static assets.</td></tr>
+          <tr><td>Scan Orchestration</td><td><code>services.scan_jobs</code> owns scan lifecycle, telemetry, report generation, history persistence, and active-session state.</td></tr>
+          <tr><td>Bitbucket Access</td><td><code>scanner.bitbucket</code> handles PAT-authenticated project/repo listing, metadata lookup, and cloning with TLS validation.</td></tr>
+          <tr><td>Detector and Analyzer</td><td><code>scanner.detector</code> and <code>analyzer.security</code> produce findings, score them, and enrich them with policy context.</td></tr>
+          <tr><td>Persistence</td><td>SQLite-backed scan history, scan logs, findings rollups, triage metadata, and exported artifacts.</td></tr>
+          <tr><td>Reports and Exports</td><td>CSV, JSON, SARIF, and HTML reports live under the output directory and can be reopened from the UI.</td></tr>
+        </tbody>
+      </table>
+    </section>
 
-  <section>
-    <h3 style="margin:0 0 8px">How It Works</h3>
-    <ol style="margin:0;padding-left:18px">
-      <li>Login with a Bitbucket Personal Access Token.</li>
-      <li>Select a project and one or more repositories in <strong>New Scan</strong>.</li>
-      <li>Choose the LLM model used for review, then start the scan.</li>
-      <li>The tool clones repositories, scans files, optionally runs LLM review, then generates reports.</li>
-      <li>During or after the scan, use <strong>To Mitigate</strong>, <strong>Accept Risk</strong>, or <strong>Suppress</strong> to triage findings.</li>
-      <li>Use <strong>Past Scans</strong> to revisit prior scans, open reports, download CSV output, or inspect logs.</li>
-    </ol>
-  </section>
+    <section id="modules" class="wiki-section">
+      <h3>Modules</h3>
+      <table>
+        <thead><tr><th>Module Group</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>Scanner</td><td>Repo access, clone helpers, detection, suppression logic, and LLM reviewer integration.</td></tr>
+          <tr><td>Services</td><td>Active scan state, session/auth handling, API actions, runtime support, trends, findings rollups, and UI rendering helpers.</td></tr>
+          <tr><td>Reports</td><td>CSV, JSON, SARIF, HTML, delta comparison, and threat-model report content.</td></tr>
+          <tr><td>Assets</td><td>Static CSS and JavaScript for pages such as scan activity, history, findings, results, and general layout.</td></tr>
+          <tr><td>Tests</td><td>Regression, security, smoke, and report/settings coverage for the desktop web app and scan services.</td></tr>
+        </tbody>
+      </table>
+    </section>
 
-  <section>
-    <h3 style="margin:0 0 8px">Pages</h3>
-    <table>
-      <thead><tr><th>Page</th><th>What It Is For</th></tr></thead>
-      <tbody>
-        <tr><td>New Scan</td><td>Select project, repositories, and LLM model for a new run.</td></tr>
-        <tr><td>Scan Workspace</td><td>Open a specific scan and switch between the live activity view and the finished detailed report.</td></tr>
-        <tr><td>AI Inventory</td><td>Review the latest known AI usage profile per repository, including providers, models, and usage patterns.</td></tr>
-        <tr><td>Past Scans</td><td>Search, filter, sort, and open results from previous scans.</td></tr>
-        <tr><td>Settings</td><td>Configure output directory and LLM connection settings.</td></tr>
-        <tr><td>Help</td><td>Understand the tool architecture, workflow, and limitations.</td></tr>
-      </tbody>
-    </table>
-  </section>
+    <section id="workflow" class="wiki-section">
+      <h3>Workflow</h3>
+      <ol style="margin:0;padding-left:18px">
+        <li>Connect to Bitbucket with a PAT or run the CLI against a local repo.</li>
+        <li>Select repositories or a local path, choose scan scope, and choose an LLM model if LLM review is enabled.</li>
+        <li>The tool resolves repo metadata, clones or opens the repo, scans files, applies policy analysis, and optionally runs LLM review.</li>
+        <li>Structured telemetry, history, inventory, and findings are persisted as the scan progresses.</li>
+        <li>CSV, JSON, and SARIF are written automatically; HTML can be generated on demand from the Results page.</li>
+        <li>Operators review findings through the Findings page, scan workspace, Past Scans, Trends, and report artifacts.</li>
+      </ol>
+    </section>
 
-    <section>
-      <h3 style="margin:0 0 8px">Outputs</h3>
+    <section id="findings" class="wiki-section">
+      <h3>Findings and Triage</h3>
+      <table>
+        <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Open</td><td>Active finding with no triage decision yet.</td></tr>
+          <tr><td>Reviewed</td><td>Analyst reviewed the finding but did not suppress or accept risk.</td></tr>
+          <tr><td>Accepted Risk</td><td>Finding remains acknowledged with a documented reason.</td></tr>
+          <tr><td>Suppressed</td><td>Finding is intentionally hidden as noise or not actionable.</td></tr>
+          <tr><td>Fixed</td><td>Finding existed in a prior full/baseline comparison but is absent from a later relevant scan.</td></tr>
+        </tbody>
+      </table>
+      <p>The <strong>Findings</strong> page is the central management surface for filtering, bulk triage actions, and cross-scan finding review.</p>
+    </section>
+
+    <section id="pages" class="wiki-section">
+      <h3>Pages</h3>
+      <table>
+        <thead><tr><th>Page</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>New Scan</td><td>Choose repositories or a local path, set scope, select model, and start a new scan.</td></tr>
+          <tr><td>Past Scans</td><td>Review historical scan runs, durations, statuses, and links back to scan workspaces.</td></tr>
+          <tr><td>Findings</td><td>Central findings management page with filters, bulk actions, status review, and drill-down into scan details.</td></tr>
+          <tr><td>Trends</td><td>History-derived metrics for findings over time, repo risk, noisy rules, suppression rate, and LLM operational stability.</td></tr>
+          <tr><td>AI Inventory</td><td>Repository-level inventory of providers, models, embeddings, prompt handling, and model-serving/agent patterns.</td></tr>
+          <tr><td>Settings</td><td>Runtime configuration including Bitbucket TLS, output path, LLM URL/model, and report timeout settings.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="exports" class="wiki-section">
+      <h3>Import / Export</h3>
+      <table>
+        <thead><tr><th>Artifact</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td>CSV</td><td>Written automatically at scan completion for spreadsheet-style analysis and operational review.</td></tr>
+          <tr><td>JSON</td><td>Written automatically at scan completion for machine-readable integration and custom processing.</td></tr>
+          <tr><td>SARIF</td><td>Written automatically at scan completion for interoperability with static-analysis and security tooling.</td></tr>
+          <tr><td>HTML</td><td>Generated on demand from the Results page and cached after generation.</td></tr>
+          <tr><td>History Export</td><td>SQLite is the source of truth; compatibility JSON export is maintained for legacy consumers.</td></tr>
+          <tr><td>Local Repo Input</td><td>Can scan a local repo path directly from the UI or from the CLI without Bitbucket cloning.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="integrations" class="wiki-section">
+      <h3>Integration</h3>
+      <table>
+        <thead><tr><th>Integration Surface</th><th>Current Support</th></tr></thead>
+        <tbody>
+          <tr><td>Bitbucket</td><td>PAT-authenticated project/repo discovery and cloning over TLS with custom CA bundle support.</td></tr>
+          <tr><td>Ollama</td><td>Optional local LLM review and report enrichment with model discovery, runtime checks, and timeout controls.</td></tr>
+          <tr><td>CLI</td><td>Headless local-repo scans via <code>scan_cli.py</code> producing CSV, JSON, SARIF, and logs.</td></tr>
+          <tr><td>Downstream Tools</td><td>JSON and SARIF exports are intended as the first integration layer for pipelines and external systems.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="cli" class="wiki-section">
+      <h3>CLI Usage</h3>
+      <pre><code>python C:\\aitool\\scan_cli.py C:\\path\\to\\repo
+python C:\\aitool\\scan_cli.py C:\\path\\to\\repo --output-dir C:\\tmp\\scan-out
+python C:\\aitool\\scan_cli.py C:\\path\\to\\repo --scope branch_diff --compare-ref master</code></pre>
+      <p>The CLI is intentionally minimal and currently focuses on local-repo scans. It writes machine-readable artifacts and a log file to the selected output directory.</p>
+    </section>
+
+    <section id="security" class="wiki-section">
+      <h3>Security Model</h3>
       <ul style="margin:0;padding-left:18px">
-        <li><strong>AI Inventory:</strong> summary of repos using AI, detected providers and models, and where embeddings, prompt handling, model serving, and agent/tool-use patterns appear.</li>
-        <li><strong>HTML Report:</strong> analyst-friendly report with summary, findings, and remediation context.</li>
-        <li><strong>CSV Report:</strong> flat export for filtering, tracking, and external review.</li>
-        <li><strong>Scan Log:</strong> terminal-like execution log showing scan phases and processing activity.</li>
-      <li><strong>History Record:</strong> persisted scan metadata including duration, status, model used, and report references.</li>
-    </ul>
+        <li>The app is designed for localhost desktop use and uses browser session cookies plus CSRF protection for mutating actions.</li>
+        <li>Bitbucket API traffic and clone operations verify TLS by default and support internal CA bundles.</li>
+        <li>OS-backed keyring storage is preferred for PAT persistence; insecure fallback must be explicitly enabled.</li>
+        <li>Mutable runtime state now lives outside the repo tree in the OS state directory.</li>
+      </ul>
+    </section>
+
+    <section id="limitations" class="wiki-section">
+      <h3>Known Limitations</h3>
+      <ul style="margin:0;padding-left:18px">
+        <li>LLM review quality and speed depend heavily on the selected local model and available hardware.</li>
+        <li>This is still a single-operator desktop-oriented architecture, not a hardened multi-user service.</li>
+        <li>Static scanning identifies likely issues and suspicious patterns but does not prove exploitability by itself.</li>
+        <li>HTML reports reflect the state at generation time; later triage changes do not rewrite previously generated report files.</li>
+        <li>JSON and SARIF exports are first-step integration outputs, not yet full issue-tracker or webhook pipelines.</li>
+      </ul>
+    </section>
   </section>
 
-  <section>
-    <h3 style="margin:0 0 8px">Triage States</h3>
-    <table>
-      <thead><tr><th>State</th><th>Meaning</th></tr></thead>
-      <tbody>
-        <tr><td>To Mitigate</td><td>The finding remains relevant and should be tracked for remediation.</td></tr>
-        <tr><td>Accept Risk</td><td>The finding is acknowledged but intentionally accepted with a reason.</td></tr>
-        <tr><td>Suppress</td><td>The finding is considered noise or not actionable and is hidden from the active findings set.</td></tr>
-        <tr><td>Reset</td><td>Removes the triage decision and returns the finding to the active findings flow.</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section>
-    <h3 style="margin:0 0 8px">Known Limitations</h3>
-    <ul style="margin:0;padding-left:18px">
-      <li>LLM review quality depends heavily on the selected local model. Small models may fail structured review or produce weak decisions.</li>
-      <li>The tool is currently optimized for a single trusted operator workflow, even though parts of the architecture already anticipate stronger access control.</li>
-      <li>Static scanning can identify likely issues, but it cannot prove exploitability or runtime behavior on its own.</li>
-      <li>Generated reports reflect the scan state at generation time. Triage actions performed after report generation do not automatically rewrite those files.</li>
-      <li>Precision is intentionally prioritized over maximum coverage, so some low-signal or ambiguous patterns may be skipped.</li>
-    </ul>
-  </section>
+  <aside class="card wiki-toc">
+    <h3 style="margin:0 0 10px">On This Page</h3>
+    <nav class="wiki-toc-links">
+      <a href="#overview">Tool Description</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="#installation">Installation</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#modules">Modules</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#findings">Findings and Triage</a>
+      <a href="#pages">Pages</a>
+      <a href="#exports">Import / Export</a>
+      <a href="#integrations">Integration</a>
+      <a href="#cli">CLI Usage</a>
+      <a href="#security">Security Model</a>
+      <a href="#limitations">Known Limitations</a>
+    </nav>
+  </aside>
 </section>"""
     return _layout(title="Help", body=body, active="help", show_scan_results=show_scan_results, csrf_token=csrf_token)

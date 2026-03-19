@@ -65,6 +65,16 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .repo-row input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
 .repo-row span{display:block}
 .running-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;align-items:start}
+.wiki-shell{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;align-items:start}
+.wiki-doc{max-width:none}
+.wiki-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px}
+.wiki-section{scroll-margin-top:82px}
+.wiki-section + .wiki-section{margin-top:18px}
+.wiki-callout{margin-top:10px;padding:10px 12px;border-radius:10px;background:#f7efe5;border:1px solid #e6cfb4;color:#5c3a18}
+.wiki-toc{position:sticky;top:78px;align-self:start}
+.wiki-toc-links{display:grid;gap:6px}
+.wiki-toc-links a{display:block;padding:6px 8px;border-radius:8px;text-decoration:none;color:#5d3612;background:#f9f1e8}
+.wiki-toc-links a:hover{background:#efdfcd}
 .scan-sidebar-head{display:grid;gap:8px}
 .scan-actions{display:flex;gap:6px;flex-wrap:wrap}
 .scan-actions .warn,.scan-actions .btn{padding:6px 9px;font-size:11px}
@@ -185,5 +195,5 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .trend-table-shell{max-height:360px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}}
-@media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}}
+@media (max-width:900px){header{grid-template-columns:1fr}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.wiki-toc{position:static}}
+@media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}}
