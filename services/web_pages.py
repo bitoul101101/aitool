@@ -109,6 +109,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
             '<div class="header-nav">'
             + f'<a class="nav{" active" if active == "new_scan" else ""}" href="/scan?new=1">New Scan</a>'
             + f'<a class="nav{" active" if active == "history" else ""}" href="/history">Past Scans</a>'
+            + f'<a class="nav{" active" if active == "findings" else ""}" href="/findings">Findings</a>'
             + f'<a class="nav{" active" if active == "trends" else ""}" href="/trends">Trends</a>'
             + f'<a class="nav{" active" if active == "inventory" else ""}" href="/inventory">AI Inventory</a>'
             + f'<a class="nav{" active" if active == "settings" else ""}" href="/settings">Settings</a>'
@@ -720,6 +721,113 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
 </section>
 <script src="/assets/history_page.js" defer></script>"""
     return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token)
+
+
+def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "") -> bytes:
+    projects = sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")})
+    repos = sorted({str(item.get("repo", "")) for item in findings if item.get("repo")})
+    rules = sorted({str(item.get("rule", "")) for item in findings if item.get("rule")})
+    statuses = sorted({str(item.get("status_label", "")) for item in findings if item.get("status_label")})
+    severities = sorted({str(item.get("severity_label", "")) for item in findings if item.get("severity_label")})
+
+    def _opts(values: list[str], label: str) -> str:
+        return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
+
+    def _pill(status: str) -> str:
+        key = str(status or "").lower().replace(" ", "_")
+        css = {
+            "open": "status-running",
+            "reviewed": "status-done",
+            "accepted_risk": "status-stopped",
+            "suppressed": "status-stopped",
+            "fixed": "",
+        }.get(key, "")
+        return f'<span class="pill {css}">{_esc(status)}</span>'
+
+    rows = []
+    for item in findings:
+        date_text, time_text, ts = _fmt_dt(str(item.get("last_seen_at", "") or item.get("first_seen_at", "")))
+        details_link = ""
+        if item.get("last_seen_scan_id"):
+            details_link = f'<a class="icon-link" href="/scan/{_esc(item.get("last_seen_scan_id", ""))}?tab=activity" title="Open latest scan"><img src="{DETAILS_ICON}" alt="Details"></a>'
+        rows.append(
+            f'<tr data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(item.get("rule", ""))}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-ts="{ts}">'
+            f'<td><input type="checkbox" class="finding-check" name="hashes" value="{_esc(item.get("hash", ""))}"></td>'
+            f'<td>{_pill(item.get("status_label", "Open"))}</td>'
+            f'<td>{_esc(item.get("severity_label", ""))}</td>'
+            f'<td>{_esc(item.get("rule", ""))}</td>'
+            f'<td>{_esc(item.get("project_key", ""))}</td>'
+            f'<td>{_esc(item.get("repo", ""))}</td>'
+            f'<td><div>{_esc(item.get("file", ""))}</div><div class="finding-sub">{_esc(item.get("line", ""))}</div></td>'
+            f'<td>{_esc(item.get("description", ""))}</td>'
+            f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
+            f'<td>{_esc(item.get("scan_count", 0))}</td>'
+            f'<td>{_esc(item.get("triage_note", "") or "-")}</td>'
+            f'<td>{details_link}</td>'
+            '</tr>'
+        )
+
+    body = f"""
+{_flash(notice, error)}
+<section class="card">
+  <form method="post" action="/findings/bulk" id="findings-form">
+    {_csrf_field(csrf_token)}
+    <section class="trend-summary-grid" style="margin-bottom:12px">
+      <div class="trend-summary-card"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Open</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "open"))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Accepted Risk</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "accepted_risk"))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Suppressed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "false_positive"))}</strong></div>
+    </section>
+    <div class="history-toolbar filters-row">
+      <input type="search" id="findings-search" placeholder="Search findings">
+      <select id="findings-filter-project">{_opts(projects, 'All Projects')}</select>
+      <select id="findings-filter-repo">{_opts(repos, 'All Repos')}</select>
+      <select id="findings-filter-status">{_opts(statuses, 'All Statuses')}</select>
+      <select id="findings-filter-severity">{_opts(severities, 'All Severities')}</select>
+      <select id="findings-filter-rule">{_opts(rules, 'All Rules')}</select>
+      <button type="button" class="ghost" id="reset-findings-filters">Reset</button>
+    </div>
+    <div class="history-toolbar filters-row" style="margin-top:10px">
+      <select name="action" id="findings-bulk-action">
+        <option value="">Bulk Action</option>
+        <option value="reviewed">Mark Reviewed</option>
+        <option value="accepted_risk">Accept Risk</option>
+        <option value="false_positive">Suppress</option>
+        <option value="reset">Reset</option>
+      </select>
+      <input type="text" name="note" id="findings-bulk-note" placeholder="Note for Accept Risk / Suppress">
+      <button type="submit" class="warn hidden" id="apply-findings-action-btn">Apply to Selected</button>
+    </div>
+    <div class="table-shell">
+      <table id="findings-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th data-sort="text">Status</th>
+            <th data-sort="text">Severity</th>
+            <th data-sort="text">Rule</th>
+            <th data-sort="text">Project</th>
+            <th data-sort="text">Repo</th>
+            <th data-sort="text">File</th>
+            <th data-sort="text">Why Flagged</th>
+            <th data-sort="datetime">Last Seen</th>
+            <th data-sort="number">Scans</th>
+            <th>Note</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>{''.join(rows) or '<tr><td colspan="12">No findings available.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="history-pagination">
+      <button type="button" class="ghost" id="findings-prev-btn">Previous</button>
+      <span class="page-info" id="findings-page-info">Page 1 of 1</span>
+      <button type="button" class="ghost" id="findings-next-btn">Next</button>
+    </div>
+  </form>
+</section>
+<script src="/assets/findings_page.js" defer></script>"""
+    return _layout(title="Findings", body=body, active="findings", show_scan_results=show_scan_results, csrf_token=csrf_token)
 
 
 def render_results_page(

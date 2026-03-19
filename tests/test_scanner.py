@@ -1908,6 +1908,103 @@ def test_render_history_page_shows_phase_summary_and_error_code():
     assert "LLM_REVIEW_FAILED" in html
 
 
+def test_build_findings_rollups_applies_triage_and_fixed_state():
+    from services.findings import build_findings_rollups
+
+    history = [
+        {
+            "scan_id": "scan-1",
+            "started_at_utc": "2026-03-18T10:00:00Z",
+            "delta": {"fixed_hashes": []},
+            "findings": [
+                {
+                    "_hash": "hash-open",
+                    "project_key": "COGI",
+                    "repo": "repo1",
+                    "file": "app.py",
+                    "line": 14,
+                    "severity": 1,
+                    "severity_label": "Critical",
+                    "provider_or_lib": "openai_key",
+                    "description": "Hardcoded key",
+                },
+                {
+                    "_hash": "hash-fixed",
+                    "project_key": "COGI",
+                    "repo": "repo1",
+                    "file": "old.py",
+                    "line": 22,
+                    "severity": 2,
+                    "severity_label": "High",
+                    "provider_or_lib": "langchain",
+                    "description": "Old issue",
+                },
+            ],
+        },
+        {
+            "scan_id": "scan-2",
+            "started_at_utc": "2026-03-19T10:00:00Z",
+            "delta": {"fixed_hashes": ["hash-fixed"]},
+            "findings": [
+                {
+                    "_hash": "hash-open",
+                    "project_key": "COGI",
+                    "repo": "repo1",
+                    "file": "app.py",
+                    "line": 16,
+                    "severity": 1,
+                    "severity_label": "Critical",
+                    "provider_or_lib": "openai_key",
+                    "description": "Hardcoded key",
+                }
+            ],
+        },
+    ]
+    triage = {"hash-open": {"status": "accepted_risk", "note": "Known exception", "marked_by": "analyst", "marked_at": "2026-03-19"}}
+
+    rows = build_findings_rollups(history, triage)
+
+    assert rows[0]["hash"] == "hash-open"
+    assert rows[0]["status"] == "accepted_risk"
+    assert rows[0]["triage_note"] == "Known exception"
+    fixed = next(item for item in rows if item["hash"] == "hash-fixed")
+    assert fixed["status"] == "fixed"
+
+
+def test_render_findings_page_shows_filters_and_bulk_actions():
+    import app_server as srv
+
+    html = srv.render_findings_page(
+        findings=[
+            {
+                "hash": "hash-open",
+                "project_key": "COGI",
+                "repo": "repo1",
+                "file": "app.py",
+                "line": "14",
+                "severity_label": "Critical",
+                "rule": "openai_key",
+                "description": "Hardcoded key next to AI client use",
+                "last_seen_at": "2026-03-19T10:00:00Z",
+                "scan_count": 2,
+                "status": "open",
+                "status_label": "Open",
+                "triage_note": "",
+                "last_seen_scan_id": "scan-2",
+            }
+        ],
+        csrf_token="csrf-demo",
+    ).decode("utf-8")
+
+    assert "Findings" in html
+    assert 'href="/findings"' in html
+    assert 'id="findings-table"' in html
+    assert 'id="findings-filter-rule"' in html
+    assert 'action="/findings/bulk"' in html
+    assert 'id="apply-findings-action-btn"' in html
+    assert 'src="/assets/findings_page.js"' in html
+
+
 def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():
     import app_server as srv
 

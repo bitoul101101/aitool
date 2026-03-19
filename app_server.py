@@ -57,7 +57,9 @@ from scanner.suppressions import (
     TRIAGE_FALSE_POSITIVE,
     list_suppressions,
     list_triage,
+    remove_triage,
     triage_by_hash,
+    upsert_triage,
 )
 from services.access_control import (
     ROLE_ADMIN,
@@ -82,6 +84,7 @@ from services.report_access import (
     find_history_record_by_scan_id,
     history_records_for_context,
 )
+from services.findings import build_findings_rollups
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
@@ -94,6 +97,7 @@ from services.scan_runtime_views import (
 )
 from services.trends import compute_history_trends
 from services.web_pages import (
+    render_findings_page,
     render_help_page,
     render_history_page,
     render_inventory_page,
@@ -578,6 +582,10 @@ def _history_records_for_user() -> list[dict]:
             )
         )
     return records
+
+
+def _findings_for_user() -> list[dict]:
+    return build_findings_rollups(_history_records_for_user(), _triage_by_hash())
 
 
 def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
@@ -1329,6 +1337,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return True
             self._render_history_page()
             return True
+        if p == "/findings":
+            if not _is_connected():
+                self._redirect("/login")
+                return True
+            if self._require_browser_session():
+                return True
+            self._render_findings_page()
+            return True
         if p == "/inventory":
             if not _is_connected():
                 self._redirect("/login")
@@ -1525,6 +1541,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._page_generate_html_report(p[6:-14])
         elif p == "/history/delete":
             return self._page_history_delete(body)
+        elif p == "/findings/bulk":
+            return self._page_findings_bulk(body)
         elif p == "/settings/save":
             return self._page_settings_save(body)
         elif p == "/findings/triage":
@@ -1783,6 +1801,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         )
         self._send(200, "text/html; charset=utf-8", html)
 
+    def _render_findings_page(self, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        html = render_findings_page(
+            findings=_findings_for_user(),
+            csrf_token=_current_csrf_token(self),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+            show_scan_results=_has_scan_results(),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
     def _render_results_page(self, scan_id: str, *, notice: str = "", error: str = ""):
         self._redirect("/scan/" + quote(Path(scan_id).name) + "?tab=results")
 
@@ -1953,6 +1984,78 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if result["errors"]:
             return self._render_history_page(error="; ".join(result["errors"]))
         self._redirect(_with_query("/history", notice=f"Deleted {len(result['deleted'])} scan record(s)"))
+
+    def _page_findings_bulk(self, body: dict):
+        if _require_role(self, ROLE_TRIAGE):
+            return
+        hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
+        action = str(body.get("action", "") or "").strip()
+        note = str(body.get("note", "") or "").strip()
+        if not hashes:
+            return self._render_findings_page(error="Select at least one finding.")
+        if action not in {"reviewed", "accepted_risk", "false_positive", "reset"}:
+            return self._render_findings_page(error="Choose a valid bulk action.")
+        if action in {"accepted_risk", "false_positive"} and not note:
+            return self._render_findings_page(error="A note is required for Accept Risk and Suppress.")
+
+        triage_lookup = _triage_by_hash()
+        findings_by_hash = {item.get("hash", ""): item for item in _findings_for_user() if item.get("hash")}
+        current_session = _current_session()
+
+        for hash_ in hashes:
+            finding = findings_by_hash.get(hash_)
+            if action == "reset":
+                remove_triage(SUPPRESSIONS_FILE, hash_)
+                if current_session:
+                    with current_session.state_lock:
+                        active = next((f for f in current_session.findings if f.get("_hash") == hash_), None)
+                        suppressed = next((f for f in current_session.suppressed_findings if f.get("_hash") == hash_), None)
+                        current_session.findings = [f for f in current_session.findings if f.get("_hash") != hash_]
+                        current_session.suppressed_findings = [f for f in current_session.suppressed_findings if f.get("_hash") != hash_]
+                        if active:
+                            current_session.findings.append(_clear_finding_triage(active))
+                        elif suppressed:
+                            current_session.findings.append(_clear_finding_triage(suppressed))
+                        current_session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
+                _audit_event("finding_reset", scan_id=_current_session_snapshot().get("scan_id", ""), finding_hash=hash_, removed=True)
+                continue
+
+            if not finding:
+                continue
+            payload = {
+                "_hash": hash_,
+                "repo": finding.get("repo", ""),
+                "file": finding.get("file", ""),
+                "line": finding.get("line", ""),
+                "provider_or_lib": finding.get("rule", ""),
+                "description": finding.get("description", ""),
+            }
+            upsert_triage(
+                SUPPRESSIONS_FILE,
+                payload,
+                status=action,
+                note=note if action in {"accepted_risk", "false_positive"} else "",
+                marked_by=_operator_state.ctx.username,
+            )
+            triage_meta = triage_lookup.get(hash_, {})
+            if current_session:
+                with current_session.state_lock:
+                    active = next((f for f in current_session.findings if f.get("_hash") == hash_), None)
+                    suppressed = next((f for f in current_session.suppressed_findings if f.get("_hash") == hash_), None)
+                    target = active or suppressed
+                    if target:
+                        updated = _apply_triage_metadata(target, triage_by_hash(SUPPRESSIONS_FILE).get(hash_, triage_meta))
+                        current_session.findings = [f for f in current_session.findings if f.get("_hash") != hash_]
+                        current_session.suppressed_findings = [f for f in current_session.suppressed_findings if f.get("_hash") != hash_]
+                        if action == TRIAGE_FALSE_POSITIVE:
+                            current_session.suppressed_findings.append(updated)
+                        else:
+                            current_session.findings.append(updated)
+                            current_session.findings.sort(key=lambda f: (f.get("severity", 4), f.get("repo", ""), f.get("file", "")))
+            _audit_event("finding_triage", scan_id=_current_session_snapshot().get("scan_id", ""), finding_hash=hash_, triage_status=action, note=note)
+
+        _persist_session_state()
+        self._redirect(_with_query("/findings", notice=f"Updated {len(hashes)} finding(s)"))
 
     def _page_settings_save(self, body: dict):
         if _require_role(self, ROLE_ADMIN):
@@ -2344,7 +2447,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if content_type == "application/x-www-form-urlencoded":
             parsed = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
             body = {}
-            list_keys = {"repo_slugs", "scan_ids"}
+            list_keys = {"repo_slugs", "scan_ids", "hashes"}
             for key, values in parsed.items():
                 if key in list_keys:
                     body[key] = values
