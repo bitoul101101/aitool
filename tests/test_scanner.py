@@ -2065,6 +2065,9 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert "Findings" in html
     assert 'href="/findings"' in html
     assert 'id="findings-table"' in html
+    assert 'class="card findings-shell"' in html
+    assert 'id="findings-form" class="findings-form"' in html
+    assert 'class="table-shell findings-table-shell"' in html
     assert 'id="findings-filter-rule"' in html
     assert 'action="/findings/bulk"' in html
     assert 'id="apply-findings-action-btn"' in html

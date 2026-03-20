@@ -751,8 +751,8 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
 
     body = f"""
 {_flash(notice, error)}
-<section class="card">
-  <form method="post" action="/findings/bulk" id="findings-form">
+  <section class="card findings-shell">
+    <form method="post" action="/findings/bulk" id="findings-form" class="findings-form">
     {_csrf_field(csrf_token)}
     <section class="trend-summary-grid" style="margin-bottom:12px">
       <div class="trend-summary-card"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
@@ -780,8 +780,8 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
       <input type="text" name="note" id="findings-bulk-note" placeholder="Note for Accept Risk / Suppress">
       <button type="submit" class="warn hidden" id="apply-findings-action-btn">Apply to Selected</button>
     </div>
-    <div class="table-shell">
-      <table id="findings-table">
+      <div class="table-shell findings-table-shell">
+        <table id="findings-table">
         <thead>
           <tr>
             <th></th>
