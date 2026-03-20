@@ -2818,6 +2818,39 @@ def test_trends_page_renders_dashboard_controls():
     assert 'data-card-id="findings_over_time"' in html
     assert 'data-card-id="llm_review_failure_rate_by_model"' in html
     assert 'src="/assets/trends_page.js"' in html
+    assert 'class="trend-timeseries"' in html
+    assert 'class="trend-timeseries-svg"' in html
+
+
+def test_top_repos_by_risk_uses_latest_repo_snapshot_not_cumulative_counts():
+    from services.trends import compute_history_trends
+
+    trends = compute_history_trends([
+        {
+            "scan_id": "20260319_100000",
+            "started_at_utc": "2026-03-19T10:00:00Z",
+            "repo_slugs": ["repo1"],
+            "sev": {"critical": 2, "high": 1, "medium": 0, "low": 0},
+            "critical_prod": 50,
+            "high_prod": 10,
+            "total": 60,
+        },
+        {
+            "scan_id": "20260320_100000",
+            "started_at_utc": "2026-03-20T10:00:00Z",
+            "repo_slugs": ["repo1"],
+            "sev": {"critical": 1, "high": 0, "medium": 1, "low": 0},
+            "critical_prod": 2,
+            "high_prod": 1,
+            "total": 4,
+        },
+    ])
+
+    top_repo = trends["top_repos_by_risk"][0]
+    assert top_repo["repo"] == "repo1"
+    assert top_repo["scans"] == 2
+    assert top_repo["critical_prod"] == 2
+    assert top_repo["risk_score"] == 22
 
 
 def test_inventory_page_is_server_rendered():

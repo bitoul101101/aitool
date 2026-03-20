@@ -1104,6 +1104,64 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
             )
         return "".join(rows)
 
+    def _time_series_chart(items: list[dict], *, value_key: str, empty_text: str, y_label: str) -> str:
+        if not items:
+            return f'<div class="empty-state">{_esc(empty_text)}</div>'
+        points = []
+        values = []
+        labels = []
+        for item in items:
+            try:
+                value = int(item.get(value_key, 0) or 0)
+            except Exception:
+                value = 0
+            values.append(value)
+            labels.append(str(item.get("label", "") or ""))
+        max_value = max(values) or 1
+        width = 560
+        height = 180
+        pad_left = 36
+        pad_right = 16
+        pad_top = 18
+        pad_bottom = 28
+        plot_w = max(1, width - pad_left - pad_right)
+        plot_h = max(1, height - pad_top - pad_bottom)
+        step = plot_w / max(1, len(values) - 1)
+        for index, value in enumerate(values):
+            x = pad_left + (step * index if len(values) > 1 else plot_w / 2)
+            y = pad_top + plot_h - ((value / max_value) * plot_h)
+            points.append((x, y, value, labels[index]))
+        line_points = " ".join(f"{x:.1f},{y:.1f}" for x, y, _v, _l in points)
+        area_points = f"{pad_left:.1f},{pad_top + plot_h:.1f} " + line_points + f" {points[-1][0]:.1f},{pad_top + plot_h:.1f}"
+        y_ticks = []
+        for idx in range(4):
+            tick_value = round(max_value * (3 - idx) / 3) if max_value else 0
+            y = pad_top + (plot_h * idx / 3)
+            y_ticks.append(
+                f'<line x1="{pad_left}" y1="{y:.1f}" x2="{width - pad_right}" y2="{y:.1f}" class="trend-ts-grid"></line>'
+                f'<text x="{pad_left - 8}" y="{y + 4:.1f}" class="trend-ts-axis" text-anchor="end">{tick_value}</text>'
+            )
+        x_labels = []
+        for x, _y, _v, label in points:
+            short = label[5:] if len(label) >= 10 and label[4] == "-" else label
+            x_labels.append(f'<text x="{x:.1f}" y="{height - 8}" class="trend-ts-axis" text-anchor="middle">{_esc(short)}</text>')
+        dots = "".join(
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3.5" class="trend-ts-dot"><title>{_esc(label)}: {value}</title></circle>'
+            for x, y, value, label in points
+        )
+        latest_value = values[-1] if values else 0
+        return (
+            '<div class="trend-timeseries">'
+            f'<div class="trend-timeseries-meta"><span class="baseline-label">{_esc(y_label)}</span><strong>{latest_value}</strong></div>'
+            f'<svg viewBox="0 0 {width} {height}" class="trend-timeseries-svg" aria-label="{_esc(y_label)} over time">'
+            + "".join(y_ticks)
+            + f'<polygon points="{area_points}" class="trend-ts-area"></polygon>'
+            + f'<polyline points="{line_points}" class="trend-ts-line"></polyline>'
+            + dots
+            + "".join(x_labels)
+            + '</svg></div>'
+        )
+
     def _table_rows(items: list[dict], columns: list[tuple[str, str]], empty_text: str) -> str:
         if not items:
             return f'<tr><td colspan="{len(columns)}">{_esc(empty_text)}</td></tr>'
@@ -1143,14 +1201,14 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
       {_trend_panel(
         card_id="findings_over_time",
         title="Findings Over Time",
-        body_html=f'<div class="trend-bars">{_bar_rows(list(trends.get("findings_over_time") or []), value_key="value", empty_text="No scan history available for findings trend.")}</div>',
+        body_html=_time_series_chart(list(trends.get("findings_over_time") or []), value_key="value", empty_text="No scan history available for findings trend.", y_label="Findings"),
         col_span=6,
         row_span=8,
       )}
       {_trend_panel(
         card_id="critical_over_time",
         title="Critical in Prod Over Time",
-        body_html=f'<div class="trend-bars">{_bar_rows(list(trends.get("critical_over_time") or []), value_key="value", empty_text="No critical-in-prod trend data available.")}</div>',
+        body_html=_time_series_chart(list(trends.get("critical_over_time") or []), value_key="value", empty_text="No critical-in-prod trend data available.", y_label="Critical in Prod"),
         col_span=6,
         row_span=8,
       )}
@@ -1166,18 +1224,18 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
         col_span=5,
         row_span=8,
       )}
-      {_trend_panel(
-        card_id="top_repos_by_risk",
-        title="Top Repos by Risk",
-        body_html=(
-          '<div class="table-shell trend-table-shell"><table>'
-          '<thead><tr><th>Repo</th><th>Scans</th><th>Risk Score</th><th>Critical in Prod</th><th>Last Findings</th></tr></thead>'
-          f'<tbody>{_table_rows(list(trends.get("top_repos_by_risk") or []), [("repo","Repo"),("scans","Scans"),("risk_score","Risk"),("critical_prod","Critical in Prod"),("latest_total","Last Findings")], "No repository trend data available.")}</tbody>'
-          '</table></div>'
-        ),
-        col_span=7,
-        row_span=14,
-      )}
+        {_trend_panel(
+          card_id="top_repos_by_risk",
+          title="Top Repos by Risk",
+          body_html=(
+            '<div class="table-shell trend-table-shell"><table>'
+            '<thead><tr><th>Repo</th><th>Scans</th><th>Risk Score</th><th>Critical in Prod</th></tr></thead>'
+            f'<tbody>{_table_rows(list(trends.get("top_repos_by_risk") or []), [("repo","Repo"),("scans","Scans"),("risk_score","Risk"),("critical_prod","Critical in Prod")], "No repository trend data available.")}</tbody>'
+            '</table></div>'
+          ),
+          col_span=7,
+          row_span=14,
+        )}
       {_trend_panel(
         card_id="top_noisy_rules",
         title="Top Noisy Rules",

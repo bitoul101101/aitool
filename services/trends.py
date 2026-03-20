@@ -101,10 +101,10 @@ def compute_history_trends(records: list[dict]) -> dict:
         "repo": "",
         "scans": 0,
         "risk_score": 0,
-        "latest_total": 0,
         "critical_prod": 0,
         "high_prod": 0,
         "last_seen": "",
+        "_last_dt": None,
     })
     noisy_rules = Counter()
     suppressed_rules = Counter()
@@ -124,11 +124,14 @@ def compute_history_trends(records: list[dict]) -> dict:
         agg = repo_agg[repo_label]
         agg["repo"] = repo_label
         agg["scans"] += 1
-        agg["risk_score"] += _risk_score(record)
-        agg["latest_total"] = int(record.get("total", record.get("active_total", 0)) or 0)
-        agg["critical_prod"] += int(record.get("critical_prod", 0) or 0)
-        agg["high_prod"] += int(record.get("high_prod", 0) or 0)
-        agg["last_seen"] = str(record.get("completed_at_utc", "") or record.get("started_at_utc", "") or "")
+        record_dt = record.get("_dt")
+        last_dt = agg.get("_last_dt")
+        if last_dt is None or (isinstance(record_dt, datetime) and record_dt >= last_dt):
+            agg["risk_score"] = _risk_score(record)
+            agg["critical_prod"] = int(record.get("critical_prod", 0) or 0)
+            agg["high_prod"] = int(record.get("high_prod", 0) or 0)
+            agg["last_seen"] = str(record.get("completed_at_utc", "") or record.get("started_at_utc", "") or "")
+            agg["_last_dt"] = record_dt
 
         rules = dict((record.get("trend") or {}).get("rules") or {})
         for rule, count in dict(rules.get("active") or {}).items():
@@ -180,6 +183,8 @@ def compute_history_trends(records: list[dict]) -> dict:
         })
 
     top_repos = sorted(repo_agg.values(), key=lambda item: (-int(item["risk_score"]), -int(item["critical_prod"]), item["repo"]))[:8]
+    for item in top_repos:
+        item.pop("_last_dt", None)
     top_noisy_rules = [
         {
             "rule": rule,
