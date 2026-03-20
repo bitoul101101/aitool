@@ -1,7 +1,7 @@
 body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#f6efe4;color:#261507}
 header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:8px 16px;background:#210d1f;color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.18)}
 .brand-lockup{display:flex;align-items:center;justify-self:start;text-decoration:none}
-.brand-lockup img{display:block;height:42px;max-width:min(250px,32vw)}
+.brand-lockup img{display:block;height:34px;max-width:min(230px,28vw);object-fit:contain}
 .header-nav{display:flex;justify-content:center;gap:8px;align-items:center}
 .header-actions{display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:wrap}
 .resume-scan-inline{display:inline-flex;margin-left:8px;vertical-align:middle}
@@ -247,5 +247,5 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .trend-table-shell{max-height:300px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@media (max-width:900px){header{grid-template-columns:1fr}.brand-lockup img{height:38px;max-width:220px}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-support-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.wiki-toc{position:static}}
+@media (max-width:900px){header{grid-template-columns:1fr}.brand-lockup img{height:30px;max-width:190px}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-support-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.wiki-toc{position:static}}
 @media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell,.threat-overview-grid{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}}

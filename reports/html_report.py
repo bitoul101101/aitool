@@ -197,12 +197,8 @@ class HTMLReporter:
     def _embedded_brand_logo(self) -> str:
         assets_dir = Path(__file__).resolve().parent.parent / "assets"
         png_path = assets_dir / "phantomlm_logo.png"
-        if png_path.exists():
-            encoded = b64encode(png_path.read_bytes()).decode("ascii")
-            return f"data:image/png;base64,{encoded}"
-        svg_path = assets_dir / "phantomlm_logo.svg"
-        encoded = b64encode(svg_path.read_bytes()).decode("ascii")
-        return f"data:image/svg+xml;base64,{encoded}"
+        encoded = b64encode(png_path.read_bytes()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
 
     def _load_llm_cache(self) -> dict[str, str]:
         path = self._llm_cache_path()

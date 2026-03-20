@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from html import escape
-from pathlib import Path
 from urllib.parse import quote
 from dateutil import tz
 
@@ -111,13 +110,6 @@ def _current_scan_nav_item(current_scan: dict | None, active: str) -> str:
     return f'<a class="nav current-scan-nav{" active" if active == "current_scan" else ""}" href="/scan/{_esc(scan_id)}?tab=activity">Current Scan</a>'
 
 
-def _brand_logo_src() -> str:
-    assets_dir = Path(__file__).resolve().parent.parent / "assets"
-    if (assets_dir / "phantomlm_logo.png").exists():
-        return "/assets/phantomlm_logo.png"
-    return "/assets/phantomlm_logo.svg"
-
-
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
@@ -147,7 +139,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 <link rel="stylesheet" href="/assets/main.css">
 </head>
 <body class="{body_class}">
-<header><a class="brand-lockup" href="/scan" aria-label="PhantomLM home"><img src="/assets/phantomlm_logo.svg" alt="PhantomLM"></a>{nav if nav else ""}</header>
+<header><a class="brand-lockup" href="/scan" aria-label="PhantomLM home"><img src="/assets/phantomlm_logo.png" alt="PhantomLM"></a>{nav if nav else ""}</header>
 <div id="connection-banner" class="connection-banner hidden" role="status" aria-live="polite">
   <strong>Connection lost.</strong> Trying to reconnect to the local PhantomLM server...
 </div>
@@ -159,11 +151,10 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 
 
 def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = "", error: str = "", csrf_token: str = "") -> bytes:
-    logo_src = _brand_logo_src()
     body = f"""
   {_flash(notice, error)}
   <section class="login-brand">
-    <img src="{logo_src}" alt="PhantomLM">
+    <img src="/assets/phantomlm_logo.png" alt="PhantomLM">
   </section>
   <section class="card login-shell">
   <h2 class="login-title">Login to Bitbucket</h2>
