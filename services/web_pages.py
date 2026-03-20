@@ -1112,75 +1112,111 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
             rows.append("<tr>" + "".join(f"<td>{_esc(item.get(key, ''))}</td>" for key, _label in columns) + "</tr>")
         return "".join(rows)
 
+    def _trend_panel(*, card_id: str, title: str, body_html: str, col_span: int, row_span: int) -> str:
+        return (
+            f'<section class="card trend-card trend-panel" data-card-id="{_esc(card_id)}" '
+            f'data-col-span="{int(col_span)}" data-row-span="{int(row_span)}" '
+            f'style="--col-span:{int(col_span)};--row-span:{int(row_span)}">'
+            f'<div class="trend-card-head">'
+            f'<h2 style="margin:0">{_esc(title)}</h2>'
+            f'<span class="trend-drag-hint" title="Drag to move">Drag</span>'
+            f'</div>'
+            f'<div class="trend-card-body">{body_html}</div>'
+            f'<button type="button" class="trend-resize" aria-label="Resize { _esc(title) }"></button>'
+            f'</section>'
+        )
+
     body = f"""
-{_flash(notice, error)}
-<section class="trends-shell">
-  <section class="trend-summary-grid">
-    <div class="trend-summary-card"><span class="baseline-label">Scans in History</span><strong>{_esc(summary.get("scan_count", 0))}</strong></div>
-    <div class="trend-summary-card"><span class="baseline-label">Findings Captured</span><strong>{_esc(summary.get("total_findings", 0))}</strong></div>
-    <div class="trend-summary-card"><span class="baseline-label">Critical in Prod</span><strong>{_esc(summary.get("critical_prod_total", 0))}</strong></div>
-    <div class="trend-summary-card"><span class="baseline-label">Models Used</span><strong>{_esc(summary.get("models_used", 0))}</strong></div>
-  </section>
-  <section class="trend-grid">
-    <section class="card">
-      <h2 style="margin:0 0 10px">Findings Over Time</h2>
-      <div class="trend-bars">{_bar_rows(list(trends.get("findings_over_time") or []), value_key="value", empty_text="No scan history available for findings trend.")}</div>
+  {_flash(notice, error)}
+  <section class="trends-shell">
+    <section class="trend-summary-grid">
+      <div class="trend-summary-card"><span class="baseline-label">Scans in History</span><strong>{_esc(summary.get("scan_count", 0))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Findings Captured</span><strong>{_esc(summary.get("total_findings", 0))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Critical in Prod</span><strong>{_esc(summary.get("critical_prod_total", 0))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Models Used</span><strong>{_esc(summary.get("models_used", 0))}</strong></div>
     </section>
-    <section class="card">
-      <h2 style="margin:0 0 10px">Critical in Prod Over Time</h2>
-      <div class="trend-bars">{_bar_rows(list(trends.get("critical_over_time") or []), value_key="value", empty_text="No critical-in-prod trend data available.")}</div>
-    </section>
-  </section>
-  <section class="trend-grid">
-    <section class="card">
-      <h2 style="margin:0 0 10px">New vs Fixed Findings</h2>
-      <div class="table-shell trend-table-shell">
-        <table>
-          <thead><tr><th>Date</th><th>Repo</th><th>New</th><th>Fixed</th></tr></thead>
-          <tbody>{_table_rows(list(trends.get("new_fixed_over_time") or []), [("label","Date"),("repo","Repo"),("new_count","New"),("fixed_count","Fixed")], "No baseline-aware trend data available yet.")}</tbody>
-        </table>
-      </div>
-    </section>
-    <section class="card">
-      <h2 style="margin:0 0 10px">Top Repos by Risk</h2>
-      <div class="table-shell trend-table-shell">
-        <table>
-          <thead><tr><th>Repo</th><th>Scans</th><th>Risk Score</th><th>Critical in Prod</th><th>Last Findings</th></tr></thead>
-          <tbody>{_table_rows(list(trends.get("top_repos_by_risk") or []), [("repo","Repo"),("scans","Scans"),("risk_score","Risk"),("critical_prod","Critical in Prod"),("latest_total","Last Findings")], "No repository trend data available.")}</tbody>
-        </table>
-      </div>
-    </section>
-  </section>
-  <section class="trend-grid">
-    <section class="card">
-      <h2 style="margin:0 0 10px">Top Noisy Rules</h2>
-      <div class="table-shell trend-table-shell">
-        <table>
-          <thead><tr><th>Rule</th><th>Hits</th><th>Suppressed</th></tr></thead>
-          <tbody>{_table_rows(list(trends.get("top_noisy_rules") or []), [("rule","Rule"),("hits","Hits"),("suppressed","Suppressed")], "Rule-level trend data will appear after new scans are saved.")}</tbody>
-        </table>
-      </div>
-    </section>
-    <section class="card">
-      <h2 style="margin:0 0 10px">Suppression Rate by Rule</h2>
-      <div class="table-shell trend-table-shell">
-        <table>
-          <thead><tr><th>Rule</th><th>Suppressed</th><th>Total</th><th>Rate</th></tr></thead>
-          <tbody>{_table_rows([{**item, "rate": f"{item.get('rate_pct', 0)}%"} for item in list(trends.get("suppression_rate_by_rule") or [])], [("rule","Rule"),("suppressed","Suppressed"),("total","Total"),("rate","Rate")], "Suppression-rate trends will appear after new scans are saved.")}</tbody>
-        </table>
-      </div>
-    </section>
-  </section>
-  <section class="card">
-    <h2 style="margin:0 0 10px">LLM Review Failure Rate by Model</h2>
-    <div class="table-shell trend-table-shell">
-      <table>
-        <thead><tr><th>Model</th><th>Scans</th><th>Failed Scans</th><th>Failed Batches</th><th>Failure Rate</th><th>Reviewed</th><th>Downgraded</th></tr></thead>
-        <tbody>{_table_rows([{**item, "failure_rate": f"{item.get('failure_rate_pct', 0)}%"} for item in list(trends.get("llm_review_failure_rate_by_model") or [])], [("model","Model"),("scans","Scans"),("failed_scans","Failed Scans"),("failed_batches","Failed Batches"),("failure_rate","Failure Rate"),("reviewed","Reviewed"),("downgraded","Downgraded")], "No LLM trend data available yet.")}</tbody>
-      </table>
+    <div class="trend-dashboard-tools">
+      <div class="muted">Drag cards to reorder. Drag the corner handle to resize. Layout is saved in this browser.</div>
+      <button type="button" class="ghost" id="trends-reset-layout">Reset Layout</button>
     </div>
-  </section>
-</section>"""
+    <section class="trend-grid trend-dashboard" id="trend-dashboard">
+      {_trend_panel(
+        card_id="findings_over_time",
+        title="Findings Over Time",
+        body_html=f'<div class="trend-bars">{_bar_rows(list(trends.get("findings_over_time") or []), value_key="value", empty_text="No scan history available for findings trend.")}</div>',
+        col_span=6,
+        row_span=8,
+      )}
+      {_trend_panel(
+        card_id="critical_over_time",
+        title="Critical in Prod Over Time",
+        body_html=f'<div class="trend-bars">{_bar_rows(list(trends.get("critical_over_time") or []), value_key="value", empty_text="No critical-in-prod trend data available.")}</div>',
+        col_span=6,
+        row_span=8,
+      )}
+      {_trend_panel(
+        card_id="new_fixed_over_time",
+        title="New vs Fixed Findings",
+        body_html=(
+          '<div class="table-shell trend-table-shell"><table>'
+          '<thead><tr><th>Date</th><th>Repo</th><th>New</th><th>Fixed</th></tr></thead>'
+          f'<tbody>{_table_rows(list(trends.get("new_fixed_over_time") or []), [("label","Date"),("repo","Repo"),("new_count","New"),("fixed_count","Fixed")], "No baseline-aware trend data available yet.")}</tbody>'
+          '</table></div>'
+        ),
+        col_span=5,
+        row_span=8,
+      )}
+      {_trend_panel(
+        card_id="top_repos_by_risk",
+        title="Top Repos by Risk",
+        body_html=(
+          '<div class="table-shell trend-table-shell"><table>'
+          '<thead><tr><th>Repo</th><th>Scans</th><th>Risk Score</th><th>Critical in Prod</th><th>Last Findings</th></tr></thead>'
+          f'<tbody>{_table_rows(list(trends.get("top_repos_by_risk") or []), [("repo","Repo"),("scans","Scans"),("risk_score","Risk"),("critical_prod","Critical in Prod"),("latest_total","Last Findings")], "No repository trend data available.")}</tbody>'
+          '</table></div>'
+        ),
+        col_span=7,
+        row_span=14,
+      )}
+      {_trend_panel(
+        card_id="top_noisy_rules",
+        title="Top Noisy Rules",
+        body_html=(
+          '<div class="table-shell trend-table-shell"><table>'
+          '<thead><tr><th>Rule</th><th>Hits</th><th>Suppressed</th></tr></thead>'
+          f'<tbody>{_table_rows(list(trends.get("top_noisy_rules") or []), [("rule","Rule"),("hits","Hits"),("suppressed","Suppressed")], "Rule-level trend data will appear after new scans are saved.")}</tbody>'
+          '</table></div>'
+        ),
+        col_span=5,
+        row_span=6,
+      )}
+      {_trend_panel(
+        card_id="suppression_rate_by_rule",
+        title="Suppression Rate by Rule",
+        body_html=(
+          '<div class="table-shell trend-table-shell"><table>'
+          '<thead><tr><th>Rule</th><th>Suppressed</th><th>Total</th><th>Rate</th></tr></thead>'
+          f'<tbody>{_table_rows([{**item, "rate": f"{item.get("rate_pct", 0)}%"} for item in list(trends.get("suppression_rate_by_rule") or [])], [("rule","Rule"),("suppressed","Suppressed"),("total","Total"),("rate","Rate")], "Suppression-rate trends will appear after new scans are saved.")}</tbody>'
+          '</table></div>'
+        ),
+        col_span=5,
+        row_span=6,
+      )}
+      {_trend_panel(
+        card_id="llm_review_failure_rate_by_model",
+        title="LLM Review Failure Rate by Model",
+        body_html=(
+          '<div class="table-shell trend-table-shell"><table>'
+          '<thead><tr><th>Model</th><th>Scans</th><th>Failed Scans</th><th>Failed Batches</th><th>Failure Rate</th><th>Reviewed</th><th>Downgraded</th></tr></thead>'
+          f'<tbody>{_table_rows([{**item, "failure_rate": f"{item.get("failure_rate_pct", 0)}%"} for item in list(trends.get("llm_review_failure_rate_by_model") or [])], [("model","Model"),("scans","Scans"),("failed_scans","Failed Scans"),("failed_batches","Failed Batches"),("failure_rate","Failure Rate"),("reviewed","Reviewed"),("downgraded","Downgraded")], "No LLM trend data available yet.")}</tbody>'
+          '</table></div>'
+        ),
+        col_span=12,
+        row_span=8,
+      )}
+    </section>
+  </section>"""
+    body += '<script src="/assets/trends_page.js" defer></script>'
     return _layout(title="Trends", body=body, active="trends", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
@@ -1235,13 +1271,13 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
     body = f"""
 {_flash(notice, error)}
 <section class="wiki-shell">
-  <section class="card wiki-doc">
-    <div class="wiki-header">
-      <div>
-        <h2 style="margin:0">PhantomLM Wiki</h2>
-        <p class="muted" style="margin:6px 0 0">Reference documentation for PhantomLM, including architecture, workflows, exports, integrations, and operating guidance.</p>
+    <section class="card wiki-doc">
+      <div class="wiki-header">
+        <div class="wiki-title-lockup">
+          <img src="/assets/phantomlm_logo.png" alt="PhantomLM">
+          <h2 style="margin:0">PhantomLM Wiki</h2>
+        </div>
       </div>
-    </div>
 
     <section id="overview" class="wiki-section">
       <h3>Tool Description</h3>

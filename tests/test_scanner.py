@@ -2797,6 +2797,29 @@ def test_help_page_is_server_rendered():
     assert "Trying to reconnect to the local PhantomLM server" in html
 
 
+def test_trends_page_renders_dashboard_controls():
+    import app_server as srv
+
+    html = srv.render_trends_page(
+        trends={
+            "summary": {"scan_count": 1, "total_findings": 2, "critical_prod_total": 1, "models_used": 1},
+            "findings_over_time": [{"label": "2026-03-20", "repo": "repo1", "value": 2}],
+            "critical_over_time": [{"label": "2026-03-20", "repo": "repo1", "value": 1}],
+            "new_fixed_over_time": [],
+            "top_repos_by_risk": [],
+            "top_noisy_rules": [],
+            "suppression_rate_by_rule": [],
+            "llm_review_failure_rate_by_model": [],
+        }
+    ).decode("utf-8")
+
+    assert 'id="trend-dashboard"' in html
+    assert 'id="trends-reset-layout"' in html
+    assert 'data-card-id="findings_over_time"' in html
+    assert 'data-card-id="llm_review_failure_rate_by_model"' in html
+    assert 'src="/assets/trends_page.js"' in html
+
+
 def test_inventory_page_is_server_rendered():
     import app_server as srv
 

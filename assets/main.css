@@ -5,7 +5,7 @@ header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12
 .header-nav{display:flex;justify-content:center;gap:8px;align-items:center}
 .header-actions{display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:wrap}
 .resume-scan-inline{display:inline-flex;margin-left:8px;vertical-align:middle}
-.nav{color:#f4dff9;text-decoration:none;padding:6px 10px;border-radius:8px;font-size:13px}
+.nav{color:#f4dff9;text-decoration:none;padding:6px 10px;border-radius:8px;font-size:15px;font-weight:700}
 .nav.active,.nav:hover{background:#5d1ea3;color:#fff}
 .current-scan-nav{background:#f5e7a1;color:#5d3b15}
 .current-scan-nav:hover,.current-scan-nav.active{background:#efd56c;color:#4a210c}
@@ -72,13 +72,15 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .repo-row input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
 .repo-row span{display:block}
 .running-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;align-items:start;height:calc(100vh - 132px);min-height:0}
-.wiki-shell{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;align-items:start}
-.wiki-doc{max-width:none}
-.wiki-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px}
+.wiki-shell{display:flex;gap:14px;align-items:flex-start}
+.wiki-doc{flex:1 1 auto;min-width:0;max-width:none}
+.wiki-header{display:flex;justify-content:center;gap:12px;align-items:center;margin-bottom:10px}
+.wiki-title-lockup{display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}
+.wiki-title-lockup img{display:block;height:56px;max-width:220px;object-fit:contain}
 .wiki-section{scroll-margin-top:82px}
 .wiki-section + .wiki-section{margin-top:18px}
 .wiki-callout{margin-top:10px;padding:10px 12px;border-radius:10px;background:#f7efe5;border:1px solid #e6cfb4;color:#5c3a18}
-.wiki-toc{grid-column:2;position:sticky;top:78px;align-self:start;justify-self:stretch}
+.wiki-toc{flex:0 0 240px;position:sticky;top:78px;align-self:flex-start;margin-left:auto;width:240px}
 .wiki-toc-links{display:grid;gap:6px}
 .wiki-toc-links a{display:block;padding:6px 8px;border-radius:8px;text-decoration:none;color:#5d3612;background:#f9f1e8}
 .wiki-toc-links a:hover{background:#efdfcd}
@@ -197,12 +199,20 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
 .table-shell tbody tr:hover{background:#f4eadb}
-.findings-shell{height:calc(100vh - 118px);display:flex;flex-direction:column;min-height:0}
+.findings-shell{height:calc(100vh - 118px);display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .findings-form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
 .findings-form .trend-summary-grid,.findings-form .history-toolbar{flex:0 0 auto}
 .findings-table-shell{flex:1 1 auto;min-height:0;max-height:none}
-#findings-table{font-size:11px}
-#findings-table th,#findings-table td{font-size:11px;line-height:1.25}
+.findings-shell,.inventory-page-grid,.trends-shell{font-size:13px}
+#findings-table{font-size:13px}
+#findings-table th,#findings-table td{font-size:13px;line-height:1.25}
+#history-table{font-size:13px}
+#history-table th,#history-table td{font-size:13px;line-height:1.25}
+#inventory-table{font-size:13px}
+#inventory-table th,#inventory-table td{font-size:13px;line-height:1.25}
+.history-pagination,.history-pagination .page-info{font-size:13px}
+.history-toolbar,.inventory-toolbar{font-size:13px}
+.findings-form .history-pagination{flex:0 0 auto;margin-top:8px}
 .threat-table-shell{max-height:320px}
 .threat-table-shell table{table-layout:fixed}
 .threat-table-shell th,.threat-table-shell td{font-size:11px;line-height:1.35;word-break:break-word}
@@ -238,20 +248,31 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .results-frame{width:100%;height:calc(100vh - 150px);min-height:560px;border:1px solid #d8b995;border-radius:14px;background:#fff}
 .trends-shell{display:grid;gap:10px}
 .trend-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.trend-summary-card{background:#fffaf4;border:1px solid #d8b995;border-radius:12px;padding:9px 10px}
-.trend-summary-card strong{display:block;font-size:20px;line-height:1.05}
-.trend-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.trend-grid .card{padding:10px}
-.trend-bars{display:grid;gap:6px}
-.trend-bar-row{display:grid;grid-template-columns:120px 1fr 40px;gap:8px;align-items:center}
+.trend-summary-card{background:#fffaf4;border:1px solid #d8b995;border-radius:12px;padding:8px 10px;min-height:74px}
+.trend-summary-card strong{display:block;font-size:18px;line-height:1.05}
+.trend-dashboard-tools{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.trend-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
+.trend-dashboard{grid-auto-rows:28px}
+.trend-card{padding:9px 10px}
+.trend-panel{position:relative;display:flex;flex-direction:column;min-height:0;grid-column:span var(--col-span,4);grid-row:span var(--row-span,8)}
+.trend-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;cursor:grab}
+.trend-panel.dragging{opacity:.55}
+.trend-panel.drop-target{outline:2px dashed #8a6c50;outline-offset:2px}
+.trend-panel .trend-card-body{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+.trend-drag-hint{font-size:11px;font-weight:700;color:#7a5d3e;text-transform:uppercase;letter-spacing:.06em}
+.trend-resize{position:absolute;right:8px;bottom:8px;width:16px;height:16px;padding:0;border-radius:4px;background:linear-gradient(135deg,transparent 0 45%,#8a6c50 45% 55%,#cda274 55% 100%);border:1px solid #d8b995;cursor:nwse-resize}
+.trend-grid .card,.trend-summary-card,.trend-table-shell table,.trend-bars,.trend-bar-meta,.trend-bar-value{font-size:13px}
+.trend-bars{display:grid;gap:5px}
+.trend-bar-row{display:grid;grid-template-columns:108px 1fr 36px;gap:6px;align-items:center}
 .trend-bar-meta{display:grid;gap:2px}
 .trend-bar-meta strong{font-size:12px}
 .trend-bar-meta .muted{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .trend-bar-track{height:10px;border-radius:999px;background:#efe1cf;overflow:hidden}
 .trend-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#6d3514,#b8682b)}
 .trend-bar-value{font-size:12px;font-weight:700;text-align:right;color:#5d3b15}
-.trend-table-shell{max-height:300px}
+.trend-table-shell{max-height:240px}
+.trend-panel[style*="--row-span:14"] .trend-table-shell{max-height:490px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@media (max-width:900px){header{grid-template-columns:1fr}.brand-lockup img{height:34px;max-width:210px}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-support-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.wiki-toc{position:static}}
+@media (max-width:900px){header{grid-template-columns:1fr}.brand-lockup img{height:34px;max-width:210px}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-support-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.trend-dashboard-tools{flex-direction:column;align-items:flex-start}.trend-panel{grid-column:1 / -1!important;grid-row:auto!important}.trend-card-head{cursor:default}.trend-resize{display:none}.wiki-toc{position:static}}
 @media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell,.threat-overview-grid{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}.findings-shell{height:auto}.findings-table-shell{max-height:calc(100vh - 260px)}}
