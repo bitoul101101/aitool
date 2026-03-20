@@ -241,6 +241,51 @@ def test_shell_cmd_from_llm_ignores_fixed_argv_subprocess_calls():
     )
 
     assert "shell_cmd_from_llm" not in {f["provider_or_lib"] for f in findings}
+    assert "unsafe_code_exec" not in {f["provider_or_lib"] for f in findings}
+
+
+def test_unsafe_code_exec_ignores_subprocess_exception_handling():
+    detector = AIUsageDetector()
+    code = (
+        "import subprocess\n"
+        "def gpu_stats():\n"
+        "    try:\n"
+        '        return subprocess.run(["nvidia-smi"], capture_output=True, text=True).stdout\n'
+        "    except (OSError, subprocess.SubprocessError, ValueError):\n"
+        '        return "Unavailable"\n'
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".py",
+        "app_server.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    assert "unsafe_code_exec" not in {f["provider_or_lib"] for f in findings}
+
+
+def test_app_server_gpu_snapshot_does_not_trigger_shell_execution_rules():
+    detector = AIUsageDetector()
+    content = Path(r"C:\aitool\app_server.py").read_text(encoding="utf-8")
+
+    findings = detector._scan_text_file_from_content(
+        content,
+        ".py",
+        "app_server.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    risky = {
+        (f["provider_or_lib"], int(f.get("line", 0) or 0))
+        for f in findings
+        if f.get("provider_or_lib") in {"shell_cmd_from_llm", "unsafe_code_exec"}
+    }
+    assert not risky
 
 
 def test_sql_in_tool_description_ignores_parameterized_sql_without_tool_context():

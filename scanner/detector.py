@@ -77,6 +77,10 @@ _TOOL_MARKER_RE = re.compile(r"Tool\s*\(|BaseTool|StructuredTool|@tool\b", re.IG
 _FIXED_ARGV_SUBPROCESS_RE = re.compile(
     r"^\s*\w+\s*=\s*subprocess\.(?:run|call|Popen|check_output|check_call)\s*\($"
 )
+_FIXED_ARGV_SUBPROCESS_WINDOW_RE = re.compile(
+    r"subprocess\.(?:run|call|Popen|check_output|check_call)\s*\(\s*\[",
+    re.IGNORECASE | re.DOTALL,
+)
 _REPORT_PROVIDER_MAP_RE = re.compile(r'^\s*"[^"]+"\s*:\s*"[^"]+"')
 _SELF_SCAN_IGNORED_PATHS = {
     "scanner/patterns.py",
@@ -448,7 +452,19 @@ def _should_ignore_internal_match(
         return True
 
     if lib == "shell_cmd_from_llm":
-        if _FIXED_ARGV_SUBPROCESS_RE.match(line) and "shell=True" not in window:
+        if (
+            (_FIXED_ARGV_SUBPROCESS_RE.match(line) or _FIXED_ARGV_SUBPROCESS_WINDOW_RE.search(window))
+            and "shell=True" not in window
+        ):
+            return True
+
+    if lib == "unsafe_code_exec":
+        if "except" in line and "subprocess." in line:
+            return True
+        if (
+            (_FIXED_ARGV_SUBPROCESS_RE.match(line) or _FIXED_ARGV_SUBPROCESS_WINDOW_RE.search(window))
+            and "shell=True" not in window
+        ):
             return True
 
     if lib == "sql_in_tool_description":
@@ -834,8 +850,8 @@ class AIUsageDetector:
                 line_no    = stripped[:m.start()].count("\n") + 1
                 match_text = m.group(0)
                 raw_line = lines[line_no - 1] if line_no - 1 < len(lines) else ""
-                win_start = max(0, line_no - 3)
-                win_end = min(len(lines), line_no + 2)
+                win_start = max(0, line_no - 8)
+                win_end = min(len(lines), line_no + 4)
                 local_window = "\n".join(lines[win_start:win_end])
 
                 if _should_ignore_internal_match(
