@@ -36,17 +36,18 @@ _CONFIG_LIBS = {
 }
 _CONFIG_EXTENSIONS = {
     ".env", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
-    ".tf", ".hcl",
+    ".tf", ".hcl", ".xml", ".properties",
     "requirements.txt", "pyproject.toml", "package.json",
     "Dockerfile", ".Dockerfile",
 }
+_HYBRID_EXTENSIONS = {".gradle", ".kts"}
 
 _CODE_EXTENSIONS = {
     '.py', '.pyw',
     '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.vue', '.svelte',
     '.java', '.go', '.cs', '.c', '.cpp', '.h', '.hpp',
     '.rs', '.swift', '.kt', '.scala', '.groovy',
-    '.rb', '.sh', '.bash', '.ps1', '.r', '.pl', '.sql',
+    '.rb', '.sh', '.bash', '.ps1', '.r', '.pl', '.sql', '.gradle', '.kts',
 }
 
 _SECRET_FINDING_LIBS = {
@@ -246,7 +247,7 @@ _SQL_LINE_CMT_RE  = re.compile(r'(--[^\n]*)')
 _PY_SUFFIXES      = {'.py', '.pyw'}
 _JS_SUFFIXES      = {'.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.vue', '.svelte'}
 _C_FAMILY_SUFFIXES = {'.java', '.go', '.cs', '.c', '.cpp', '.h', '.hpp',
-                      '.rs', '.swift', '.kt', '.scala', '.groovy'}
+                      '.rs', '.swift', '.kt', '.scala', '.groovy', '.gradle', '.kts'}
 _HASH_CMT_SUFFIXES = {'.rb', '.sh', '.bash', '.ps1', '.r', '.pl'}
 _SQL_SUFFIXES      = {'.sql'}
 
@@ -905,7 +906,8 @@ class AIUsageDetector:
         """
         from pathlib import PurePosixPath
         name      = PurePosixPath(rel_path).name
-        is_config = (suffix in _CONFIG_EXTENSIONS or name in _CONFIG_EXTENSIONS)
+        is_hybrid = suffix in _HYBRID_EXTENSIONS
+        is_config = (suffix in _CONFIG_EXTENSIONS or name in _CONFIG_EXTENSIONS or is_hybrid)
         is_code   = suffix in _CODE_EXTENSIONS
 
         stripped  = _strip_comments(content, suffix) if is_code else content
@@ -916,9 +918,9 @@ class AIUsageDetector:
 
         for rule in self._compiled:
             lib = rule.get("provider_or_lib", "")
-            if lib in _CONFIG_LIBS and is_code:
+            if lib in _CONFIG_LIBS and is_code and not is_hybrid:
                 continue
-            if lib not in _CONFIG_LIBS and is_config:
+            if lib not in _CONFIG_LIBS and is_config and not is_hybrid:
                 continue
             guard = rule.get("_guard")
             if guard and not guard.search(stripped):

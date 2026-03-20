@@ -2536,6 +2536,39 @@ def test_iter_files_includes_high_value_supported_file_types(tmp_path):
         assert name not in found
 
 
+def test_gradle_files_get_comment_stripping_and_config_rule_handling():
+    detector = AIUsageDetector()
+    code = (
+        "// openai.api_key = 'sk-comment-only'\n"
+        "openai>=1.0\n"
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".gradle",
+        "build.gradle",
+        "repo",
+    )
+
+    libs = {f["provider_or_lib"] for f in findings}
+    assert "dependency_declaration" in libs
+    assert "openai" not in libs
+
+
+def test_properties_files_are_treated_as_config_for_entropy_secrets():
+    detector = AIUsageDetector()
+    code = 'API_TOKEN="abcdefghijklmnopqrstuvwxyzABCDEFG1234567890"\n'
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".properties",
+        "application.properties",
+        "repo",
+    )
+
+    assert "entropy_secret" in {f["provider_or_lib"] for f in findings}
+
+
 def test_results_page_is_server_rendered():
     import app_server as srv
 
