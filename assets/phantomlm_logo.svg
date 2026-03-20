@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 160" role="img" aria-labelledby="title desc">
+  <title id="title">PhantomLM</title>
+  <desc id="desc">PhantomLM logo with a purple emblem and wordmark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a071a"/>
+      <stop offset="100%" stop-color="#120512"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#cf9cff"/>
+      <stop offset="45%" stop-color="#8d4dff"/>
+      <stop offset="100%" stop-color="#4b11db"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#f6d6ff"/>
+      <stop offset="30%" stop-color="#b56cff"/>
+      <stop offset="100%" stop-color="#4310bf"/>
+    </radialGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="720" height="160" rx="24" fill="url(#bg)"/>
+  <g transform="translate(20 18)">
+    <circle cx="74" cy="62" r="10" fill="url(#core)" filter="url(#softGlow)"/>
+    <g fill="none" stroke="url(#glow)" stroke-linecap="round">
+      <path d="M6 72C34 56 62 42 95 36c24-4 46 0 62 12" stroke-width="7"/>
+      <path d="M10 90c26-18 52-30 80-35 24-4 43 0 58 10" stroke-width="6" opacity=".9"/>
+      <path d="M18 106c22-18 46-28 72-30 18-2 34 1 48 10" stroke-width="5" opacity=".78"/>
+      <path d="M94 9c24 5 42 17 55 36 12 18 15 37 11 58-3 17-11 32-22 44" stroke-width="5" opacity=".85"/>
+      <path d="M111 8c23 10 39 25 48 45 9 20 11 39 5 58" stroke-width="4" opacity=".65"/>
+      <path d="M127 16c18 12 30 28 35 47" stroke-width="3" opacity=".55"/>
+    </g>
+    <path d="M43 128V28h34c25 0 40 12 40 31 0 17-11 27-28 31l24 38H86L66 93h-7v35zm16-49h15c17 0 26-6 26-18 0-11-8-17-24-17H59z" fill="url(#glow)"/>
+    <circle cx="32" cy="20" r="2" fill="#7d48ff"/>
+    <circle cx="20" cy="46" r="1.8" fill="#b774ff"/>
+    <circle cx="142" cy="26" r="2.2" fill="#8d4dff"/>
+    <circle cx="150" cy="86" r="2" fill="#b774ff"/>
+    <circle cx="124" cy="120" r="1.7" fill="#7d48ff"/>
+  </g>
+  <g transform="translate(200 0)" fill="url(#glow)">
+    <text x="0" y="101" font-family="Segoe UI, Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="-1.5">PhantomLM</text>
+  </g>
+</svg>

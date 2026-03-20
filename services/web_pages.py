@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from html import escape
+from pathlib import Path
 from urllib.parse import quote
 from dateutil import tz
 
@@ -110,6 +111,13 @@ def _current_scan_nav_item(current_scan: dict | None, active: str) -> str:
     return f'<a class="nav current-scan-nav{" active" if active == "current_scan" else ""}" href="/scan/{_esc(scan_id)}?tab=activity">Current Scan</a>'
 
 
+def _brand_logo_src() -> str:
+    assets_dir = Path(__file__).resolve().parent.parent / "assets"
+    if (assets_dir / "phantomlm_logo.png").exists():
+        return "/assets/phantomlm_logo.png"
+    return "/assets/phantomlm_logo.svg"
+
+
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
@@ -139,7 +147,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 <link rel="stylesheet" href="/assets/main.css">
 </head>
 <body class="{body_class}">
-<header><h1>PhantomLM</h1>{nav if nav else ""}</header>
+<header><a class="brand-lockup" href="/scan" aria-label="PhantomLM home"><img src="/assets/phantomlm_logo.svg" alt="PhantomLM"></a>{nav if nav else ""}</header>
 <div id="connection-banner" class="connection-banner hidden" role="status" aria-live="polite">
   <strong>Connection lost.</strong> Trying to reconnect to the local PhantomLM server...
 </div>
@@ -151,9 +159,13 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 
 
 def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = "", error: str = "", csrf_token: str = "") -> bytes:
+    logo_src = _brand_logo_src()
     body = f"""
-{_flash(notice, error)}
-<section class="card login-shell">
+  {_flash(notice, error)}
+  <section class="login-brand">
+    <img src="{logo_src}" alt="PhantomLM">
+  </section>
+  <section class="card login-shell">
   <h2 class="login-title">Login to Bitbucket</h2>
   <p class="muted" style="margin:10px 0 0;text-align:center">Scan Bitbucket repositories to detect AI usage, insecure AI patterns, and policy-relevant findings.</p>
   <form method="post" action="/login" class="login-grid" style="margin-top:18px">
@@ -496,18 +508,6 @@ def render_scan_page(
         </div>
       </div>
     </section>"""
-    llm_batches_html = (
-        '<section class="card" id="llm-batches-card">'
-        '<h2 style="margin:0 0 8px;font-size:15px">LLM Batch Timings</h2>'
-        '<div class="baseline-summary"><div class="hardware-grid">'
-        + "".join(
-            f'<div class="hardware-stat"><span class="baseline-label">Batch {int(item.get("batch", 0))}/{int(item.get("total_batches", 0))}</span>'
-            f'<strong>{_esc(_fmt_duration(item.get("duration_s", 0)))}{" fail" if item.get("failed") else ""}</strong></div>'
-            for item in llm_batch_metrics[-5:]
-        )
-        + '</div></div></section>'
-        if llm_batch_metrics else ""
-    )
     errors_html = (
         '<section class="card" id="scan-errors-card">'
         '<h2 style="margin:0 0 8px;font-size:15px">Errors</h2>'
@@ -600,7 +600,6 @@ def render_scan_page(
       <div class="timeline" id="phase-timeline">{timeline_html}</div>
     </section>
     {hardware_html}
-    {llm_batches_html}
     {errors_html}
     {baseline_html}
     {inventory_html}

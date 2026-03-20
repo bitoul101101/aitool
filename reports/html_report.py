@@ -6,6 +6,7 @@ AI Security & Compliance Monitoring
 import hashlib
 import json
 import urllib.error
+from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Dict, Any
@@ -192,6 +193,16 @@ class HTMLReporter:
 
     def _llm_cache_path(self) -> Path:
         return self.output_dir / "ai_report_llm_cache.json"
+
+    def _embedded_brand_logo(self) -> str:
+        assets_dir = Path(__file__).resolve().parent.parent / "assets"
+        png_path = assets_dir / "phantomlm_logo.png"
+        if png_path.exists():
+            encoded = b64encode(png_path.read_bytes()).decode("ascii")
+            return f"data:image/png;base64,{encoded}"
+        svg_path = assets_dir / "phantomlm_logo.svg"
+        encoded = b64encode(svg_path.read_bytes()).decode("ascii")
+        return f"data:image/svg+xml;base64,{encoded}"
 
     def _load_llm_cache(self) -> dict[str, str]:
         path = self._llm_cache_path()
@@ -622,6 +633,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
   padding:8px 14px 6px;
   border-bottom:1px solid rgba(255,255,255,.1);
 }
+.hdr-brand img{display:block;max-width:min(320px,40vw);max-height:88px;object-fit:contain}
 .hdr-band-copy{display:flex;flex-direction:column;gap:2px}
 .hdr-band-title{
   font-size:17px;font-weight:800;color:#fff;
@@ -1108,6 +1120,7 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
         return f"""<div class="hdr {risk_cls}">
   <div class="hdr-accent"></div>
   <div class="hdr-band">
+    <div class="hdr-brand"><img src="{self._embedded_brand_logo()}" alt="PhantomLM"></div>
     <div class="hdr-band-copy">
       <div class="hdr-band-title">AI Security &amp; Compliance Scan Report</div>
       <div class="hdr-band-subtitle">Findings summary and detailed evidence</div>

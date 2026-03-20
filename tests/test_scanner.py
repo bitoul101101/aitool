@@ -1418,6 +1418,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="suppressed-section">' not in html
     assert 'id="new-scan-btn"' in html
     assert "Performance" in html
+    assert "LLM Batch Timings" not in html
     assert "LLM Stats" not in html
     assert html.index("Phase Timeline") < html.index("Performance")
     assert 'href="/scan/20260317_154037?tab=results"' in html
