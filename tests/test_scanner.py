@@ -2340,7 +2340,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'src="/assets/findings_page.js"' in html
     assert "File:Line" in html
     assert "<th>Note</th>" not in html
-    assert 'sev-chip sev-1' in html
+    assert 'sev-chip sev-critical' in html
     assert "Debug mode in production" in html
     assert '?tab=results' in html
 
@@ -3220,7 +3220,10 @@ def test_login_page_centers_login_action():
     html = srv.render_login_page(bitbucket_url=srv.BITBUCKET_URL, has_saved_pat=False).decode("utf-8")
 
     assert 'href="/assets/main.css"' in html
-    assert '<div class="login-actions"><button type="submit">Login</button></div>' in html
+    assert '<div class="login-actions"><button type="submit" autofocus>Login</button></div>' in html
+    assert '<body class="login-page">' in html
+    assert '<header>' not in html
+    assert '<section class="login-brand">' in html
 
 
 def test_allowed_origin_only_permits_local_app_hosts():

@@ -11,8 +11,9 @@ header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12
 .current-scan-nav:hover,.current-scan-nav.active{background:#efd56c;color:#4a210c}
 .exit-form{margin:0}
 main{max-width:1340px;margin:0 auto;padding:16px 18px}
-.login-page main{min-height:calc(100vh - 70px);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}
-.login-brand{display:flex;justify-content:center;align-items:center;max-width:min(92vw,900px)}
+.login-page main{min-height:100vh;display:grid;grid-template-rows:minmax(0,1fr) auto auto minmax(0,1.1fr);align-items:center;justify-items:center;gap:16px;padding:20px 18px 28px}
+.login-page .toast-wrap{grid-row:1;position:static;left:auto;bottom:auto;align-self:start;width:min(100%,520px)}
+.login-brand{grid-row:2;display:flex;justify-content:center;align-items:center;max-width:min(92vw,900px)}
 .login-brand img{display:block;max-width:100%;max-height:clamp(90px,22vh,200px);object-fit:contain}
 .card{background:#fffaf4;border:1px solid #d8b995;border-radius:14px;padding:14px}
 .notice,.error{padding:10px 12px;border-radius:10px}
@@ -42,7 +43,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .checkline{display:flex;align-items:center;gap:8px;font-size:14px;text-transform:none;color:#261507}
 .checkline input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
-.login-shell{width:min(100%,420px);margin:0 auto}
+.login-shell{grid-row:3;width:min(100%,420px);margin:0 auto}
 .login-grid{display:grid;gap:14px}
 .login-actions{display:flex;justify-content:center}
 .login-title{text-align:center;margin:0 0 6px}
@@ -136,10 +137,10 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .score-strip{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
 .score-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid #d8bf9f;border-radius:999px;background:#f6eee4;color:#5b3a16;font-size:10px;font-weight:600}
 .sev-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;color:#fff}
-.sev-1{background:#b42318}
-.sev-2{background:#e05c00}
-.sev-3{background:#b07a00}
-.sev-4{background:#4f7b39}
+.sev-1,.sev-critical{background:#b42318}
+.sev-2,.sev-high{background:#e05c00}
+.sev-3,.sev-medium{background:#b07a00}
+.sev-4,.sev-low{background:#4f7b39}
 .finding-snippet{margin-top:2px;padding:6px 8px;border-radius:8px;background:#f6ebdc;color:#5a4021;font-family:Cascadia Code,Consolas,monospace;font-size:10px;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}
 .triage-state{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;background:#efe1cf;color:#5d3b15}
 .triage-reviewed{background:#e3efff;color:#164a95}

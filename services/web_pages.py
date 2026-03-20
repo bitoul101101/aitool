@@ -115,6 +115,7 @@ def _current_scan_nav_item(current_scan: dict | None, active: str) -> str:
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
+    header_html = ""
     if show_nav:
         current_scan_nav = _current_scan_nav_item(current_scan, active)
         nav = (
@@ -132,6 +133,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
             + f'<form class="exit-form" method="post" action="/app/exit">{_csrf_field(csrf_token)}<button type="submit" class="warn">Exit</button></form>'
             + "</div>"
         )
+        header_html = f'<header><a class="brand-lockup" href="/scan" aria-label="PhantomLM home"><img src="/assets/phantomlm_logo.png" alt="PhantomLM"></a>{nav}</header>'
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -141,7 +143,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 <link rel="stylesheet" href="/assets/main.css">
 </head>
 <body class="{body_class}">
-<header><a class="brand-lockup" href="/scan" aria-label="PhantomLM home"><img src="/assets/phantomlm_logo.png" alt="PhantomLM"></a>{nav if nav else ""}</header>
+{header_html}
 <div id="connection-banner" class="connection-banner hidden" role="status" aria-live="polite">
   <strong>Connection lost.</strong> Trying to reconnect to the local PhantomLM server...
 </div>
@@ -170,7 +172,7 @@ def render_login_page(*, bitbucket_url: str, has_saved_pat: bool, notice: str = 
     <label class="checkline"><input type="checkbox" name="use_saved_token" value="true"><span>Use saved token</span></label>
     <label class="checkline"><input type="checkbox" name="remember" value="true"><span>Remember token locally</span></label>
     <div class="muted">Saved token available: {"Yes" if has_saved_pat else "No"}</div>
-    <div class="login-actions"><button type="submit">Login</button></div>
+    <div class="login-actions"><button type="submit" autofocus>Login</button></div>
   </form>
 </section>"""
     return _layout(title="Login", body=body, show_nav=False, csrf_token=csrf_token)
@@ -285,7 +287,13 @@ def render_scan_page(
     def severity_chip(detail: dict) -> str:
         sev = int(detail.get("severity", 4) or 4)
         label = detail.get("severity_label", str(sev))
-        return f'<span class="sev-chip sev-{sev}">{_esc(label)}</span>'
+        sev_css = {
+            1: "sev-critical",
+            2: "sev-high",
+            3: "sev-medium",
+            4: "sev-low",
+        }.get(sev, "sev-low")
+        return f'<span class="sev-chip {sev_css}">{_esc(label)}</span>'
 
     def snippet_block(detail: dict) -> str:
         snippet = str(detail.get("snippet", "") or "").strip()
@@ -735,7 +743,13 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     def _severity_chip(detail: dict) -> str:
         sev = int(detail.get("severity", 4) or 4)
         label = detail.get("severity_label", str(sev))
-        return f'<span class="sev-chip sev-{sev}">{_esc(label)}</span>'
+        sev_css = {
+            1: "sev-critical",
+            2: "sev-high",
+            3: "sev-medium",
+            4: "sev-low",
+        }.get(sev, "sev-low")
+        return f'<span class="sev-chip {sev_css}">{_esc(label)}</span>'
 
     rows = []
     for item in findings:
