@@ -23,16 +23,6 @@ def _record_datetime(record: dict) -> tuple[datetime | None, str]:
     return None, raw
 
 
-def _repo_label(record: dict) -> str:
-    repos = [str(item).strip() for item in list(record.get("repo_slugs", record.get("repos", [])) or []) if str(item).strip()]
-    if repos:
-        return ", ".join(repos)
-    local_path = str(record.get("local_repo_path", "") or "").strip()
-    if local_path:
-        return Path(local_path).name or local_path
-    return "Unknown"
-
-
 def _risk_score(record: dict) -> int:
     sev = dict(record.get("sev") or {})
     critical = int(sev.get("critical", 0) or 0)
@@ -75,13 +65,79 @@ def _load_llm_metrics_from_log(record: dict) -> dict:
     }
 
 
+def _repo_entries(record: dict) -> list[dict]:
+    repos = [str(item).strip() for item in list(record.get("repo_slugs", record.get("repos", [])) or []) if str(item).strip()]
+    if not repos:
+        local_path = str(record.get("local_repo_path", "") or "").strip()
+        if local_path:
+            repos = [Path(local_path).name or local_path]
+    if not repos:
+        repos = ["Unknown"]
+
+    per_repo = dict(record.get("per_repo") or {})
+    findings = list(record.get("findings") or [])
+    finding_counts = Counter()
+    new_counts = Counter()
+    for finding in findings:
+        repo = str(finding.get("repo", "") or "").strip()
+        if not repo:
+            continue
+        finding_counts[repo] += 1
+        if str(finding.get("delta_status", "") or "").strip().lower() == "new":
+            new_counts[repo] += 1
+
+    overall_sev = dict(record.get("sev") or {})
+    overall_delta = dict(record.get("delta") or {})
+    is_multi_repo = len(repos) > 1
+    entries: list[dict] = []
+    for repo in repos:
+        repo_data = dict(per_repo.get(repo) or {})
+        repo_sev_raw = dict(repo_data.get("sev") or {})
+        repo_sev = {
+            "critical": int(repo_sev_raw.get("1", repo_sev_raw.get(1, 0)) or 0),
+            "high": int(repo_sev_raw.get("2", repo_sev_raw.get(2, 0)) or 0),
+            "medium": int(repo_sev_raw.get("3", repo_sev_raw.get(3, 0)) or 0),
+            "low": int(repo_sev_raw.get("4", repo_sev_raw.get(4, 0)) or 0),
+        }
+        repo_count = int(repo_data.get("count", finding_counts.get(repo, 0)) or 0)
+        if not is_multi_repo:
+            repo_count = int(record.get("total", record.get("active_total", repo_count)) or repo_count)
+            repo_sev = {
+                "critical": int(overall_sev.get("critical", repo_sev["critical"]) or repo_sev["critical"]),
+                "high": int(overall_sev.get("high", repo_sev["high"]) or repo_sev["high"]),
+                "medium": int(overall_sev.get("medium", repo_sev["medium"]) or repo_sev["medium"]),
+                "low": int(overall_sev.get("low", repo_sev["low"]) or repo_sev["low"]),
+            }
+            critical_prod = int(record.get("critical_prod", repo_sev["critical"]) or repo_sev["critical"])
+            high_prod = int(record.get("high_prod", repo_sev["high"]) or repo_sev["high"])
+            new_count = int(overall_delta.get("new_count", new_counts.get(repo, 0)) or new_counts.get(repo, 0))
+            fixed_count = int(overall_delta.get("fixed_count", 0) or 0)
+        else:
+            critical_prod = int(repo_sev["critical"] or 0)
+            high_prod = int(repo_sev["high"] or 0)
+            new_count = int(new_counts.get(repo, 0) or 0)
+            # Fixed findings are not persisted per repo for multi-repo scans.
+            fixed_count = 0
+
+        entries.append({
+            "repo": repo,
+            "total": repo_count,
+            "critical_prod": critical_prod,
+            "high_prod": high_prod,
+            "new_count": new_count,
+            "fixed_count": fixed_count,
+            "sev": repo_sev,
+        })
+    return entries
+
+
 def compute_history_trends(records: list[dict]) -> dict:
     prepared: list[dict] = []
     for raw in records or []:
         record = dict(raw or {})
         dt, _ = _record_datetime(record)
         record["_dt"] = dt
-        record["_repo_label"] = _repo_label(record)
+        record["_repo_entries"] = _repo_entries(record)
         trend = dict(record.get("trend") or {})
         if not trend.get("llm") and record.get("llm_model"):
             log_metrics = _load_llm_metrics_from_log(record)
@@ -120,18 +176,24 @@ def compute_history_trends(records: list[dict]) -> dict:
     })
 
     for record in prepared:
-        repo_label = record["_repo_label"]
-        agg = repo_agg[repo_label]
-        agg["repo"] = repo_label
-        agg["scans"] += 1
         record_dt = record.get("_dt")
-        last_dt = agg.get("_last_dt")
-        if last_dt is None or (isinstance(record_dt, datetime) and record_dt >= last_dt):
-            agg["risk_score"] = _risk_score(record)
-            agg["critical_prod"] = int(record.get("critical_prod", 0) or 0)
-            agg["high_prod"] = int(record.get("high_prod", 0) or 0)
-            agg["last_seen"] = str(record.get("completed_at_utc", "") or record.get("started_at_utc", "") or "")
-            agg["_last_dt"] = record_dt
+        for repo_entry in list(record.get("_repo_entries") or []):
+            repo_label = str(repo_entry.get("repo", "") or "Unknown")
+            agg = repo_agg[repo_label]
+            agg["repo"] = repo_label
+            agg["scans"] += 1
+            last_dt = agg.get("_last_dt")
+            if last_dt is None or (isinstance(record_dt, datetime) and record_dt >= last_dt):
+                repo_snapshot = {
+                    "sev": dict(repo_entry.get("sev") or {}),
+                    "critical_prod": int(repo_entry.get("critical_prod", 0) or 0),
+                    "high_prod": int(repo_entry.get("high_prod", 0) or 0),
+                }
+                agg["risk_score"] = _risk_score(repo_snapshot)
+                agg["critical_prod"] = int(repo_entry.get("critical_prod", 0) or 0)
+                agg["high_prod"] = int(repo_entry.get("high_prod", 0) or 0)
+                agg["last_seen"] = str(record.get("completed_at_utc", "") or record.get("started_at_utc", "") or "")
+                agg["_last_dt"] = record_dt
 
         rules = dict((record.get("trend") or {}).get("rules") or {})
         for rule, count in dict(rules.get("active") or {}).items():
@@ -156,31 +218,26 @@ def compute_history_trends(records: list[dict]) -> dict:
     for record in recent:
         dt = record.get("_dt")
         stamp = dt.strftime("%d/%m") if isinstance(dt, datetime) else str(record.get("scan_id", "") or "")[:8]
-        repo_label = record["_repo_label"]
-        total = int(record.get("total", record.get("active_total", 0)) or 0)
-        critical_prod = int(record.get("critical_prod", 0) or 0)
-        high_prod = int(record.get("high_prod", 0) or 0)
-        delta = dict(record.get("delta") or {})
-        new_count = int(delta.get("new_count", 0) or 0)
-        fixed_count = int(delta.get("fixed_count", 0) or 0)
-        findings_over_time.append({
-            "label": stamp,
-            "repo": repo_label,
-            "value": total,
-            "state": str(record.get("state", "") or ""),
-        })
-        critical_over_time.append({
-            "label": stamp,
-            "repo": repo_label,
-            "value": critical_prod,
-            "high_prod": high_prod,
-        })
-        new_fixed_over_time.append({
-            "label": stamp,
-            "repo": repo_label,
-            "new_count": new_count,
-            "fixed_count": fixed_count,
-        })
+        for repo_entry in list(record.get("_repo_entries") or []):
+            repo_label = str(repo_entry.get("repo", "") or "Unknown")
+            findings_over_time.append({
+                "label": stamp,
+                "repo": repo_label,
+                "value": int(repo_entry.get("total", 0) or 0),
+                "state": str(record.get("state", "") or ""),
+            })
+            critical_over_time.append({
+                "label": stamp,
+                "repo": repo_label,
+                "value": int(repo_entry.get("critical_prod", 0) or 0),
+                "high_prod": int(repo_entry.get("high_prod", 0) or 0),
+            })
+            new_fixed_over_time.append({
+                "label": stamp,
+                "repo": repo_label,
+                "new_count": int(repo_entry.get("new_count", 0) or 0),
+                "fixed_count": int(repo_entry.get("fixed_count", 0) or 0),
+            })
 
     top_repos = sorted(repo_agg.values(), key=lambda item: (-int(item["risk_score"]), -int(item["critical_prod"]), item["repo"]))[:8]
     for item in top_repos:

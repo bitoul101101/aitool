@@ -2853,6 +2853,56 @@ def test_top_repos_by_risk_uses_latest_repo_snapshot_not_cumulative_counts():
     assert top_repo["risk_score"] == 22
 
 
+def test_multi_repo_trends_expand_scan_history_into_separate_repo_rows():
+    from services.trends import compute_history_trends
+
+    trends = compute_history_trends([
+        {
+            "scan_id": "20260320_101500",
+            "started_at_utc": "2026-03-20T10:15:00Z",
+            "state": "done",
+            "repo_slugs": ["repo1", "repo2"],
+            "per_repo": {
+                "repo1": {
+                    "count": 3,
+                    "sev": {1: 1, 2: 1, 3: 0, 4: 1},
+                },
+                "repo2": {
+                    "count": 2,
+                    "sev": {1: 0, 2: 1, 3: 1, 4: 0},
+                },
+            },
+            "findings": [
+                {"repo": "repo1", "delta_status": "new"},
+                {"repo": "repo1", "delta_status": "existing"},
+                {"repo": "repo1", "delta_status": "existing"},
+                {"repo": "repo2", "delta_status": "new"},
+                {"repo": "repo2", "delta_status": "existing"},
+            ],
+            "total": 5,
+            "critical_prod": 99,
+            "high_prod": 88,
+        }
+    ])
+
+    repo_names = [item["repo"] for item in trends["top_repos_by_risk"]]
+    assert "repo1" in repo_names
+    assert "repo2" in repo_names
+    assert "repo1, repo2" not in repo_names
+
+    findings_rows = {(item["repo"], item["value"]) for item in trends["findings_over_time"]}
+    assert ("repo1", 3) in findings_rows
+    assert ("repo2", 2) in findings_rows
+
+    critical_rows = {(item["repo"], item["value"], item["high_prod"]) for item in trends["critical_over_time"]}
+    assert ("repo1", 1, 1) in critical_rows
+    assert ("repo2", 0, 1) in critical_rows
+
+    delta_rows = {(item["repo"], item["new_count"], item["fixed_count"]) for item in trends["new_fixed_over_time"]}
+    assert ("repo1", 1, 0) in delta_rows
+    assert ("repo2", 1, 0) in delta_rows
+
+
 def test_inventory_page_is_server_rendered():
     import app_server as srv
 
