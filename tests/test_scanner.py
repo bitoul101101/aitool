@@ -2300,6 +2300,35 @@ def test_build_findings_rollups_applies_triage_and_fixed_state():
     assert fixed["status"] == "fixed"
 
 
+def test_build_findings_rollups_normalizes_legacy_severity_labels():
+    from services.findings import build_findings_rollups
+
+    rows = build_findings_rollups(
+        [
+            {
+                "scan_id": "scan-1",
+                "started_at_utc": "2026-03-19T10:00:00Z",
+                "findings": [
+                    {
+                        "_hash": "hash-1",
+                        "repo": "repo1",
+                        "file": "app.py",
+                        "line": 12,
+                        "severity": 1,
+                        "severity_label": "sev-1",
+                        "provider_or_lib": "debug_mode",
+                        "capability": "Debug mode in production",
+                        "description": "x",
+                    }
+                ],
+            }
+        ],
+        {},
+    )
+
+    assert rows[0]["severity_label"] == "Critical"
+
+
 def test_render_findings_page_shows_filters_and_bulk_actions():
     import app_server as srv
 

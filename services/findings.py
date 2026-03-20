@@ -31,6 +31,21 @@ def _status_label(status: str) -> str:
     }.get(status, "Open")
 
 
+def _severity_label(value: object, raw_label: str = "") -> str:
+    raw = str(raw_label or "").strip()
+    lowered = raw.lower()
+    if lowered in {"critical", "high", "medium", "low"}:
+        return raw.title()
+    mapping = {1: "Critical", 2: "High", 3: "Medium", 4: "Low"}
+    try:
+        sev = int(value or 4)
+    except Exception:
+        sev = 4
+    if lowered.startswith("sev-"):
+        return mapping.get(sev, "Low")
+    return raw or mapping.get(sev, "Low")
+
+
 def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list[dict]:
     fixed_marks: dict[str, tuple[int, str]] = {}
     for record in history:
@@ -57,7 +72,10 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                 "file": str(finding.get("file", "") or ""),
                 "line": str(finding.get("line", "") or ""),
                 "severity": int(finding.get("severity", 4) or 4),
-                "severity_label": str(finding.get("severity_label", "") or ""),
+                "severity_label": _severity_label(
+                    finding.get("severity", 4),
+                    str(finding.get("severity_label", "") or ""),
+                ),
                 "rule": str(finding.get("provider_or_lib", "") or finding.get("category", "") or "unknown"),
                 "capability": str(finding.get("capability", "") or ""),
                 "rule_label": format_rule_label(
@@ -87,7 +105,10 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                 row["last_seen_at"] = started_at
                 row["last_seen_scan_id"] = scan_id
                 row["severity"] = int(finding.get("severity", row["severity"]) or row["severity"])
-                row["severity_label"] = str(finding.get("severity_label", row.get("severity_label", "")) or row.get("severity_label", ""))
+                row["severity_label"] = _severity_label(
+                    finding.get("severity", row["severity"]),
+                    str(finding.get("severity_label", row.get("severity_label", "")) or row.get("severity_label", "")),
+                )
                 row["capability"] = str(finding.get("capability", row.get("capability", "")) or row.get("capability", ""))
                 row["rule_label"] = format_rule_label(
                     str(finding.get("provider_or_lib", row.get("rule", "")) or row.get("rule", "")),
