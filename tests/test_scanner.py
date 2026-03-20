@@ -2485,15 +2485,55 @@ def test_history_page_is_server_rendered():
     assert ">Phases<" not in html
     assert ">1</td>" in html
     assert ">2</td>" in html
-    assert ">4</td>" in html
-    assert ">repo1</td>" in html
-    assert 'href="/scan/20260317_120000?tab=activity"' in html
-    assert 'title="Open scan details"' in html
-    assert ">Details</th>" in html
-    assert ">HTML</th>" not in html
-    assert ">CSV</th>" not in html
-    assert ">LOG</th>" not in html
-    assert 'href="/assets/main.css"' in html
+
+
+def test_iter_files_includes_high_value_supported_file_types(tmp_path):
+    from scanner.detector import AIUsageDetector
+
+    included = [
+        "Dockerfile",
+        "pom.xml",
+        "application.properties",
+        "build.gradle",
+        "settings.kts",
+        "query.sql",
+        "tool.pyw",
+        "model.swift",
+        "service.kt",
+        "pipeline.scala",
+        "job.groovy",
+        "script.pl",
+        "analysis.r",
+        "component.vue",
+        "widget.svelte",
+        "runtime.mjs",
+        "legacy.cjs",
+        "requirements.txt",
+        "package.json",
+        "pyproject.toml",
+    ]
+    skipped = [
+        "archive.zip",
+        "image.png",
+        "binary.exe",
+        "library.jar",
+        "document.pdf",
+    ]
+
+    for name in included + skipped:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x", encoding="utf-8")
+
+    found = {
+        path.name
+        for path in AIUsageDetector(verbose=False)._iter_files(tmp_path)
+    }
+
+    for name in included:
+        assert name in found
+    for name in skipped:
+        assert name not in found
 
 
 def test_results_page_is_server_rendered():

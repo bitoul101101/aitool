@@ -1956,22 +1956,21 @@ ALL_PATTERNS: List[Dict[str, Any]] = (
 
 # File extensions to scan
 SCAN_EXTENSIONS = {
-    ".py", ".js", ".ts", ".jsx", ".tsx",
-    ".java", ".go", ".rb", ".rs",
-    ".cs", ".cpp", ".c", ".h",
-    ".yaml", ".yml", ".json", ".toml", ".ini", ".env",
+    ".py", ".pyw", ".js", ".ts", ".jsx", ".tsx",
+    ".java", ".go", ".rb", ".rs", ".swift", ".kt", ".scala", ".groovy",
+    ".cs", ".cpp", ".c", ".h", ".hpp", ".pl", ".r", ".sql",
+    ".yaml", ".yml", ".json", ".toml", ".ini", ".env", ".xml", ".properties",
+    ".cfg", ".conf", ".gradle", ".kts",
     ".sh", ".bash", ".ps1",
     ".ipynb",  # notebooks handled specially
     ".tf", ".hcl",  # Terraform (AI service config)
     ".md", ".txt",  # docs referencing endpoints
     ".Dockerfile", "Dockerfile",
-    ".cfg", ".conf",
     ".mjs", ".cjs",           # ES modules / CommonJS
     ".vue", ".svelte",        # frontend frameworks
     "requirements.txt",       # Python dependency declarations
     "package.json",           # JS dependency declarations
     "pyproject.toml",         # Python project config
-    ".github",                # GitHub Actions (dir matched via rglob)
     # Task 6: minified bundles
     ".min.js",
     # Task 7: IaC formats

@@ -1117,10 +1117,10 @@ class AIUsageDetector:
         for path in root.rglob("*"):
             if not path.is_file():
                 continue
-            parts = set(path.parts)
-            if parts & SKIP_DIRS:
+            rel_parts = path.relative_to(root).parts
+            if any(part in SKIP_DIRS for part in rel_parts):
                 continue
-            if any(d in str(path) for d in SKIP_DIRS):
+            if any(part.endswith(".egg-info") for part in rel_parts):
                 continue
             if path.name in SKIP_FILES:
                 continue
