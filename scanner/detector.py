@@ -81,9 +81,19 @@ _FIXED_ARGV_SUBPROCESS_WINDOW_RE = re.compile(
     r"subprocess\.(?:run|call|Popen|check_output|check_call)\s*\(\s*\[",
     re.IGNORECASE | re.DOTALL,
 )
+_LOCAL_FILE_HASH_RE = re.compile(
+    r"hashlib\.(?:sha(?:1|224|256|384|512)|md5)\s*\(",
+    re.IGNORECASE,
+)
 _REPORT_PROVIDER_MAP_RE = re.compile(r'^\s*"[^"]+"\s*:\s*"[^"]+"')
 _SELF_SCAN_IGNORED_PATHS = {
     "scanner/patterns.py",
+}
+_SELF_SCAN_LOCAL_LLM_PLUMBING_PATHS = {
+    "reports/report_server.py",
+    "services/settings_service.py",
+    "reports/html_report.py",
+    "scanner/llm_reviewer.py",
 }
 
 # ── Entropy guard for credential patterns ────────────────────────
@@ -448,6 +458,14 @@ def _should_ignore_internal_match(
     if normalized in _SELF_SCAN_IGNORED_PATHS:
         return True
 
+    if normalized in _SELF_SCAN_LOCAL_LLM_PLUMBING_PATHS and lib in {
+        "ollama",
+        "vllm",
+        "direct_http_ai",
+        "http_response_to_llm",
+    }:
+        return True
+
     if normalized == "reports/html_report.py" and _REPORT_PROVIDER_MAP_RE.match(line):
         return True
 
@@ -469,6 +487,10 @@ def _should_ignore_internal_match(
 
     if lib == "sql_in_tool_description":
         if "?" in window and "execute(" in window and not _TOOL_MARKER_RE.search(window):
+            return True
+
+    if lib == "file_content_to_llm":
+        if ".read_bytes(" in line and _LOCAL_FILE_HASH_RE.search(window):
             return True
 
     return False

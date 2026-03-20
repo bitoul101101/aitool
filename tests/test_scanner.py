@@ -217,6 +217,65 @@ def test_self_scan_ignores_internal_pattern_catalog_findings():
     assert findings == []
 
 
+def test_file_content_to_llm_ignores_local_hashing_of_read_bytes():
+    detector = AIUsageDetector()
+    code = (
+        "from pathlib import Path\n"
+        "import hashlib\n"
+        "def policy_version(path):\n"
+        "    data = Path(path).read_bytes()\n"
+        "    return hashlib.sha256(data).hexdigest()[:12]\n"
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".py",
+        "app_server.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    assert "file_content_to_llm" not in {f["provider_or_lib"] for f in findings}
+
+
+def test_self_scan_ignores_internal_local_llm_plumbing_findings():
+    detector = AIUsageDetector()
+
+    report_server_code = (
+        "class Handler:\n"
+        '    ollama_base = "http://localhost:11434"\n'
+        "    def proxy(self, body):\n"
+        '        target = self.ollama_base.rstrip("/") + "/api/generate"\n'
+        "        req = urllib.request.Request(target, data=body, headers={\"Content-Type\": \"application/json\"}, method=\"POST\")\n"
+        "        return urllib.request.urlopen(req, timeout=120)\n"
+    )
+    report_findings = detector._scan_text_file_from_content(
+        report_server_code,
+        ".py",
+        "reports/report_server.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+    assert "ollama" not in {f["provider_or_lib"] for f in report_findings}
+    assert "http_response_to_llm" not in {f["provider_or_lib"] for f in report_findings}
+
+    settings_code = (
+        "def save_settings(llm_url):\n"
+        '    return {\"ok\": True, \"models\": list_ollama_models(llm_url or \"http://localhost:11434\")}\n'
+    )
+    settings_findings = detector._scan_text_file_from_content(
+        settings_code,
+        ".py",
+        "services/settings_service.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+    assert "ollama" not in {f["provider_or_lib"] for f in settings_findings}
+
+
 def test_shell_cmd_from_llm_ignores_fixed_argv_subprocess_calls():
     detector = AIUsageDetector()
     code = (
@@ -284,6 +343,27 @@ def test_app_server_gpu_snapshot_does_not_trigger_shell_execution_rules():
         (f["provider_or_lib"], int(f.get("line", 0) or 0))
         for f in findings
         if f.get("provider_or_lib") in {"shell_cmd_from_llm", "unsafe_code_exec"}
+    }
+    assert not risky
+
+
+def test_app_server_policy_version_does_not_trigger_file_content_to_llm():
+    detector = AIUsageDetector()
+    content = Path(r"C:\aitool\app_server.py").read_text(encoding="utf-8")
+
+    findings = detector._scan_text_file_from_content(
+        content,
+        ".py",
+        "app_server.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    risky = {
+        (f["provider_or_lib"], int(f.get("line", 0) or 0))
+        for f in findings
+        if f.get("provider_or_lib") == "file_content_to_llm"
     }
     assert not risky
 
