@@ -221,6 +221,41 @@ def test_html_report_llm_enrichment_timeout_returns_placeholder():
     assert "LLM unavailable (qwen): timed out" in only_value
 
 
+def test_html_report_llm_enrichment_retries_once_after_timeout():
+    import urllib.request
+
+    reporter = HTMLReporter(output_dir=tempfile.mkdtemp(), scan_id="20260318_180151")
+    findings = [
+        {"file": "app.py", "line": 10, "provider_or_lib": "openai", "capability": "chat", "severity": 2}
+    ]
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return self._payload
+
+    payload = json.dumps({
+        "message": {
+            "content": "## Why It's Problematic\nIssue.\n## How to Fix It\n- Fix\n- Test\n- Review\n## References\nhttps://owasp.org"
+        }
+    }).encode("utf-8")
+
+    with patch.object(urllib.request, "urlopen", side_effect=[TimeoutError("timed out"), FakeResponse(payload)]):
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen", timeout=180)
+
+    only_value = next(iter(details.values()))
+    assert "LLM unavailable" not in only_value
+    assert "Why It's Problematic" in only_value
+
+
 def test_generate_html_report_builds_and_persists_html_artifact_on_demand():
     from services.scan_jobs import ScanJobPaths, ScanJobService
 

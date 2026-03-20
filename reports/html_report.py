@@ -426,6 +426,12 @@ class HTMLReporter:
         def _placeholder_html(message: str) -> str:
             return _render_html("", message)
 
+        def _is_timeout_error(exc: Exception) -> bool:
+            if isinstance(exc, TimeoutError):
+                return True
+            text = str(exc or "").strip().lower()
+            return "timed out" in text or "timeout" in text
+
         def _fetch_one(f: dict) -> tuple[str, str]:
             key    = _key(f)
             prompt = _build_prompt(f)
@@ -443,20 +449,22 @@ class HTMLReporter:
                     "repeat_penalty": 1.2,    # prevents repetition loops
                 },
             }).encode("utf-8")
-            try:
-                req  = urllib.request.Request(
-                    endpoint,
-                    data=body,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    data    = _json.loads(resp.read().decode("utf-8"))
-                    content = (data.get("message") or {}).get("content", "") or \
-                              data.get("response", "")
-                return key, _render_html(content)
-            except Exception as exc:
-                return key, _placeholder_html(f"⚠ LLM unavailable ({model}): {exc}")
+            req = urllib.request.Request(
+                endpoint,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            for attempt in range(2):
+                try:
+                    with urllib.request.urlopen(req, timeout=timeout) as resp:
+                        data = _json.loads(resp.read().decode("utf-8"))
+                        content = (data.get("message") or {}).get("content", "") or data.get("response", "")
+                    return key, _render_html(content)
+                except Exception as exc:
+                    if attempt == 0 and _is_timeout_error(exc):
+                        continue
+                    return key, _placeholder_html(f"⚠ LLM unavailable ({model}): {exc}")
 
         limited_findings = list(findings[:REPORT_LLM_MAX_FINDINGS])
         skipped_findings = list(findings[REPORT_LLM_MAX_FINDINGS:])
