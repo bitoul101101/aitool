@@ -2375,6 +2375,19 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert '?tab=results' in html
 
 
+def test_findings_history_notice_reports_summary_only_scans():
+    from services.findings import findings_history_notice
+
+    notice = findings_history_notice([
+        {"scan_id": "scan-1", "total": 6, "findings": [{"_hash": "a"}]},
+        {"scan_id": "scan-2", "total": 14, "findings": []},
+        {"scan_id": "scan-3", "total": 0, "findings": []},
+    ])
+
+    assert "Detailed findings are available for 1 of 2 scans." in notice
+    assert "up to 14 findings cannot be listed here." in notice
+
+
 def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():
     import app_server as srv
 
@@ -3202,6 +3215,29 @@ def test_multi_repo_trends_expand_scan_history_into_separate_repo_rows():
     delta_rows = {(item["repo"], item["new_count"], item["fixed_count"]) for item in trends["new_fixed_over_time"]}
     assert ("repo1", 1, 0) in delta_rows
     assert ("repo2", 1, 0) in delta_rows
+
+
+def test_trends_over_time_use_all_past_scans_not_only_recent_subset():
+    from services.trends import compute_history_trends
+
+    records = []
+    for idx in range(15):
+        records.append({
+            "scan_id": f"20260320_10{idx:02d}00",
+            "started_at_utc": f"2026-03-20T10:{idx:02d}:00Z",
+            "repo_slugs": ["repo1"],
+            "total": idx + 1,
+            "sev": {"critical": 0, "high": 0, "medium": 0, "low": idx + 1},
+            "critical_prod": 0,
+            "high_prod": 0,
+            "delta": {"new_count": idx, "fixed_count": 0},
+        })
+
+    trends = compute_history_trends(records)
+
+    assert len(trends["findings_over_time"]) == 15
+    assert trends["findings_over_time"][0]["value"] == 1
+    assert trends["findings_over_time"][-1]["value"] == 15
 
 
 def test_inventory_page_is_server_rendered():

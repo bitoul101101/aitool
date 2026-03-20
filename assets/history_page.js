@@ -146,6 +146,12 @@
     const noun = selected === 1 ? "scan" : "scans";
     if (!window.confirm(`Delete ${selected} selected ${noun}? This removes the scan history, activity log, and generated reports.`)) {
       event.preventDefault();
+      return;
+    }
+    try {
+      localStorage.setItem("phantomlm.history.updated", String(Date.now()));
+    } catch (_err) {
+      // Ignore storage failures.
     }
   });
   prevBtn?.addEventListener("click", () => {

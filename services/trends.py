@@ -147,8 +147,6 @@ def compute_history_trends(records: list[dict]) -> dict:
         prepared.append(record)
 
     prepared.sort(key=lambda item: (item.get("_dt") or datetime.min, str(item.get("scan_id", ""))))
-    recent = prepared[-12:]
-
     findings_over_time = []
     critical_over_time = []
     new_fixed_over_time = []
@@ -215,7 +213,7 @@ def compute_history_trends(records: list[dict]) -> dict:
         if llm_metrics.get("failed_scan"):
             model_agg["failed_scans"] += 1
 
-    for record in recent:
+    for record in prepared:
         dt = record.get("_dt")
         stamp = dt.strftime("%d/%m") if isinstance(dt, datetime) else str(record.get("scan_id", "") or "")[:8]
         for repo_entry in list(record.get("_repo_entries") or []):

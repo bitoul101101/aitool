@@ -84,7 +84,7 @@ from services.report_access import (
     find_history_record_by_scan_id,
     history_records_for_context,
 )
-from services.findings import build_findings_rollups
+from services.findings import build_findings_rollups, findings_history_notice
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
@@ -1906,10 +1906,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_VIEWER):
             return
         qs = parse_qs(urlparse(self.path).query)
+        history = _history_records_for_user()
+        findings_notice = findings_history_notice(history)
+        merged_notice = " ".join(part for part in [notice or (qs.get("notice", [""])[0] or ""), findings_notice] if part).strip()
         html = render_findings_page(
-            findings=_findings_for_user(),
+            findings=build_findings_rollups(history, _triage_by_hash()),
             csrf_token=_current_csrf_token(self),
-            notice=notice or (qs.get("notice", [""])[0] or ""),
+            notice=merged_notice,
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
             current_scan=_current_scan_nav_context(),

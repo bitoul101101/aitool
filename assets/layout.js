@@ -16,6 +16,8 @@ setTimeout(() => {
     return;
   }
 
+  const syncablePaths = new Set(["/history", "/findings", "/trends", "/inventory"]);
+
   const banner = document.getElementById("connection-banner");
   let failures = 0;
   let reconnecting = false;
@@ -66,5 +68,14 @@ setTimeout(() => {
     if (reconnecting) {
       window.setTimeout(() => window.location.reload(), 1200);
     }
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key !== "phantomlm.history.updated") {
+      return;
+    }
+    if (!syncablePaths.has(window.location.pathname)) {
+      return;
+    }
+    window.location.reload();
   });
 })();

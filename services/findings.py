@@ -168,3 +168,25 @@ def findings_summary(findings: list[dict]) -> dict[str, int]:
         "suppressed": counts.get(TRIAGE_FALSE_POSITIVE, 0),
         "fixed": counts.get("fixed", 0),
     }
+
+
+def findings_history_notice(history: list[dict]) -> str:
+    total_scans = 0
+    detailed_scans = 0
+    omitted_findings = 0
+    for record in history:
+        total = int(record.get("total", 0) or 0)
+        findings = list(record.get("findings") or [])
+        if total <= 0 and not findings:
+            continue
+        total_scans += 1
+        if findings:
+            detailed_scans += 1
+        else:
+            omitted_findings += total
+    if total_scans and detailed_scans < total_scans:
+        return (
+            f"Detailed findings are available for {detailed_scans} of {total_scans} scans. "
+            f"Older scans only stored summary counts, so up to {omitted_findings} findings cannot be listed here."
+        )
+    return ""
