@@ -99,6 +99,12 @@ _SELF_SCAN_ANALYSIS_INTERNAL_PATHS = {
     "scanner/detector.py",
     "scanner/cross_file.py",
 }
+_SELF_SCAN_METADATA_ONLY_PATHS = {
+    "analyzer/security.py",
+}
+_SELF_SCAN_INFRA_INTERNAL_PATHS = {
+    "scanner/bitbucket.py",
+}
 
 # ── Entropy guard for credential patterns ────────────────────────
 # Real secrets have high entropy (≥3.0 bits/char).  Documentation examples,
@@ -476,6 +482,20 @@ def _should_ignore_internal_match(
     if normalized in _SELF_SCAN_ANALYSIS_INTERNAL_PATHS and lib in {
         "document_embedded_instruction",
         "file_content_to_llm",
+    }:
+        return True
+
+    if normalized in _SELF_SCAN_METADATA_ONLY_PATHS and lib in {
+        "unsafe_code_exec",
+        "llm_tool_no_authz",
+        "prompt_injection_risk",
+        "sql_injection_risk",
+    }:
+        return True
+
+    if normalized in _SELF_SCAN_INFRA_INTERNAL_PATHS and lib in {
+        "unsafe_code_exec",
+        "excessive_agent_autonomy",
     }:
         return True
 

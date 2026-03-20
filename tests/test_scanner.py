@@ -322,6 +322,48 @@ def test_self_scan_ignores_internal_cross_file_analysis_cache_reads():
     assert "file_content_to_llm" not in libs
 
 
+def test_self_scan_ignores_internal_bitbucket_clone_and_security_advice_noise():
+    detector = AIUsageDetector()
+
+    bitbucket_code = (
+        "import os, subprocess\n"
+        "def clone(cmd, verify_ssl):\n"
+        "    env = os.environ.copy()\n"
+        "    if not verify_ssl:\n"
+        '        env[\"GIT_SSL_NO_VERIFY\"] = \"1\"\n'
+        "    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)\n"
+    )
+    bitbucket_findings = detector._scan_text_file_from_content(
+        bitbucket_code,
+        ".py",
+        "scanner/bitbucket.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+    bitbucket_libs = {f["provider_or_lib"] for f in bitbucket_findings}
+    assert "unsafe_code_exec" not in bitbucket_libs
+    assert "excessive_agent_autonomy" not in bitbucket_libs
+
+    security_advice_code = (
+        "SECURITY_GUIDANCE = {\n"
+        '    \"unsafe_code_exec\": \"Never exec() model outputs directly in production.\",\n'
+        '    \"sql_injection_risk\": \"Never pass LLM-generated SQL strings directly to execute().\",\n'
+        "}\n"
+    )
+    guidance_findings = detector._scan_text_file_from_content(
+        security_advice_code,
+        ".py",
+        "analyzer/security.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+    guidance_libs = {f["provider_or_lib"] for f in guidance_findings}
+    assert "unsafe_code_exec" not in guidance_libs
+    assert "sql_injection_risk" not in guidance_libs
+
+
 def test_shell_cmd_from_llm_ignores_fixed_argv_subprocess_calls():
     detector = AIUsageDetector()
     code = (
