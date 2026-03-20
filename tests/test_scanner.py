@@ -2389,6 +2389,14 @@ def test_json_report_includes_structured_threat_model(tmp_path):
     assert payload["threat_model"]["stages"]["attack_trees"]
 
 
+def test_html_report_header_uses_png_logo_and_centered_band(tmp_path):
+    reporter = HTMLReporter(str(tmp_path), "demo")
+    html = reporter._render([], {}, {})
+    assert "data:image/png;base64," in html
+    assert "flex-direction:column" in html
+    assert "text-align:center" in html
+
+
 def test_threat_dragon_report_writes_model_file(tmp_path):
     findings = [{
         "provider_or_lib": "prompt_injection_risk",

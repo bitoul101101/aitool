@@ -625,12 +625,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
 
 /* title band */
 .hdr-band{
-  display:flex;align-items:center;justify-content:space-between;gap:16px;
-  padding:8px 14px 6px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  padding:10px 14px 8px;
   border-bottom:1px solid rgba(255,255,255,.1);
+  text-align:center;
 }
-.hdr-brand img{display:block;max-width:min(320px,40vw);max-height:88px;object-fit:contain}
-.hdr-band-copy{display:flex;flex-direction:column;gap:2px}
+.hdr-brand{display:flex;justify-content:center;align-items:center;width:100%}
+.hdr-brand img{display:block;max-width:min(320px,42vw);max-height:82px;object-fit:contain}
+.hdr-band-copy{display:flex;flex-direction:column;gap:2px;align-items:center;text-align:center}
 .hdr-band-title{
   font-size:17px;font-weight:800;color:#fff;
   letter-spacing:-.3px;line-height:1.1;
