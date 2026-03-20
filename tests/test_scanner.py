@@ -364,6 +364,56 @@ def test_self_scan_ignores_internal_bitbucket_clone_and_security_advice_noise():
     assert "sql_injection_risk" not in guidance_libs
 
 
+def test_self_scan_ignores_internal_detector_ui_and_test_fixture_noise():
+    detector = AIUsageDetector()
+
+    detector_code = (
+        '_TOOL_MARKER_RE = re.compile(r"Tool\\\\s*\\\\(|BaseTool|StructuredTool|@tool\\\\b", re.IGNORECASE)\n'
+        '_FIXED_ARGV_SUBPROCESS_RE = re.compile(r"^\\\\s*\\\\w+\\\\s*=\\\\s*subprocess\\\\.(?:run|call|Popen)")\n'
+    )
+    detector_findings = detector._scan_text_file_from_content(
+        detector_code,
+        ".py",
+        "scanner/detector.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+    detector_libs = {f["provider_or_lib"] for f in detector_findings}
+    assert "llm_tool_no_authz" not in detector_libs
+    assert "unsafe_code_exec" not in detector_libs
+
+    ui_code = (
+        'project_links = "".join(\n'
+        '    f\'<a href="/scan?project={_esc(p.get("key",""))}">{_esc(p.get("key",""))}</a>\'\n'
+        "    for p in projects\n"
+        ")\n"
+    )
+    ui_findings = detector._scan_text_file_from_content(
+        ui_code,
+        ".py",
+        "services/web_pages.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+    assert "sql_injection_risk" not in {f["provider_or_lib"] for f in ui_findings}
+
+    fixture_code = 'OPENAI_API_KEY = "sk-abcdefghijklmnopqrstuvwxyz123456"\n'
+    fixture_findings = detector._scan_text_file_from_content(
+        fixture_code,
+        ".py",
+        "tests/test_scanner.py",
+        "aitool",
+        ctx_str="test",
+        is_test=True,
+    )
+    fixture_libs = {f["provider_or_lib"] for f in fixture_findings}
+    assert "openai_key_pattern" not in fixture_libs
+    assert "entropy_secret" not in fixture_libs
+    assert "hardcoded_key" not in fixture_libs
+
+
 def test_shell_cmd_from_llm_ignores_fixed_argv_subprocess_calls():
     detector = AIUsageDetector()
     code = (

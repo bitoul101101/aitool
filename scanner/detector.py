@@ -105,6 +105,13 @@ _SELF_SCAN_METADATA_ONLY_PATHS = {
 _SELF_SCAN_INFRA_INTERNAL_PATHS = {
     "scanner/bitbucket.py",
 }
+_SELF_SCAN_TEST_FIXTURE_PATHS = {
+    "tests/test_scanner.py",
+}
+_SELF_SCAN_UI_INTERNAL_PATHS = {
+    "services/web_pages.py",
+    "services/scan_jobs.py",
+}
 
 # ── Entropy guard for credential patterns ────────────────────────
 # Real secrets have high entropy (≥3.0 bits/char).  Documentation examples,
@@ -482,6 +489,9 @@ def _should_ignore_internal_match(
     if normalized in _SELF_SCAN_ANALYSIS_INTERNAL_PATHS and lib in {
         "document_embedded_instruction",
         "file_content_to_llm",
+        "unsafe_code_exec",
+        "llm_tool_no_authz",
+        "shell_cmd_from_llm",
     }:
         return True
 
@@ -496,6 +506,22 @@ def _should_ignore_internal_match(
     if normalized in _SELF_SCAN_INFRA_INTERNAL_PATHS and lib in {
         "unsafe_code_exec",
         "excessive_agent_autonomy",
+    }:
+        return True
+
+    if normalized in _SELF_SCAN_TEST_FIXTURE_PATHS and lib in {
+        "openai_key_pattern",
+        "js_hardcoded_key",
+        "entropy_secret",
+        "hardcoded_credential",
+        "hardcoded_key",
+        "unsafe_code_exec",
+        "shell_cmd_from_llm",
+    }:
+        return True
+
+    if normalized in _SELF_SCAN_UI_INTERNAL_PATHS and lib in {
+        "sql_injection_risk",
     }:
         return True
 
@@ -952,6 +978,13 @@ class AIUsageDetector:
         from scanner.entropy import scan_entropy_secrets
         if is_code or is_config:
             for ef in scan_entropy_secrets(content, lines, rel_path, repo_name):
+                if _should_ignore_internal_match(
+                    rel_path,
+                    str(ef.get("provider_or_lib", "") or ""),
+                    lines[max(int(ef.get("line", 1) or 1) - 1, 0)] if lines else "",
+                    local_window=str(ef.get("snippet", "") or ""),
+                ):
+                    continue
                 ef["confidence"]          = 75
                 ef["context"]             = ctx_str
                 ef["corroboration_count"] = 1
