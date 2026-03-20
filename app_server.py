@@ -1,7 +1,7 @@
 ﻿"""
 app_server.py
 ─────────────
-Single-file web application server for the AI Security & Compliance Scanner.
+Single-file web application server for PhantomLM.
 
 Serves a simple server-rendered web UI with targeted dynamic endpoints.
 
@@ -2005,7 +2005,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>AI Scanner Stopped</title>
+  <title>PhantomLM Stopped</title>
   <style>
     body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f6efe6;color:#3b2412;display:grid;place-items:center;min-height:100vh}
     .card{max-width:480px;background:#fffaf4;border:1px solid #e3c9ad;border-radius:16px;padding:24px;box-shadow:0 18px 42px rgba(50,25,0,.08)}
@@ -2016,7 +2016,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 </head>
 <body>
   <section class="card">
-    <h1>AI Scanner stopped</h1>
+      <h1>PhantomLM stopped</h1>
     <p>The local server has been shut down.</p>
     <p class="muted" id="close-note">Trying to close this tab...</p>
   </section>
@@ -2711,7 +2711,7 @@ def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.Thread
     t.start()
 
     url = f"http://127.0.0.1:{port}/"
-    print(f"  AI Scanner -> {url}")
+    print(f"  PhantomLM -> {url}")
     legacy_runtime_files = _legacy_runtime_artifacts()
     if legacy_runtime_files:
         print("  Warning: legacy repo-root runtime files were found. The app now uses the state directory below.")

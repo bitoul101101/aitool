@@ -473,13 +473,13 @@ def build_threat_dragon_model(findings: list[dict[str, Any]], *, meta: dict[str,
     repo_label = str((meta or {}).get("repo", "") or "Repository")
     return {
         "summary": {
-            "title": f"AI Scanner Threat Model - {repo_label}",
-            "owner": str((meta or {}).get("owner", "") or "AI Scanner"),
+            "title": f"PhantomLM Threat Model - {repo_label}",
+            "owner": str((meta or {}).get("owner", "") or "PhantomLM"),
             "description": "Threat model generated from scan evidence, repository signals, and staged analysis.",
             "id": 0,
         },
         "detail": {
-            "contributors": [{"name": "AI Security & Compliance Scanner"}],
+            "contributors": [{"name": "PhantomLM"}],
             "reviewer": str((meta or {}).get("operator", "") or "Operator"),
             "diagrams": [
                 {

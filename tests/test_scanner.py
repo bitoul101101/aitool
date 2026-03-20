@@ -1427,7 +1427,9 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'id="hardware-cpu-graph"' in html
     assert 'id="hardware-ram-graph"' in html
     assert 'id="hardware-gpu-graph"' in html
-    assert 'id="hardware-disk-graph"' in html
+    assert 'id="hardware-disk-bars"' in html
+    assert 'id="hardware-disk-read-fill"' in html
+    assert 'id="hardware-disk-write-fill"' in html
     assert 'id="perf-reviewed-skipped"' not in html
     assert 'id="perf-llm-outcomes"' not in html
     assert '<div class="workspace-header">' in html
@@ -2399,7 +2401,7 @@ def test_threat_dragon_report_writes_model_file(tmp_path):
     path = reporter.write_json(findings, meta={"project_key": "LOCAL", "repo": "repo1"})
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
 
-    assert payload["summary"]["title"].startswith("AI Scanner Threat Model")
+    assert payload["summary"]["title"].startswith("PhantomLM Threat Model")
     assert payload["detail"]["diagrams"][0]["diagramType"] == "STRIDE"
     assert payload["detail"]["diagrams"][0]["diagramJson"]["cells"]
 
@@ -2771,7 +2773,7 @@ def test_help_page_is_server_rendered():
     assert 'href="/help"' in html
     assert 'href="/inventory"' in html
     assert '<a class="nav active" href="/help">Help</a>' in html
-    assert "AI Security &amp; Compliance Scanner Wiki" in html
+    assert "PhantomLM Wiki" in html
     assert "On This Page" in html
     assert 'href="#installation"' in html
     assert "Capabilities" in html
@@ -2780,7 +2782,7 @@ def test_help_page_is_server_rendered():
     assert "Known Limitations" in html
     assert "AI Inventory" in html
     assert 'id="connection-banner"' in html
-    assert "Trying to reconnect to the local AI Scanner server" in html
+    assert "Trying to reconnect to the local PhantomLM server" in html
 
 
 def test_inventory_page_is_server_rendered():
@@ -3974,7 +3976,7 @@ def test_page_app_exit_returns_shutdown_fallback_page():
         srv._Handler._page_app_exit(handler)
         assert handler.sent[0] == 200
         html = handler.sent[2].decode("utf-8")
-        assert "AI Scanner stopped" in html
+        assert "PhantomLM stopped" in html
         assert "Trying to close this tab..." in html
         assert "window.close()" in html
         assert "You can close this tab" in html
@@ -4020,7 +4022,7 @@ def test_sarif_reporter_writes_valid_run_structure(tmp_path):
 
     assert payload["version"] == "2.1.0"
     run = payload["runs"][0]
-    assert run["tool"]["driver"]["name"] == "AI Security & Compliance Scanner"
+    assert run["tool"]["driver"]["name"] == "PhantomLM"
     assert run["results"][0]["ruleId"] == "openai_key"
     assert run["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "app.py"
 

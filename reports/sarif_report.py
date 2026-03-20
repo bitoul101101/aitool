@@ -83,7 +83,7 @@ class SARIFReporter:
                 {
                     "tool": {
                         "driver": {
-                            "name": "AI Security & Compliance Scanner",
+                            "name": "PhantomLM",
                             "version": str((meta or {}).get("tool_version", "") or ""),
                             "informationUri": "https://example.invalid/local-ai-scanner",
                             "rules": list(rules.values()),

@@ -1,5 +1,5 @@
 """
-main_web.py - AI Security & Compliance Scanner (Web UI)
+main_web.py - PhantomLM (Web UI)
 Launches the local web application server at http://127.0.0.1:5757 and keeps the process alive.
 The web UI is server-rendered from app_server.py and the services it imports.
 This file is only the desktop-friendly launcher and shutdown wrapper.
@@ -34,4 +34,4 @@ if __name__ == "__main__":
     finally:
         srv.shutdown()
         srv.server_close()
-        print("\nScanner stopped.")
+        print("\nPhantomLM stopped.")

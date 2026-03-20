@@ -139,9 +139,9 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 <link rel="stylesheet" href="/assets/main.css">
 </head>
 <body class="{body_class}">
-<header><h1>AI Security & Compliance Scanner</h1>{nav if nav else ""}</header>
+<header><h1>PhantomLM</h1>{nav if nav else ""}</header>
 <div id="connection-banner" class="connection-banner hidden" role="status" aria-live="polite">
-  <strong>Connection lost.</strong> Trying to reconnect to the local AI Scanner server...
+  <strong>Connection lost.</strong> Trying to reconnect to the local PhantomLM server...
 </div>
 <main>{body}</main>
 <script src="/assets/layout.js" defer></script>
@@ -492,7 +492,7 @@ def render_scan_page(
           <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong><div class="metric-sparkline" id="hardware-cpu-graph" aria-hidden="true"></div></div>
           <div class="hardware-stat"><span class="baseline-label">RAM</span><strong id="hardware-ram">{_esc(hardware.get("ram_text", "Unavailable"))}</strong><div class="metric-sparkline" id="hardware-ram-graph" aria-hidden="true"></div></div>
           <div class="hardware-stat"><span class="baseline-label">GPU</span><strong id="hardware-gpu">{_esc(hardware.get("gpu_text", "Unavailable"))}</strong><div class="metric-sparkline" id="hardware-gpu-graph" aria-hidden="true"></div></div>
-          <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong><div class="metric-sparkline" id="hardware-disk-graph" aria-hidden="true"></div></div>
+          <div class="hardware-stat"><span class="baseline-label">Disk I/O</span><strong id="hardware-disk-io">{_esc(hardware.get("disk_io_text", "Sampling..."))}</strong><div class="disk-io-bars" id="hardware-disk-bars" aria-hidden="true"><div class="disk-io-row"><span class="disk-io-label">Read</span><div class="disk-io-track"><div class="disk-io-fill read" id="hardware-disk-read-fill"></div></div><span class="disk-io-value" id="hardware-disk-read-value">-</span></div><div class="disk-io-row"><span class="disk-io-label">Write</span><div class="disk-io-track"><div class="disk-io-fill write" id="hardware-disk-write-fill"></div></div><span class="disk-io-value" id="hardware-disk-write-value">-</span></div></div></div>
         </div>
       </div>
     </section>"""
@@ -1248,8 +1248,8 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
   <section class="card wiki-doc">
     <div class="wiki-header">
       <div>
-        <h2 style="margin:0">AI Security &amp; Compliance Scanner Wiki</h2>
-        <p class="muted" style="margin:6px 0 0">Reference documentation for the AI Security &amp; Compliance Scanner, including architecture, workflows, exports, integrations, and operating guidance.</p>
+        <h2 style="margin:0">PhantomLM Wiki</h2>
+        <p class="muted" style="margin:6px 0 0">Reference documentation for PhantomLM, including architecture, workflows, exports, integrations, and operating guidance.</p>
       </div>
     </div>
 

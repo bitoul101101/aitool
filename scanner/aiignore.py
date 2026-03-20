@@ -1,5 +1,5 @@
 """
-.aiignore — suppression file for the AI Security & Compliance Scanner.
+.aiignore — suppression file for PhantomLM.
 
 Syntax is a strict subset of .gitignore:
   - Blank lines and lines starting with '#' are ignored (comments).

@@ -30,7 +30,7 @@ def _utc_now_iso() -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a local or Bitbucket AI security scan and write JSON/SARIF/CSV artifacts.")
+    parser = argparse.ArgumentParser(description="Run a local or Bitbucket PhantomLM scan and write JSON/SARIF/CSV artifacts.")
     parser.add_argument("repo_path", nargs="?", help="Local repository path to scan")
     parser.add_argument("--output-dir", default=str(BASE_DIR / "output"), help="Artifact output directory")
     parser.add_argument("--llm-url", default="", help="Ollama base URL")

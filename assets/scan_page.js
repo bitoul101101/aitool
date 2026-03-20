@@ -45,7 +45,7 @@
   let statusPollInFlight = false;
   let statusPollAbortController = null;
   let statusPollTimer = null;
-  const metricHistory = { cpu: [], ram: [], gpu: [], disk: [] };
+  const metricHistory = { cpu: [], ram: [], gpu: [] };
   const METRIC_HISTORY_LIMIT = 60;
 
   function escHtml(value) {
@@ -346,11 +346,10 @@
     pushMetricSample("cpu", parsePercent(hardware.cpu_percent || ""));
     pushMetricSample("ram", parseRamPercent(hardware.ram_text || ""));
     pushMetricSample("gpu", parseGpuPercent(hardware.gpu_text || ""));
-    pushMetricSample("disk", parseDiskIoRate(hardware.disk_io_text || ""));
     renderMetricSparkline("cpu");
     renderMetricSparkline("ram");
     renderMetricSparkline("gpu");
-    renderMetricSparkline("disk");
+    renderDiskIoBars(hardware.disk_io_text || "");
   }
 
   function parsePercent(text) {
@@ -379,25 +378,44 @@
     return parsePercent(firstPart);
   }
 
-  function parseDiskIoRate(text) {
+  function parseDiskIoParts(text) {
     const parts = String(text || "").split("|");
-    if (!parts.length) {
-      return null;
-    }
-    let total = 0;
-    let matched = false;
+    const result = { readBytes: null, writeBytes: null, readLabel: "-", writeLabel: "-" };
     parts.forEach(function (part) {
-      const match = String(part).match(/([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB)\/s/i);
+      const match = String(part).match(/([RW])\s*([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB)\/s/i);
       if (!match) {
         return;
       }
-      matched = true;
-      const value = Number(match[1]);
-      const unit = String(match[2] || "B").toUpperCase();
+      const kind = String(match[1] || "").toUpperCase();
+      const value = Number(match[2]);
+      const unit = String(match[3] || "B").toUpperCase();
       const scale = { B: 1, KB: 1024, MB: 1024 * 1024, GB: 1024 * 1024 * 1024 }[unit] || 1;
-      total += value * scale;
+      const bytes = value * scale;
+      if (kind === "R") {
+        result.readBytes = bytes;
+        result.readLabel = value.toFixed(value >= 10 ? 0 : 1).replace(/\.0$/, "") + " " + unit + "/s";
+      } else if (kind === "W") {
+        result.writeBytes = bytes;
+        result.writeLabel = value.toFixed(value >= 10 ? 0 : 1).replace(/\.0$/, "") + " " + unit + "/s";
+      }
     });
-    return matched ? total : null;
+    return result;
+  }
+
+  function renderDiskIoBars(text) {
+    const readFill = document.getElementById("hardware-disk-read-fill");
+    const writeFill = document.getElementById("hardware-disk-write-fill");
+    const readValue = document.getElementById("hardware-disk-read-value");
+    const writeValue = document.getElementById("hardware-disk-write-value");
+    if (!readFill || !writeFill || !readValue || !writeValue) {
+      return;
+    }
+    const parts = parseDiskIoParts(text);
+    readValue.textContent = parts.readLabel;
+    writeValue.textContent = parts.writeLabel;
+    const maxBytes = Math.max(parts.readBytes || 0, parts.writeBytes || 0, 1);
+    readFill.style.width = ((parts.readBytes || 0) / maxBytes * 100).toFixed(1) + "%";
+    writeFill.style.width = ((parts.writeBytes || 0) / maxBytes * 100).toFixed(1) + "%";
   }
 
   function parseNumericMagnitude(text) {
@@ -438,9 +456,7 @@
     }
     const width = 220;
     const height = 46;
-    const maxValue = metric === "disk"
-      ? Math.max.apply(null, values.concat([1]))
-      : 100;
+    const maxValue = 100;
     const points = values.map(function (value, index) {
       const x = values.length === 1 ? 0 : (index / (values.length - 1)) * width;
       const y = height - ((value / maxValue) * (height - 4)) - 2;
