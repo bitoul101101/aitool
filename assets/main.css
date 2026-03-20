@@ -200,6 +200,10 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .table-shell{max-height:calc(100vh - 220px);overflow:auto;border:1px solid #ead4ba;border-radius:12px}
 .table-shell thead th{position:sticky;top:0;z-index:2}
 .table-shell tbody tr:hover{background:#f4eadb}
+.history-shell{height:calc(100vh - 118px);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.history-form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+.history-form .history-toolbar,.history-form .history-pagination{flex:0 0 auto}
+.history-table-shell{flex:1 1 auto;min-height:0;max-height:none;overflow:hidden}
 .findings-shell{height:calc(100vh - 118px);display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .findings-form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
 .findings-form .trend-summary-grid,.findings-form .history-toolbar{flex:0 0 auto}

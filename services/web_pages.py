@@ -139,7 +139,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{_esc(title)}</title>
+<title>{_esc(f"PhantomLM | {title}")}</title>
 <link rel="stylesheet" href="/assets/main.css">
 </head>
 <body class="{body_class}">
@@ -644,7 +644,6 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         delta_new = delta.get("new_count", 0)
         delta_existing = delta.get("existing_count", delta.get("unchanged_count", 0))
         delta_fixed = delta.get("fixed_count", 0)
-        phase_summary = _fmt_phase_summary(rec.get("phase_metrics") or {})
         last_error = ((rec.get("errors") or [])[-1] or {}).get("code", "") if rec.get("errors") else ""
         rows.append(
             f'<tr data-project="{_esc(project)}" data-repo="{_esc(repo_label)}" data-status="{_esc(state)}" data-model="{_esc(rec.get("llm_model",""))}" data-ts="{ts}">'
@@ -660,15 +659,14 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             f'<td>{_esc(rec.get("high_prod", 0))}</td>'
             f'<td>{_esc(rec.get("llm_model", ""))}</td>'
             f'<td>{_esc(_fmt_duration(rec.get("duration_s", 0)))}</td>'
-            f'<td>{_esc(phase_summary)}</td>'
             f'<td><span class="pill {status_class}">{_esc(state.title())}</span></td>'
             f'<td>{_esc(last_error or "—")}</td>'
             f'<td>{details_link}</td></tr>'
         )
     body = f"""
 {_flash(notice, error)}
-<section class="card">
-  <form method="post" action="/history/delete" id="history-form">
+<section class="card history-shell">
+  <form method="post" action="/history/delete" id="history-form" class="history-form">
     {_csrf_field(csrf_token)}
     <div class="history-toolbar filters-row">
       <input type="search" id="history-search" placeholder="Search any column">
@@ -695,13 +693,12 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             <th data-sort="number">High<br>in Prod</th>
             <th data-sort="text">LLM<br>Model</th>
             <th data-sort="number">Duration</th>
-            <th>Phases</th>
             <th data-sort="text">Status</th>
             <th>Error</th>
             <th>Details</th>
           </tr>
         </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="16">No scan history available.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="15">No scan history available.</td></tr>'}</tbody>
       </table>
     </div>
     <div class="history-pagination">
@@ -1036,7 +1033,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
       </select>
       <button type="button" class="ghost" id="inventory-reset">Reset</button>
     </div>
-    <div class="table-shell">
+    <div class="table-shell history-table-shell">
       <table id="inventory-table">
         <thead>
           <tr>

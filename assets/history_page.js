@@ -15,8 +15,9 @@
   const nextBtn = document.getElementById("history-next-btn");
   const pageInfo = document.getElementById("history-page-info");
   const selectPage = document.getElementById("history-select-page");
-  const PAGE_SIZE = 20;
+  const tableShell = document.querySelector(".history-table-shell");
   let currentPage = 1;
+  let pageSize = 20;
   let sortState = { index: null, dir: -1, kind: "datetime" };
 
   function rows() {
@@ -51,12 +52,26 @@
     });
   }
 
+  function computePageSize() {
+    const visibleRows = rows();
+    const sampleRow = visibleRows.find((row) => row.children.length > 1);
+    if (!tableShell || !sampleRow) {
+      pageSize = 20;
+      return;
+    }
+    const header = document.querySelector("#history-table thead");
+    const headerHeight = header ? header.getBoundingClientRect().height : 0;
+    const rowHeight = Math.max(sampleRow.getBoundingClientRect().height || 0, 28);
+    const available = Math.max(tableShell.clientHeight - headerHeight - 4, rowHeight);
+    pageSize = Math.max(1, Math.floor(available / rowHeight));
+  }
+
   function renderPage() {
     const visible = filteredRows();
-    const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
     currentPage = Math.min(currentPage, totalPages);
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const end = start + PAGE_SIZE;
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
     rows().forEach((row) => {
       row.style.display = "none";
     });
@@ -161,11 +176,16 @@
     }
   });
   nextBtn?.addEventListener("click", () => {
-    const totalPages = Math.max(1, Math.ceil(filteredRows().length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filteredRows().length / pageSize));
     if (currentPage < totalPages) {
       currentPage += 1;
       renderPage();
     }
   });
+  window.addEventListener("resize", () => {
+    computePageSize();
+    renderPage();
+  });
+  computePageSize();
   sortHistory(1, "datetime");
 })();

@@ -2210,7 +2210,7 @@ def test_structured_phase_timeline_prefers_persisted_phase_metrics():
     assert durations["total"] == "00:47"
 
 
-def test_render_history_page_shows_phase_summary_and_error_code():
+def test_render_history_page_shows_error_code_without_phases_column():
     import app_server as srv
 
     html = srv.render_history_page(
@@ -2226,14 +2226,12 @@ def test_render_history_page_shows_phase_summary_and_error_code():
             "high_prod": 1,
             "llm_model": "gpt-oss:20b",
             "duration_s": 55,
-            "phase_metrics": {"init": 4, "clone": 0, "scan": 2, "llm review": 49, "report": 0},
             "errors": [{"code": "LLM_REVIEW_FAILED", "stage": "llm_review", "message": "timed out"}],
         }],
         csrf_token="csrf-demo",
     ).decode("utf-8")
 
-    assert "I 00:04" in html
-    assert "L 00:49" in html
+    assert ">Phases<" not in html
     assert "LLM_REVIEW_FAILED" in html
 
 
@@ -2484,6 +2482,7 @@ def test_history_page_is_server_rendered():
     assert "New" in html
     assert "Existing" in html
     assert "Fixed" in html
+    assert ">Phases<" not in html
     assert ">1</td>" in html
     assert ">2</td>" in html
     assert ">4</td>" in html
