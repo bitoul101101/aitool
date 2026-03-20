@@ -276,6 +276,31 @@ def test_self_scan_ignores_internal_local_llm_plumbing_findings():
     assert "ollama" not in {f["provider_or_lib"] for f in settings_findings}
 
 
+def test_self_scan_ignores_internal_cross_file_analysis_cache_reads():
+    detector = AIUsageDetector()
+    code = (
+        "file_contents = {}\n"
+        "if suffix in _CODE_EXTENSIONS and fpath.stat().st_size < 200_000:\n"
+        "    try:\n"
+        '        file_contents[rel] = fpath.read_text(encoding=\"utf-8\", errors=\"replace\")\n'
+        "    except OSError:\n"
+        "        pass\n"
+    )
+
+    findings = detector._scan_text_file_from_content(
+        code,
+        ".py",
+        "scanner/detector.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+
+    libs = {f["provider_or_lib"] for f in findings}
+    assert "document_embedded_instruction" not in libs
+    assert "file_content_to_llm" not in libs
+
+
 def test_shell_cmd_from_llm_ignores_fixed_argv_subprocess_calls():
     detector = AIUsageDetector()
     code = (

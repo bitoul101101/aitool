@@ -95,6 +95,10 @@ _SELF_SCAN_LOCAL_LLM_PLUMBING_PATHS = {
     "reports/html_report.py",
     "scanner/llm_reviewer.py",
 }
+_SELF_SCAN_ANALYSIS_INTERNAL_PATHS = {
+    "scanner/detector.py",
+    "scanner/cross_file.py",
+}
 
 # ── Entropy guard for credential patterns ────────────────────────
 # Real secrets have high entropy (≥3.0 bits/char).  Documentation examples,
@@ -463,6 +467,12 @@ def _should_ignore_internal_match(
         "vllm",
         "direct_http_ai",
         "http_response_to_llm",
+    }:
+        return True
+
+    if normalized in _SELF_SCAN_ANALYSIS_INTERNAL_PATHS and lib in {
+        "document_embedded_instruction",
+        "file_content_to_llm",
     }:
         return True
 
