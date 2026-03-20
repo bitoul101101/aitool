@@ -2366,6 +2366,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'id="findings-filter-rule"' in html
     assert 'action="/findings/bulk"' in html
     assert 'id="apply-findings-action-btn"' in html
+    assert 'id="findings-select-all"' in html
     assert 'src="/assets/findings_page.js"' in html
     assert "File:Line" in html
     assert "<th>Note</th>" not in html
@@ -3114,7 +3115,7 @@ def test_trends_page_renders_dashboard_controls():
     ).decode("utf-8")
 
     assert 'id="trend-dashboard"' in html
-    assert 'id="trends-reset-layout"' in html
+    assert 'id="trends-layout-select"' in html
     assert 'data-card-id="findings_over_time"' in html
     assert 'data-card-id="llm_review_failure_rate_by_model"' in html
     assert 'src="/assets/trends_page.js"' in html

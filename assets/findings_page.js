@@ -14,6 +14,7 @@
   const prevBtn = document.getElementById("findings-prev-btn");
   const nextBtn = document.getElementById("findings-next-btn");
   const pageInfo = document.getElementById("findings-page-info");
+  const selectAll = document.getElementById("findings-select-all");
   const PAGE_SIZE = 25;
   let currentPage = 1;
   let sortState = { index: null, dir: 1, kind: "text" };
@@ -24,6 +25,20 @@
 
   function updateBulkAction() {
     applyBtn?.classList.toggle("hidden", !rows().some((row) => row.querySelector(".finding-check")?.checked));
+  }
+
+  function displayedRows() {
+    return rows().filter((row) => row.style.display !== "none");
+  }
+
+  function updateSelectAllState() {
+    if (!selectAll) {
+      return;
+    }
+    const visibleChecks = displayedRows().map((row) => row.querySelector(".finding-check")).filter(Boolean);
+    const checked = visibleChecks.filter((box) => box.checked).length;
+    selectAll.checked = visibleChecks.length > 0 && checked === visibleChecks.length;
+    selectAll.indeterminate = checked > 0 && checked < visibleChecks.length;
   }
 
   function filteredRows() {
@@ -57,6 +72,7 @@
       nextBtn.disabled = currentPage >= totalPages;
     }
     updateBulkAction();
+    updateSelectAllState();
   }
 
   function applyFilters() {
@@ -112,7 +128,20 @@
     if (rule) rule.value = "";
     applyFilters();
   });
-  rows().forEach((row) => row.querySelector(".finding-check")?.addEventListener("change", updateBulkAction));
+  rows().forEach((row) => row.querySelector(".finding-check")?.addEventListener("change", () => {
+    updateBulkAction();
+    updateSelectAllState();
+  }));
+  selectAll?.addEventListener("change", () => {
+    displayedRows().forEach((row) => {
+      const box = row.querySelector(".finding-check");
+      if (box) {
+        box.checked = selectAll.checked;
+      }
+    });
+    updateBulkAction();
+    updateSelectAllState();
+  });
   prevBtn?.addEventListener("click", () => {
     if (currentPage > 1) {
       currentPage -= 1;

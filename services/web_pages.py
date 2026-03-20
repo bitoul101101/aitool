@@ -813,7 +813,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         <table id="findings-table">
         <thead>
           <tr>
-            <th></th>
+            <th><input type="checkbox" id="findings-select-all" aria-label="Select all displayed findings"></th>
             <th data-sort="text">Status</th>
             <th data-sort="text">Severity</th>
             <th data-sort="text">Rule</th>
@@ -1211,10 +1211,8 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
             f'style="--col-span:{int(col_span)};--row-span:{int(row_span)}">'
             f'<div class="trend-card-head">'
             f'<h2 style="margin:0">{_esc(title)}</h2>'
-            f'<span class="trend-drag-hint" title="Drag to move">Drag</span>'
             f'</div>'
             f'<div class="trend-card-body">{body_html}</div>'
-            f'<button type="button" class="trend-resize" aria-label="Resize { _esc(title) }"></button>'
             f'</section>'
         )
 
@@ -1228,8 +1226,8 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
       <div class="trend-summary-card"><span class="baseline-label">Models Used</span><strong>{_esc(summary.get("models_used", 0))}</strong></div>
     </section>
     <div class="trend-dashboard-tools">
-      <div class="muted">Drag cards to reorder. Drag the corner handle to resize. Layout is saved in this browser.</div>
-      <button type="button" class="ghost" id="trends-reset-layout">Reset Layout</button>
+      <div class="muted">Choose a fixed layout for the dashboard.</div>
+      <label class="trend-layout-picker"><span>Layout</span><select id="trends-layout-select"><option value="balanced">Balanced</option><option value="compact">Compact</option></select></label>
     </div>
     <section class="trend-grid trend-dashboard" id="trend-dashboard">
       {_trend_panel(

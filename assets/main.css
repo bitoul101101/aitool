@@ -254,16 +254,15 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .trend-summary-card{background:#fffaf4;border:1px solid #d8b995;border-radius:12px;padding:8px 10px;min-height:74px}
 .trend-summary-card strong{display:block;font-size:18px;line-height:1.05}
 .trend-dashboard-tools{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.trend-layout-picker{display:flex;align-items:center;gap:8px;font-size:12px;text-transform:none;margin:0}
+.trend-layout-picker span{font-weight:700;color:#5d3b15}
+.trend-layout-picker select{width:auto;min-width:140px}
 .trend-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
 .trend-dashboard{grid-auto-rows:28px}
 .trend-card{padding:9px 10px}
 .trend-panel{position:relative;display:flex;flex-direction:column;min-height:0;grid-column:span var(--col-span,4);grid-row:span var(--row-span,8)}
-.trend-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;cursor:grab}
-.trend-panel.dragging{opacity:.55}
-.trend-panel.drop-target{outline:2px dashed #8a6c50;outline-offset:2px}
+.trend-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .trend-panel .trend-card-body{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
-.trend-drag-hint{font-size:11px;font-weight:700;color:#7a5d3e;text-transform:uppercase;letter-spacing:.06em}
-.trend-resize{position:absolute;right:8px;bottom:8px;width:16px;height:16px;padding:0;border-radius:4px;background:linear-gradient(135deg,transparent 0 45%,#8a6c50 45% 55%,#cda274 55% 100%);border:1px solid #d8b995;cursor:nwse-resize}
 .trend-grid .card,.trend-summary-card,.trend-table-shell table,.trend-bars,.trend-bar-meta,.trend-bar-value{font-size:13px}
 .trend-bars{display:grid;gap:5px}
 .trend-timeseries{display:grid;gap:8px}
@@ -286,5 +285,5 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .trend-panel[style*="--row-span:14"] .trend-table-shell{max-height:490px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@media (max-width:900px){header{grid-template-columns:1fr}.brand-lockup img{height:34px;max-width:210px}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-support-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.trend-dashboard-tools{flex-direction:column;align-items:flex-start}.trend-panel{grid-column:1 / -1!important;grid-row:auto!important}.trend-card-head{cursor:default}.trend-resize{display:none}.wiki-toc{position:static}}
+@media (max-width:900px){header{grid-template-columns:1fr}.brand-lockup img{height:34px;max-width:210px}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-support-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.trend-dashboard-tools{flex-direction:column;align-items:flex-start}.trend-panel{grid-column:1 / -1!important;grid-row:auto!important}.wiki-toc{position:static}}
 @media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell,.threat-overview-grid{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}.findings-shell{height:auto}.findings-table-shell{max-height:calc(100vh - 260px)}}
