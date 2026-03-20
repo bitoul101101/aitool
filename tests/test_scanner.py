@@ -275,6 +275,27 @@ def test_self_scan_ignores_internal_local_llm_plumbing_findings():
     )
     assert "ollama" not in {f["provider_or_lib"] for f in settings_findings}
 
+    reviewer_code = (
+        "def challenge(user_message):\n"
+        "    body = {\n"
+        '        \"messages\": [\n'
+        '            {\"role\": \"system\", \"content\": _CHALLENGE_SYSTEM},\n'
+        '            {\"role\": \"user\", \"content\": user_message},\n'
+        "        ],\n"
+        "        \"temperature\": 0.0,\n"
+        "    }\n"
+        "    return body\n"
+    )
+    reviewer_findings = detector._scan_text_file_from_content(
+        reviewer_code,
+        ".py",
+        "scanner/llm_reviewer.py",
+        "aitool",
+        ctx_str="production",
+        is_test=False,
+    )
+    assert "prompt_injection_risk" not in {f["provider_or_lib"] for f in reviewer_findings}
+
 
 def test_self_scan_ignores_internal_cross_file_analysis_cache_reads():
     detector = AIUsageDetector()

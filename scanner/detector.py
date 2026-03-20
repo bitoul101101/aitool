@@ -467,6 +467,9 @@ def _should_ignore_internal_match(
         "vllm",
         "direct_http_ai",
         "http_response_to_llm",
+        "prompt_injection_risk",
+        "tool_output_injection",
+        "cross_context_injection",
     }:
         return True
 
