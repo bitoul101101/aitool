@@ -2210,7 +2210,7 @@ def test_structured_phase_timeline_prefers_persisted_phase_metrics():
     assert durations["total"] == "00:47"
 
 
-def test_render_history_page_shows_error_code_without_phases_column():
+def test_render_history_page_hides_phases_and_error_columns():
     import app_server as srv
 
     html = srv.render_history_page(
@@ -2232,7 +2232,7 @@ def test_render_history_page_shows_error_code_without_phases_column():
     ).decode("utf-8")
 
     assert ">Phases<" not in html
-    assert "LLM_REVIEW_FAILED" in html
+    assert ">Error<" not in html
 
 
 def test_build_findings_rollups_applies_triage_and_fixed_state():

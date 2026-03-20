@@ -644,7 +644,6 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         delta_new = delta.get("new_count", 0)
         delta_existing = delta.get("existing_count", delta.get("unchanged_count", 0))
         delta_fixed = delta.get("fixed_count", 0)
-        last_error = ((rec.get("errors") or [])[-1] or {}).get("code", "") if rec.get("errors") else ""
         rows.append(
             f'<tr data-project="{_esc(project)}" data-repo="{_esc(repo_label)}" data-status="{_esc(state)}" data-model="{_esc(rec.get("llm_model",""))}" data-ts="{ts}">'
             f'<td><input type="checkbox" class="history-check" name="scan_ids" value="{_esc(rec.get("scan_id",""))}"></td>'
@@ -660,7 +659,6 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             f'<td>{_esc(rec.get("llm_model", ""))}</td>'
             f'<td>{_esc(_fmt_duration(rec.get("duration_s", 0)))}</td>'
             f'<td><span class="pill {status_class}">{_esc(state.title())}</span></td>'
-            f'<td>{_esc(last_error or "—")}</td>'
             f'<td>{details_link}</td></tr>'
         )
     body = f"""
@@ -694,11 +692,10 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
             <th data-sort="text">LLM<br>Model</th>
             <th data-sort="number">Duration</th>
             <th data-sort="text">Status</th>
-            <th>Error</th>
             <th>Details</th>
           </tr>
         </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="15">No scan history available.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="14">No scan history available.</td></tr>'}</tbody>
       </table>
     </div>
     <div class="history-pagination">
