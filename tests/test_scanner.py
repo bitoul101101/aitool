@@ -2311,8 +2311,11 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
                 "repo": "repo1",
                 "file": "app.py",
                 "line": "14",
+                "severity": 1,
                 "severity_label": "Critical",
-                "rule": "openai_key",
+                "rule": "debug_mode",
+                "capability": "Debug mode in production",
+                "rule_label": "Debug mode in production",
                 "description": "Hardcoded key next to AI client use",
                 "last_seen_at": "2026-03-19T10:00:00Z",
                 "scan_count": 2,
@@ -2335,6 +2338,11 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'action="/findings/bulk"' in html
     assert 'id="apply-findings-action-btn"' in html
     assert 'src="/assets/findings_page.js"' in html
+    assert "File:Line" in html
+    assert "<th>Note</th>" not in html
+    assert 'sev-chip sev-1' in html
+    assert "Debug mode in production" in html
+    assert '?tab=results' in html
 
 
 def test_render_scan_page_clears_previous_repo_selection_in_new_scan_mode():

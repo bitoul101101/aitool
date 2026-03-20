@@ -206,6 +206,8 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .findings-shell,.inventory-page-grid,.trends-shell{font-size:13px}
 #findings-table{font-size:13px}
 #findings-table th,#findings-table td{font-size:13px;line-height:1.25}
+#findings-table .finding-check{width:18px;height:18px}
+#findings-table .sev-chip{font-size:11px;padding:3px 8px}
 #history-table{font-size:13px}
 #history-table th,#history-table td{font-size:13px;line-height:1.25}
 #inventory-table{font-size:13px}

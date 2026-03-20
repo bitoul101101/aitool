@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime
 
+from services.rule_labels import format_rule_label
 from scanner.suppressions import (
     TRIAGE_ACCEPTED_RISK,
     TRIAGE_FALSE_POSITIVE,
@@ -58,6 +59,11 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                 "severity": int(finding.get("severity", 4) or 4),
                 "severity_label": str(finding.get("severity_label", "") or ""),
                 "rule": str(finding.get("provider_or_lib", "") or finding.get("category", "") or "unknown"),
+                "capability": str(finding.get("capability", "") or ""),
+                "rule_label": format_rule_label(
+                    str(finding.get("provider_or_lib", "") or finding.get("category", "") or "unknown"),
+                    str(finding.get("capability", "") or ""),
+                ),
                 "description": str(finding.get("description", "") or ""),
                 "policy_status": str(finding.get("policy_status", "") or ""),
                 "context": str(finding.get("context", "production") or "production"),
@@ -82,6 +88,11 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                 row["last_seen_scan_id"] = scan_id
                 row["severity"] = int(finding.get("severity", row["severity"]) or row["severity"])
                 row["severity_label"] = str(finding.get("severity_label", row.get("severity_label", "")) or row.get("severity_label", ""))
+                row["capability"] = str(finding.get("capability", row.get("capability", "")) or row.get("capability", ""))
+                row["rule_label"] = format_rule_label(
+                    str(finding.get("provider_or_lib", row.get("rule", "")) or row.get("rule", "")),
+                    str(finding.get("capability", row.get("capability", "")) or row.get("capability", "")),
+                )
                 row["description"] = str(finding.get("description", row["description"]) or row["description"])
                 row["policy_status"] = str(finding.get("policy_status", row["policy_status"]) or row["policy_status"])
                 row["file"] = str(finding.get("file", row["file"]) or row["file"])
@@ -120,7 +131,7 @@ def findings_filter_options(findings: list[dict]) -> dict[str, list[str]]:
     return {
         "projects": sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")}),
         "repos": sorted({str(item.get("repo", "")) for item in findings if item.get("repo")}),
-        "rules": sorted({str(item.get("rule", "")) for item in findings if item.get("rule")}),
+        "rules": sorted({str(item.get("rule_label", "")) for item in findings if item.get("rule_label")}),
         "statuses": sorted({_status_label(str(item.get("status", "open"))) for item in findings}),
         "severities": sorted({str(item.get("severity_label", "")) for item in findings if item.get("severity_label")}),
     }

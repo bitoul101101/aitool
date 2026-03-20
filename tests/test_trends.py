@@ -105,7 +105,7 @@ def test_live_trends_page_renders_aggregated_sections():
             assert "Top Noisy Rules" in html
             assert "LLM Review Failure Rate by Model" in html
             assert "repo1" in html
-            assert "openai" in html
+            assert "Openai" in html
     finally:
         server.shutdown()
         server.server_close()

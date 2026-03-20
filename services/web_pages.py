@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from html import escape
 from urllib.parse import quote
+
+from services.rule_labels import format_rule_label
 from dateutil import tz
 
 
@@ -708,7 +710,11 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
 def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")})
     repos = sorted({str(item.get("repo", "")) for item in findings if item.get("repo")})
-    rules = sorted({str(item.get("rule", "")) for item in findings if item.get("rule")})
+    rules = sorted({
+        str(item.get("rule_label", "") or format_rule_label(str(item.get("rule", "") or ""), str(item.get("capability", "") or "")))
+        for item in findings
+        if item.get("rule") or item.get("rule_label")
+    })
     statuses = sorted({str(item.get("status_label", "")) for item in findings if item.get("status_label")})
     severities = sorted({str(item.get("severity_label", "")) for item in findings if item.get("severity_label")})
 
@@ -726,25 +732,34 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         }.get(key, "")
         return f'<span class="pill {css}">{_esc(status)}</span>'
 
+    def _severity_chip(detail: dict) -> str:
+        sev = int(detail.get("severity", 4) or 4)
+        label = detail.get("severity_label", str(sev))
+        return f'<span class="sev-chip sev-{sev}">{_esc(label)}</span>'
+
     rows = []
     for item in findings:
         date_text, time_text, ts = _fmt_dt(str(item.get("last_seen_at", "") or item.get("first_seen_at", "")))
+        rule_label = str(item.get("rule_label", "") or format_rule_label(str(item.get("rule", "") or ""), str(item.get("capability", "") or "")))
         details_link = ""
         if item.get("last_seen_scan_id"):
-            details_link = f'<a class="icon-link" href="/scan/{_esc(item.get("last_seen_scan_id", ""))}?tab=activity" title="Open latest scan"><img src="{DETAILS_ICON}" alt="Details"></a>'
+            details_link = f'<a class="icon-link" href="/scan/{_esc(item.get("last_seen_scan_id", ""))}?tab=results" title="Open latest scan results"><img src="{DETAILS_ICON}" alt="Details"></a>'
+        file_line = _esc(item.get("file", ""))
+        line_value = str(item.get("line", "") or "").strip()
+        if line_value:
+            file_line += f":{_esc(line_value)}"
         rows.append(
-            f'<tr data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(item.get("rule", ""))}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-ts="{ts}">'
+            f'<tr data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-ts="{ts}">'
             f'<td><input type="checkbox" class="finding-check" name="hashes" value="{_esc(item.get("hash", ""))}"></td>'
             f'<td>{_pill(item.get("status_label", "Open"))}</td>'
-            f'<td>{_esc(item.get("severity_label", ""))}</td>'
-            f'<td>{_esc(item.get("rule", ""))}</td>'
+            f'<td>{_severity_chip(item)}</td>'
+            f'<td>{_esc(rule_label)}</td>'
             f'<td>{_esc(item.get("project_key", ""))}</td>'
             f'<td>{_esc(item.get("repo", ""))}</td>'
-            f'<td><div>{_esc(item.get("file", ""))}</div><div class="finding-sub">{_esc(item.get("line", ""))}</div></td>'
+            f'<td>{file_line}</td>'
             f'<td>{_esc(item.get("description", ""))}</td>'
             f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
             f'<td>{_esc(item.get("scan_count", 0))}</td>'
-            f'<td>{_esc(item.get("triage_note", "") or "-")}</td>'
             f'<td>{details_link}</td>'
             '</tr>'
         )
@@ -790,15 +805,14 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
             <th data-sort="text">Rule</th>
             <th data-sort="text">Project</th>
             <th data-sort="text">Repo</th>
-            <th data-sort="text">File</th>
+            <th data-sort="text">File:Line</th>
             <th data-sort="text">Why Flagged</th>
             <th data-sort="datetime">Last Seen</th>
             <th data-sort="number">Scans</th>
-            <th>Note</th>
             <th>Details</th>
           </tr>
         </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="12">No findings available.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="11">No findings available.</td></tr>'}</tbody>
       </table>
     </div>
     <div class="history-pagination">
@@ -1167,7 +1181,13 @@ def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_
             return f'<tr><td colspan="{len(columns)}">{_esc(empty_text)}</td></tr>'
         rows = []
         for item in items:
-            rows.append("<tr>" + "".join(f"<td>{_esc(item.get(key, ''))}</td>" for key, _label in columns) + "</tr>")
+            cells = []
+            for key, _label in columns:
+                value = item.get(key, "")
+                if key == "rule":
+                    value = format_rule_label(str(value or ""))
+                cells.append(f"<td>{_esc(value)}</td>")
+            rows.append("<tr>" + "".join(cells) + "</tr>")
         return "".join(rows)
 
     def _trend_panel(*, card_id: str, title: str, body_html: str, col_span: int, row_span: int) -> str:
