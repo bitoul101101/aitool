@@ -213,8 +213,16 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 #findings-table th,#findings-table td{font-size:13px;line-height:1.25}
 #findings-table .finding-check{width:18px;height:18px}
 #findings-table .sev-chip{font-size:11px;padding:3px 8px}
+#findings-table th:nth-child(9),#findings-table td:nth-child(9),
+#findings-table th:nth-child(10),#findings-table td:nth-child(10){text-align:center}
 #history-table{font-size:13px}
 #history-table th,#history-table td{font-size:13px;line-height:1.25}
+#history-table th:nth-child(5),#history-table td:nth-child(5),
+#history-table th:nth-child(6),#history-table td:nth-child(6),
+#history-table th:nth-child(7),#history-table td:nth-child(7),
+#history-table th:nth-child(8),#history-table td:nth-child(8),
+#history-table th:nth-child(9),#history-table td:nth-child(9),
+#history-table th:nth-child(10),#history-table td:nth-child(10){text-align:center}
 #inventory-table{font-size:13px}
 #inventory-table th,#inventory-table td{font-size:13px;line-height:1.25}
 .history-pagination,.history-pagination .page-info{font-size:13px}
