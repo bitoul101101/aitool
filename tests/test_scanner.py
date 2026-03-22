@@ -2453,6 +2453,8 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'class="card findings-shell"' in html
     assert 'id="findings-form" class="findings-form"' in html
     assert 'class="table-shell findings-table-shell"' in html
+    assert 'class="findings-summary-strip"' in html
+    assert 'class="findings-summary-chip"' in html
     assert 'id="findings-filter-rule"' in html
     assert 'action="/findings/bulk"' in html
     assert 'formaction="/findings/generate-html"' in html
@@ -2481,7 +2483,8 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'data-match="OpenAI(api_key=' in html
     assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
     assert 'class="pill status-stopped has-tooltip"' in html
-    assert '<strong>Justification</strong>Approved temporary exception' in html
+    assert 'data-tooltip-title="Justification"' in html
+    assert 'data-tooltip-text="Approved temporary exception"' in html
     assert 'class="snippet-hit"' in html
     assert 'data-llm-reason="The code sends a hardcoded credential to an AI provider."' in html
 

@@ -22,6 +22,7 @@
   const selectAll = document.getElementById("findings-select-all");
   const PAGE_SIZE = 25;
   const JUSTIFICATION_ACTIONS = new Set(["accepted_risk", "false_positive"]);
+  let statusTooltip = null;
   let currentPage = 1;
   let sortState = { index: null, dir: 1, kind: "text" };
 
@@ -39,6 +40,38 @@
 
   function closeAllDetailRows() {
     rows().forEach((row) => closeDetailRow(row));
+  }
+
+  function hideStatusTooltip() {
+    statusTooltip?.remove();
+    statusTooltip = null;
+  }
+
+  function placeStatusTooltip(target) {
+    if (!statusTooltip || !target) {
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const tooltipRect = statusTooltip.getBoundingClientRect();
+    let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+    const top = rect.top - tooltipRect.height - 12;
+    left = Math.max(8, Math.min(left, window.innerWidth - tooltipRect.width - 8));
+    statusTooltip.style.left = `${left}px`;
+    statusTooltip.style.top = `${Math.max(8, top)}px`;
+  }
+
+  function showStatusTooltip(target) {
+    const title = String(target?.dataset.tooltipTitle || "").trim();
+    const text = String(target?.dataset.tooltipText || "").trim();
+    if (!text) {
+      return;
+    }
+    hideStatusTooltip();
+    statusTooltip = document.createElement("div");
+    statusTooltip.className = "floating-status-tooltip";
+    statusTooltip.innerHTML = `<strong>${escapeHtml(title || "Justification")}</strong>${escapeHtml(text)}`;
+    document.body.appendChild(statusTooltip);
+    placeStatusTooltip(target);
   }
 
   function escapeHtml(value) {
@@ -252,6 +285,43 @@
     }
     toggleDetailRow(row);
   }));
+  body.addEventListener("mouseover", (event) => {
+    const target = event.target.closest(".has-tooltip");
+    if (!target || !body.contains(target)) {
+      return;
+    }
+    showStatusTooltip(target);
+  });
+  body.addEventListener("mouseout", (event) => {
+    const target = event.target.closest(".has-tooltip");
+    if (!target) {
+      return;
+    }
+    const related = event.relatedTarget;
+    if (related instanceof Element && target.contains(related)) {
+      return;
+    }
+    hideStatusTooltip();
+  });
+  body.addEventListener("focusin", (event) => {
+    const target = event.target.closest(".has-tooltip");
+    if (target) {
+      showStatusTooltip(target);
+    }
+  });
+  body.addEventListener("focusout", (event) => {
+    const target = event.target.closest(".has-tooltip");
+    if (!target) {
+      return;
+    }
+    const related = event.relatedTarget;
+    if (related instanceof Element && target.contains(related)) {
+      return;
+    }
+    hideStatusTooltip();
+  });
+  window.addEventListener("scroll", () => hideStatusTooltip(), true);
+  window.addEventListener("resize", () => hideStatusTooltip());
   selectAll?.addEventListener("change", () => {
     displayedRows().forEach((row) => {
       const box = row.querySelector(".finding-check");

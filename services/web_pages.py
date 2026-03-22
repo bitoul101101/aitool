@@ -829,11 +829,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         }.get(key, "")
         note_text = str(note or "").strip()
         if note_text:
-            return (
-                f'<span class="pill {css} has-tooltip">{_esc(status)}'
-                f'<span class="status-tooltip" role="tooltip"><strong>Justification</strong>{_esc(note_text)}</span>'
-                '</span>'
-            )
+            return f'<span class="pill {css} has-tooltip" data-tooltip-title="Justification" data-tooltip-text="{_esc(note_text)}">{_esc(status)}</span>'
         return f'<span class="pill {css}">{_esc(status)}</span>'
 
     def _severity_chip(detail: dict) -> str:
@@ -900,14 +896,14 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     {f'<input type="hidden" name="scan_id" value="{_esc(scan_label)}">' if scan_label else ''}
     {f'<section class="card findings-scan-actions-card"><div class="results-actions findings-scan-actions">{scan_actions_html}</div></section>' if scan_actions_html else ''}
     {f'<div class="warn-box" style="margin-bottom:8px">Showing findings for scan {_esc(scan_label)}.</div>' if scan_label else ''}
-    <section class="trend-summary-grid" style="margin-bottom:12px">
-      <div class="trend-summary-card"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
-      <div class="trend-summary-card"><span class="baseline-label">Open</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "open"))}</strong></div>
-      <div class="trend-summary-card"><span class="baseline-label">Sent for Review</span><strong>{_esc(sum(1 for item in findings if item.get("status") == TRIAGE_SENT_FOR_REVIEW))}</strong></div>
-      <div class="trend-summary-card"><span class="baseline-label">In Remediation</span><strong>{_esc(sum(1 for item in findings if item.get("status") in {TRIAGE_IN_REMEDIATION, "reviewed"}))}</strong></div>
-      <div class="trend-summary-card"><span class="baseline-label">Accepted Risk</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "accepted_risk"))}</strong></div>
-      <div class="trend-summary-card"><span class="baseline-label">FP - Dismissed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "false_positive"))}</strong></div>
-      <div class="trend-summary-card"><span class="baseline-label">Fixed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "fixed"))}</strong></div>
+    <section class="findings-summary-strip">
+      <div class="findings-summary-chip"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
+      <div class="findings-summary-chip"><span class="baseline-label">Open</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "open"))}</strong></div>
+      <div class="findings-summary-chip"><span class="baseline-label">Sent for Review</span><strong>{_esc(sum(1 for item in findings if item.get("status") == TRIAGE_SENT_FOR_REVIEW))}</strong></div>
+      <div class="findings-summary-chip"><span class="baseline-label">In Remediation</span><strong>{_esc(sum(1 for item in findings if item.get("status") in {TRIAGE_IN_REMEDIATION, "reviewed"}))}</strong></div>
+      <div class="findings-summary-chip"><span class="baseline-label">Accepted Risk</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "accepted_risk"))}</strong></div>
+      <div class="findings-summary-chip"><span class="baseline-label">FP - Dismissed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "false_positive"))}</strong></div>
+      <div class="findings-summary-chip"><span class="baseline-label">Fixed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "fixed"))}</strong></div>
     </section>
     <div class="history-toolbar filters-row">
       <input type="search" id="findings-search" placeholder="Search findings">
