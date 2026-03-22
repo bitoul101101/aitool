@@ -30,7 +30,7 @@ def _utc_now_iso() -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a local or Bitbucket PhantomLM scan and write JSON/CSV artifacts.")
+    parser = argparse.ArgumentParser(description="Run a local or Bitbucket PhantomLM scan and write JSON artifacts.")
     parser.add_argument("repo_path", nargs="?", help="Local repository path to scan")
     parser.add_argument("--output-dir", default=str(BASE_DIR / "output"), help="Artifact output directory")
     parser.add_argument("--llm-url", default="", help="Ollama base URL")
@@ -133,7 +133,6 @@ def main() -> int:
     print(f"Scan state   : {session.state}")
     print(f"Scan ID      : {session.scan_id}")
     print(f"Findings     : {len(session.findings)}")
-    print(f"CSV report   : {report.get('csv', '')}")
     print(f"JSON report  : {report.get('json', '')}")
     print(f"Log file     : {log_path}")
     return 0 if session.state in {"done", "stopped", "skipped"} else 1

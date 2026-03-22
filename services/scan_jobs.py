@@ -1599,13 +1599,12 @@ class ScanJobService:
             safe_name = f"AI_Scan_Report_{session.project_key}_{label}_{dt_date}_{dt_time}"
             report_meta = self._report_meta_from_session(session, final)
 
-            log("  Writing CSV report...", "dim")
             log("  Writing JSON report...", "dim")
             structured_reports = self._write_structured_reports(
                 findings=final,
                 base_name=safe_name,
                 report_meta=report_meta,
-                write_csv=True,
+                write_csv=False,
             )
             if final:
                 log("  HTML report deferred until requested from the Findings page.", "dim")
@@ -1617,7 +1616,6 @@ class ScanJobService:
             session.add_phase_time("report", time.perf_counter() - report_started)
             log(
                 "  OK Reports: "
-                f"{Path(structured_reports['csv']).name}, "
                 f"{Path(structured_reports['json']).name}",
                 "ok",
             )

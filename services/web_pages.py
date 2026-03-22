@@ -176,6 +176,14 @@ def _scan_results_toolbar_actions(
         toolbar_actions.append(f'<button type="button" class="btn alt disabled" disabled>Generating {generation_mode_label} HTML...</button>')
     if csv_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
+    else:
+        toolbar_actions.append(
+            f'<form method="post" action="/findings/generate-html" class="triage-form inline-only" target="_blank">'
+            f'{_csrf_field(csrf_token)}'
+            f'<input type="hidden" name="scan_id" value="{_esc(scan_id)}" />'
+            '<button type="submit" class="btn alt" name="export_type" value="csv">Generate CSV</button>'
+            '</form>'
+        )
     if json_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(json_name)}" download>Download JSON</a>')
     if log_url:
@@ -1017,7 +1025,7 @@ def render_results_page(
     elif can_generate_html:
         results_body = (
             '<section class="card empty-state"><strong>HTML report has not been generated yet.</strong>'
-            '<div class="muted" style="margin-top:6px">Generate a fast or detailed HTML report when you need it. CSV and log artifacts remain available immediately.</div>'
+            '<div class="muted" style="margin-top:6px">Generate a fast or detailed HTML report when you need it. CSV is also available on demand, while JSON and logs remain available immediately.</div>'
             '</section>'
         )
     else:
@@ -1460,7 +1468,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
           <tr><td>Detection</td><td>Finds AI provider usage, prompt handling risks, model-serving exposure, RAG/vector patterns, secret-to-AI correlation, policy violations, and suspicious flows.</td></tr>
           <tr><td>Analysis</td><td>Applies context-aware severity scoring, production relevance, evidence quality scoring, and policy mapping before optional LLM review.</td></tr>
           <tr><td>Review Workflow</td><td>Supports owner handoff, remediation tracking, accepted risk, FP dismissal with justification, central findings management, scan history, and trend analysis.</td></tr>
-          <tr><td>Reporting</td><td>Produces CSV, JSON, and on-demand HTML reports, plus logs, inventory views, and trend summaries.</td></tr>
+          <tr><td>Reporting</td><td>Produces automatic JSON reports, on-demand CSV and HTML reports, plus logs, inventory views, and trend summaries.</td></tr>
           <tr><td>Execution Modes</td><td>Supports browser-driven scans plus a minimal CLI for both local-repo and Bitbucket project/repo scans that writes machine-readable artifacts.</td></tr>
         </tbody>
       </table>
@@ -1492,7 +1500,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
           <tr><td>Bitbucket Access</td><td><code>scanner.bitbucket</code> handles PAT-authenticated project/repo listing, metadata lookup, and cloning with TLS validation.</td></tr>
           <tr><td>Detector and Analyzer</td><td><code>scanner.detector</code> and <code>analyzer.security</code> produce findings, score them, and enrich them with policy context.</td></tr>
           <tr><td>Persistence</td><td>SQLite-backed scan history, scan logs, findings rollups, triage metadata, and exported artifacts.</td></tr>
-          <tr><td>Reports and Exports</td><td>CSV, JSON, and HTML reports live under the output directory and can be reopened from the UI.</td></tr>
+          <tr><td>Reports and Exports</td><td>JSON reports are written automatically; CSV and HTML can be generated from the UI when needed.</td></tr>
         </tbody>
       </table>
     </section>
@@ -1504,7 +1512,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <tbody>
           <tr><td>Scanner</td><td>Repo access, clone helpers, detection, suppression logic, and LLM reviewer integration.</td></tr>
           <tr><td>Services</td><td>Active scan state, session/auth handling, API actions, runtime support, trends, findings rollups, and UI rendering helpers.</td></tr>
-          <tr><td>Reports</td><td>CSV, JSON, HTML, and delta comparison.</td></tr>
+          <tr><td>Reports</td><td>JSON, on-demand CSV, on-demand HTML, and delta comparison.</td></tr>
           <tr><td>Assets</td><td>Static CSS and JavaScript for pages such as scan activity, history, findings, results, and general layout.</td></tr>
           <tr><td>Tests</td><td>Regression, security, smoke, and report/settings coverage for the desktop web app and scan services.</td></tr>
         </tbody>
@@ -1518,7 +1526,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <li>Select repositories or a local path, choose scan scope, and choose an LLM model if LLM review is enabled.</li>
         <li>The tool resolves repo metadata, clones or opens the repo, scans files, applies policy analysis, and optionally runs LLM review.</li>
         <li>Structured telemetry, history, inventory, findings, and staged threat-model data are persisted as the scan progresses.</li>
-        <li>CSV and JSON exports are written automatically; HTML can be generated on demand from the Results page.</li>
+        <li>JSON exports are written automatically; CSV and HTML can be generated on demand from the Findings page.</li>
         <li>Operators review findings through the Findings page, scan workspace, Past Scans, Trends, and report artifacts.</li>
       </ol>
     </section>
@@ -1559,7 +1567,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
       <table>
         <thead><tr><th>Artifact</th><th>Behavior</th></tr></thead>
         <tbody>
-          <tr><td>CSV</td><td>Written automatically at scan completion for spreadsheet-style analysis and operational review.</td></tr>
+          <tr><td>CSV</td><td>Generated on demand from the Findings page for spreadsheet-style analysis and operational review.</td></tr>
           <tr><td>JSON</td><td>Written automatically at scan completion for machine-readable integration and custom processing.</td></tr>
           <tr><td>HTML</td><td>Generated on demand from the Results page and cached after generation.</td></tr>
           <tr><td>History Export</td><td>SQLite is the source of truth; compatibility JSON export is maintained for legacy consumers.</td></tr>
@@ -1575,7 +1583,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <tbody>
           <tr><td>Bitbucket</td><td>PAT-authenticated project/repo discovery and cloning over TLS with custom CA bundle support.</td></tr>
           <tr><td>Ollama</td><td>Optional local LLM review and report enrichment with model discovery, runtime checks, and timeout controls.</td></tr>
-          <tr><td>CLI</td><td>Headless local-repo or Bitbucket scans via <code>scan_cli.py</code> producing CSV, JSON, and logs.</td></tr>
+          <tr><td>CLI</td><td>Headless local-repo or Bitbucket scans via <code>scan_cli.py</code> producing automatic JSON output plus logs.</td></tr>
           <tr><td>Downstream Tools</td><td>JSON exports are the first integration layer for pipelines and external tooling.</td></tr>
         </tbody>
       </table>
@@ -1588,7 +1596,7 @@ python C:\\aitool\\scan_cli.py C:\\path\\to\\repo --output-dir C:\\tmp\\scan-out
 python C:\\aitool\\scan_cli.py --project COGI --repo repo1
 python C:\\aitool\\scan_cli.py --project COGI --repo repo1 --repo repo2 --scope branch_diff --compare-ref master</code></pre>
       <p>The CLI is intentionally minimal but now supports both local-repo scans and Bitbucket project/repo scans. For Bitbucket mode, provide <code>--project</code> and one or more <code>--repo</code> values, plus a PAT through <code>--token</code>, <code>AI_SCANNER_PAT</code>, <code>BITBUCKET_PAT</code>, or the saved credential store.</p>
-      <p class="muted" style="margin:8px 0 0">CLI scans write CSV and JSON exports automatically. HTML remains on-demand in the web UI.</p>
+      <p class="muted" style="margin:8px 0 0">CLI scans write JSON automatically. CSV and HTML remain on-demand in the web UI.</p>
     </section>
 
     <section id="security" class="wiki-section">

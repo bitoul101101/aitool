@@ -2452,7 +2452,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
         ],
         csrf_token="csrf-demo",
         scan_label="scan-2",
-        scan_actions_html='<a class="btn alt" href="/reports/scan.csv" download>Download CSV File</a>',
+        scan_actions_html='<form method="post" action="/findings/generate-html" class="triage-form inline-only" target="_blank"><input type="hidden" name="scan_id" value="scan-2" /><button type="submit" class="btn alt" name="export_type" value="csv">Generate CSV</button></form>',
     ).decode("utf-8")
 
     assert "Findings" in html
@@ -2486,7 +2486,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert "Debug mode in production" in html
     assert "Security" in html
     assert "Showing findings for scan scan-2." in html
-    assert "Download CSV File" in html
+    assert "Generate CSV" in html
     assert 'class="finding-row"' in html
     assert 'data-match="OpenAI(api_key=' in html
     assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
@@ -5252,7 +5252,6 @@ def test_scan_cli_reports_json_and_csv_paths(tmp_path, capsys, monkeypatch):
 
     assert rc == 0
     assert "JSON report" in out
-    assert "CSV report" in out
     assert (tmp_path / "logs").exists()
 
 
@@ -5552,7 +5551,6 @@ def test_run_scan_with_no_repos_completes_cleanly():
     assert session.repo_details == {}
     assert any(msg["msg"] == "  No findings - HTML report skipped." for msg in session.log_lines)
     report = dict((session.report_paths or {}).get("__all__", {}) or {})
-    assert report.get("csv_name", "").endswith(".csv")
     assert report.get("json_name", "").endswith(".json")
     assert all(ord(ch) < 128 for entry in session.log_lines for ch in entry["msg"])
 
@@ -5650,11 +5648,11 @@ def test_run_scan_defers_html_report_generation_until_requested():
              patch("scanner.bitbucket.cleanup_clone", return_value=None), \
              patch("services.scan_jobs.AIUsageDetector.scan", return_value=[finding]), \
              patch("services.scan_jobs.SecurityAnalyzer.analyze", side_effect=lambda self, rows: rows), \
-             patch("services.scan_jobs.Aggregator.process", return_value=[finding]), \
-             patch("services.scan_jobs.CSVReporter.write_csv", return_value=str(d / "output" / "report.csv")):
+             patch("services.scan_jobs.Aggregator.process", return_value=[finding]):
             srv._run_scan(session)
 
         assert any("HTML report deferred until requested from the Findings page." in entry["msg"] for entry in session.log_lines)
+        assert not any("Writing CSV report..." in entry["msg"] for entry in session.log_lines)
         assert not any("Writing HTML report" in entry["msg"] for entry in session.log_lines)
     finally:
         srv.OUTPUT_DIR = orig_out
