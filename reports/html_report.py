@@ -225,7 +225,7 @@ class HTMLReporter:
         path = self.output_dir / f"ai_scan_{self.scan_id}.html"
         # Pre-bake LLM detail answers at report-write time if Ollama is available
         llm_details = {}
-        if detail_mode == "detailed" and ollama_url and ollama_model:
+        if detail_mode == "detailed":
             try:
                 timeout_s = int(self.meta.get("report_detail_timeout_s", 180) or 180)
                 llm_details = self._fetch_llm_details(
@@ -426,6 +426,22 @@ class HTMLReporter:
         def _placeholder_html(message: str) -> str:
             return _render_html("", message)
 
+        def _stored_detail_html(f: dict) -> str:
+            reason = str(f.get("llm_reason", "") or "").strip()
+            remediation = str(f.get("remediation", "") or "").strip()
+            secure_example = str(f.get("llm_secure_example", "") or "").strip()
+            if not any([reason, remediation, secure_example]):
+                return ""
+            lang = _lang_tag(str(f.get("file", "") or ""))
+            parts = []
+            if reason:
+                parts.append("## Why It's Problematic\n" + reason)
+            if remediation:
+                parts.append("## How to Fix It\n" + remediation)
+            if secure_example:
+                parts.append(f"## Secure Code Example\n```{lang}\n{secure_example}\n```")
+            return _render_html("\n\n".join(parts))
+
         def _is_timeout_error(exc: Exception) -> bool:
             if isinstance(exc, TimeoutError):
                 return True
@@ -466,16 +482,8 @@ class HTMLReporter:
                         continue
                     return key, _placeholder_html(f"⚠ LLM unavailable ({model}): {exc}")
 
-        limited_findings = list(findings[:REPORT_LLM_MAX_FINDINGS])
-        skipped_findings = list(findings[REPORT_LLM_MAX_FINDINGS:])
-        for finding in skipped_findings:
-            results[_key(finding)] = _placeholder_html(
-                f"⚠ LLM analysis skipped for this finding to keep report generation responsive. "
-                f"Only the first {REPORT_LLM_MAX_FINDINGS} findings are enriched per report."
-            )
-
         unique_findings: dict[str, dict] = {}
-        for finding in limited_findings:
+        for finding in findings:
             unique_findings.setdefault(_key(finding), finding)
 
         work_items = list(unique_findings.values())
@@ -488,8 +496,17 @@ class HTMLReporter:
         completed = 0
         for finding in work_items:
             key = _key(finding)
-            cached_html = cache.get(_cache_key(finding))
-            if cached_html:
+            stored_html = _stored_detail_html(finding)
+            cached_html = cache.get(_cache_key(finding)) if base_url and model else ""
+            if stored_html:
+                results[key] = stored_html
+                completed += 1
+                if progress_fn:
+                    try:
+                        progress_fn(completed, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
+                    except (TypeError, ValueError):
+                        pass
+            elif cached_html:
                 results[key] = cached_html
                 completed += 1
                 if progress_fn:
@@ -500,12 +517,29 @@ class HTMLReporter:
             else:
                 uncached_items.append(finding)
 
-        if not uncached_items:
+        if not base_url or not model:
             return results
 
-        max_workers = max(1, min(REPORT_LLM_MAX_WORKERS, len(uncached_items)))
+        limited_uncached_items = list(uncached_items[:REPORT_LLM_MAX_FINDINGS])
+        skipped_uncached_items = list(uncached_items[REPORT_LLM_MAX_FINDINGS:])
+        for finding in skipped_uncached_items:
+            results[_key(finding)] = _placeholder_html(
+                f"⚠ LLM analysis skipped for this finding to keep report generation responsive. "
+                f"Only the first {REPORT_LLM_MAX_FINDINGS} findings are enriched per report."
+            )
+            completed += 1
+            if progress_fn:
+                try:
+                    progress_fn(completed, total_work, finding.get("capability", finding.get("provider_or_lib", "")))
+                except (TypeError, ValueError):
+                    pass
+
+        if not limited_uncached_items:
+            return results
+
+        max_workers = max(1, min(REPORT_LLM_MAX_WORKERS, len(limited_uncached_items)))
         if max_workers == 1:
-            for finding in uncached_items:
+            for finding in limited_uncached_items:
                 key, html = _fetch_one(finding)
                 results[key] = html
                 cache[_cache_key(finding)] = html
@@ -520,7 +554,7 @@ class HTMLReporter:
 
         future_meta = {}
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="report-llm") as executor:
-            for finding in uncached_items:
+            for finding in limited_uncached_items:
                 future = executor.submit(_fetch_one, finding)
                 future_meta[future] = finding
             for future in as_completed(future_meta):

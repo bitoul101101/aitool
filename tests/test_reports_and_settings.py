@@ -173,6 +173,32 @@ def test_html_report_llm_enrichment_deduplicates_repeated_findings():
     assert calls[0][1] == 180
 
 
+def test_html_report_uses_stored_scan_time_llm_detail_before_fetching():
+    import urllib.request
+
+    reporter = HTMLReporter(output_dir=tempfile.mkdtemp(), scan_id="20260318_180025")
+    findings = [
+        {
+            "file": "app.py",
+            "line": 10,
+            "provider_or_lib": "openai",
+            "capability": "chat",
+            "severity": 2,
+            "llm_reason": "The key is embedded directly in code.",
+            "remediation": "Move the key to an environment variable.",
+            "llm_secure_example": "client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])",
+        }
+    ]
+
+    with patch.object(urllib.request, "urlopen", side_effect=AssertionError("should not fetch")):
+        details = reporter._fetch_llm_details(findings, "http://localhost:11434", "qwen", timeout=180)
+
+    only_value = next(iter(details.values()))
+    assert "Problematic" in only_value
+    assert "Secure Code Example" in only_value
+    assert "OPENAI_API_KEY" in only_value
+
+
 def test_html_report_llm_enrichment_applies_budget_placeholder():
     import urllib.request
     from reports import html_report as report_mod
