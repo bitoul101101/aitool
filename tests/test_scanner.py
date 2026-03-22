@@ -1687,10 +1687,10 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="findings-panel">' not in html
     assert '<div class="mitigate-section">' not in html
     assert '<div class="suppressed-section">' not in html
-    assert "Performance" in html
+    assert 'id="hardware-card"' in html
     assert "LLM Batch Timings" not in html
     assert "LLM Stats" not in html
-    assert html.index("Phase Timeline") < html.index("Performance")
+    assert html.index("Phase Timeline") < html.index('id="hardware-card"')
     assert 'href="/scan/20260317_154037?tab=activity"' not in html
     assert '>Results</a>' not in html
     assert 'id="hardware-gpu"' in html
@@ -4921,6 +4921,44 @@ def test_request_app_shutdown_sets_exit_event_and_stops_server():
     finally:
         srv._server_instance = orig_server
         srv._app_exit_event.clear()
+
+
+def test_api_history_delete_clears_matching_stopped_current_session():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+    handler = DummyHandler()
+    orig_session = srv._session
+    session = srv.ScanSession()
+    session.scan_id = "20250317_999999"
+    session.project_key = "LOCAL"
+    session.repo_slugs = ["repo1"]
+    session.state = "stopped"
+    try:
+        srv._replace_current_session(session)
+        with patch.object(srv, "_load_history", return_value=[{
+            "scan_id": "20250317_999999",
+            "project_key": "LOCAL",
+            "repo_slugs": ["repo1"],
+            "state": "stopped",
+            "reports": {"__all__": {}},
+            "log_file": "",
+        }]), patch.object(srv, "_delete_history") as delete_mock:
+            srv._Handler._api_history_delete(handler, {"scan_ids": ["20250317_999999"]})
+
+        assert handler.payload[0] == 200
+        assert handler.payload[1]["deleted"] == ["20250317_999999"]
+        delete_mock.assert_called_once_with(["20250317_999999"])
+        assert srv._current_session().scan_id == ""
+        assert srv._current_session().state == "idle"
+    finally:
+        srv._replace_current_session(orig_session)
 
 
 def test_start_attempts_to_boot_ollama_before_opening_browser():

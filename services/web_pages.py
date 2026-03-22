@@ -589,7 +589,6 @@ def render_scan_page(
     inventory_html = ""
     hardware_html = f"""
     <section class="card" id="hardware-card">
-      <h2 style="margin:0 0 8px;font-size:15px">Performance</h2>
       <div class="baseline-summary" id="hardware-summary">
         <div class="hardware-grid">
           <div class="hardware-stat"><span class="baseline-label">CPU</span><strong id="hardware-cpu">{_esc(hardware.get("cpu_percent", "Sampling..."))}</strong><div class="metric-sparkline" id="hardware-cpu-graph" aria-hidden="true"></div></div>
@@ -674,9 +673,9 @@ def render_scan_page(
 <section class="running-shell">
   <section class="card activity-panel">
     <div class="workspace-header">
-      <div></div>
-      <h2>Activity Log</h2>
       <div class="scan-actions">{stop_button if running else ""}</div>
+      <h2>Activity Log</h2>
+      <div></div>
     </div>
     <div class="activity-main">
       <div class="terminal" id="scan-log">
@@ -691,7 +690,7 @@ def render_scan_page(
       </div>
       <div class="activity-side-stack">
         <section class="card timeline-card activity-timeline-card">
-          <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
+          <h2 style="margin:0 0 8px;font-size:14px">Phase Timeline</h2>
           <div class="timeline" id="phase-timeline">{timeline_html}</div>
         </section>
         {hardware_html}

@@ -552,6 +552,17 @@ def _delete_history(scan_ids: List[str]) -> None:
     _scan_service.delete_history(scan_ids)
 
 
+def _clear_deleted_stopped_session(scan_ids: List[str]) -> None:
+    ids = {str(scan_id or "").strip() for scan_id in list(scan_ids or []) if str(scan_id or "").strip()}
+    if not ids:
+        return
+    current = _current_session()
+    with _state_lock:
+        if current.scan_id in ids and current.state == "stopped":
+            replacement = ScanSession()
+            _replace_current_session(replacement)
+
+
 def _is_within_roots(path: Path, roots: List[Path]) -> bool:
     try:
         resolved = path.resolve()
@@ -2300,6 +2311,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._render_history_page(error=str(e))
         if result["errors"]:
             return self._render_history_page(error="; ".join(result["errors"]))
+        _clear_deleted_stopped_session(result["deleted"])
         self._redirect(_with_query("/history", notice=f"Deleted {len(result['deleted'])} scan record(s)"))
 
     def _page_findings_bulk(self, body: dict):
@@ -2733,13 +2745,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         managed_roots = [Path(OUTPUT_DIR).resolve(), Path(LOG_DIR).resolve()]
         try:
-            self._json(delete_history_records(
+            result = delete_history_records(
                 body=body,
                 history_records=_history_records_for_user(),
                 delete_managed_file=lambda path_str, sid, artifact: _delete_managed_history_file(path_str, sid, artifact, roots=managed_roots),
                 delete_history=_delete_history,
                 audit_event=_audit_event,
-            ))
+            )
+            _clear_deleted_stopped_session(result["deleted"])
+            self._json(result)
         except ValueError as e:
             return self._err(400, str(e))
         except Exception as e:

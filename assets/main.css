@@ -77,7 +77,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .repo-row{display:flex;align-items:center;gap:6px;padding:1px 4px;border-radius:6px;font-size:12px;line-height:1.15}
 .repo-row input{width:auto;margin:0;flex:0 0 auto;transform:translateY(1px)}
 .repo-row span{display:block}
-.running-shell{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;align-items:start;height:calc(100vh - 132px);min-height:0}
+.running-shell{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:14px;align-items:stretch;height:calc(100vh - 124px);min-height:0}
 .wiki-shell{display:flex;gap:14px;align-items:flex-start}
 .wiki-doc{flex:1 1 auto;min-width:0;max-width:none}
 .wiki-header{display:flex;justify-content:center;gap:12px;align-items:center;margin-bottom:10px}
@@ -102,14 +102,15 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
 .timeline-row.total-row,.timeline .timeline-row:last-child{margin-top:8px;padding-top:12px;border-top:2px solid #cfae8a;border-radius:0 0 10px 10px}
 .timeline-name{text-transform:capitalize}
-.activity-main{display:grid;grid-template-columns:minmax(0,3.2fr) minmax(220px,.65fr);gap:10px;min-height:0}
-.activity-side-stack{display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;min-height:0}
-.terminal{background:#18120d;color:#79f7a1;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:calc(100vh - 220px);max-height:none;min-height:320px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:13px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px;align-items:start}
+.activity-main{display:grid;grid-template-columns:minmax(0,3.2fr) minmax(220px,.65fr);gap:10px;min-height:0;height:100%}
+.activity-main>*{min-width:0}
+.activity-side-stack{display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;min-height:0;height:100%}
+.terminal{background:#18120d;color:#79f7a1;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:100%;max-height:100%;min-height:0;min-width:0;overflow:auto;box-sizing:border-box;font-family:Cascadia Code,Consolas,monospace;font-size:13px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px;align-items:start}
 .terminal-log-text{min-width:0;white-space:pre-wrap}
-.terminal-brand-inline{margin:0;color:inherit;opacity:.88;font-family:inherit;font-size:12px;line-height:1.25;white-space:pre;justify-self:start;align-self:start}
-.activity-panel{height:100%;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px}
+.terminal-brand-inline{margin:0;color:inherit;opacity:.88;font-family:inherit;font-size:10px;line-height:1.15;white-space:pre;justify-self:start;align-self:start;max-width:100%;overflow:visible}
+.activity-panel{height:100%;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;overflow:hidden}
 .activity-timeline-card{padding:7px 9px}
-.activity-main #hardware-card{margin-top:0;min-height:0;overflow:auto}
+.activity-main #hardware-card{margin-top:0;min-height:0;height:100%;max-height:100%;overflow:auto;box-sizing:border-box;padding-top:8px}
 .running-shell>.stack{height:100%;min-height:0;overflow:auto;align-content:start;padding-right:2px}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
@@ -304,10 +305,14 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .subnav a{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#efe1cf;color:#5d3b15;text-decoration:none;font-size:11px;font-weight:700}
 .subnav a.active{background:#6d3514;color:#fff}
 .subnav a.disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
-.workspace-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;margin-bottom:6px}
+.workspace-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:2px;margin-bottom:2px}
 .workspace-header .subnav{margin-bottom:0;justify-self:start}
-.workspace-header .page-title{justify-self:center;font-size:14px;font-weight:700;margin:0;line-height:1.1}
+.workspace-header .page-title{justify-self:center;font-size:14px;font-weight:700;margin:0;line-height:1}
 .workspace-header .scan-actions{justify-self:end}
+.activity-panel .workspace-header{gap:1px;margin-bottom:1px}
+.activity-panel .workspace-header h2{margin:0;font-size:15px;line-height:1}
+.activity-panel .workspace-header .scan-actions{justify-self:start}
+.activity-panel .scan-actions .warn,.activity-panel .scan-actions .btn{padding:4px 8px;font-size:11px}
 .results-frame{width:100%;height:calc(100vh - 150px);min-height:560px;border:1px solid #d8b995;border-radius:14px;background:#fff}
 .trends-shell{display:grid;gap:10px}
 .trend-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
