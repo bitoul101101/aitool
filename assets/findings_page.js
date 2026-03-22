@@ -43,11 +43,40 @@
       .replace(/"/g, "&quot;");
   }
 
-  function detailBlock(title, content) {
+  function renderRichContent(content, { codeOnly = false } = {}) {
+    const text = String(content || "");
+    if (!text) {
+      return "";
+    }
+    if (codeOnly) {
+      return `<pre class="finding-detail-code"><code>${escapeHtml(text)}</code></pre>`;
+    }
+    const fenceRe = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let html = "";
+    let match;
+    while ((match = fenceRe.exec(text)) !== null) {
+      const before = text.slice(lastIndex, match.index).trim();
+      if (before) {
+        html += `<p>${escapeHtml(before).replace(/\n/g, "<br>")}</p>`;
+      }
+      const language = (match[1] || "").trim();
+      const code = match[2] || "";
+      html += `<pre class="finding-detail-code"><code${language ? ` data-lang="${escapeHtml(language)}"` : ""}>${escapeHtml(code.trim())}</code></pre>`;
+      lastIndex = fenceRe.lastIndex;
+    }
+    const tail = text.slice(lastIndex).trim();
+    if (tail) {
+      html += `<p>${escapeHtml(tail).replace(/\n/g, "<br>")}</p>`;
+    }
+    return html || `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
+  }
+
+  function detailBlock(title, content, options = {}) {
     if (!content) {
       return "";
     }
-    return `<h4>${title}</h4><p>${escapeHtml(content).replace(/\n/g, "<br>")}</p>`;
+    return `<h4>${title}</h4>${renderRichContent(content, options)}`;
   }
 
   function toggleDetailRow(row) {
@@ -69,7 +98,7 @@
     const fallback = reviewed
       ? '<p class="finding-detail-note">LLM reviewed this finding, but no explanation was stored in history.</p>'
       : '<p class="finding-detail-note">No LLM explanation is stored for this finding yet.</p>';
-    detailCell.innerHTML = `<div class="finding-detail-panel">${verdict}${detailBlock("Why It's Problematic", reason)}${detailBlock("How to Fix It", remediation)}${detailBlock("Code Snippet", snippet)}${(!reason && !remediation && !snippet) ? fallback : ""}</div>`;
+    detailCell.innerHTML = `<div class="finding-detail-panel">${verdict}${detailBlock("Why It's Problematic", reason)}${detailBlock("How to Fix It", remediation)}${detailBlock("Code Snippet", snippet, { codeOnly: true })}${(!reason && !remediation && !snippet) ? fallback : ""}</div>`;
     detailRow.appendChild(detailCell);
     row.after(detailRow);
     row.classList.add("row-expanded");

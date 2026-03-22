@@ -223,6 +223,8 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .finding-detail-panel h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6d3514;margin:14px 0 6px}
 .finding-detail-panel h4:first-child{margin-top:0}
 .finding-detail-panel p{margin:0 0 8px}
+.finding-detail-code{display:block;max-width:100%;background:#18120d;color:#f5debe;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;line-height:1.55;padding:10px 14px;border-radius:8px;overflow-x:auto;margin:6px 0 10px;white-space:pre}
+.finding-detail-code code{font:inherit;color:inherit}
 .finding-detail-note{color:#7a5d3e;font-size:12px}
 .finding-detail-panel .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .finding-detail-panel .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid #d8b995;color:#5f3f1c;font-size:11px;font-weight:700}

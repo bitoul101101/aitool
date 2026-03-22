@@ -44,6 +44,7 @@ def _launch_dedicated_browser_window(url: str) -> bool:
                     str(exe),
                     f"--app={url}",
                     "--new-window",
+                    "--start-maximized",
                     "--disable-session-crashed-bubble",
                 ],
                 stdout=subprocess.DEVNULL,

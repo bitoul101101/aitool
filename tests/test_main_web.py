@@ -15,6 +15,7 @@ def test_launch_dedicated_browser_window_uses_app_mode():
     args = popen_mock.call_args[0][0]
     assert args[0] == str(fake_browser)
     assert "--new-window" in args
+    assert "--start-maximized" in args
     assert any(arg.startswith("--app=http://127.0.0.1:5757/") for arg in args)
 
 
