@@ -27,13 +27,9 @@ def find_history_record_by_report_name(history: list[dict], filename: str) -> di
             "html",
             "csv",
             "json",
-            "sarif",
-            "threat_dragon",
             "html_name",
             "csv_name",
             "json_name",
-            "sarif_name",
-            "threat_dragon_name",
         ):
             value = str(reports.get(key, "") or "")
             if value and Path(value).name == safe:

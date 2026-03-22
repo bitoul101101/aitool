@@ -131,8 +131,6 @@ def _scan_results_toolbar_actions(
     html_detail_mode: str = "",
     csv_name: str = "",
     json_name: str = "",
-    sarif_name: str = "",
-    threat_dragon_name: str = "",
     log_url: str = "",
     can_generate_html: bool = False,
     html_generation: dict | None = None,
@@ -176,18 +174,8 @@ def _scan_results_toolbar_actions(
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
     if json_name:
         toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(json_name)}" download>Download JSON</a>')
-    if sarif_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(sarif_name)}" download>Download SARIF</a>')
-    if threat_dragon_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(threat_dragon_name)}" download>Download Threat Dragon</a>')
     if log_url:
         toolbar_actions.append(f'<a class="btn ghost" href="{_esc(log_url)}" download>Download Logs</a>')
-    toolbar_actions.append(
-        f'<form method="post" action="/scan/{_esc(scan_id)}/replay-threat-model" class="triage-form inline-only">'
-        f'{_csrf_field(csrf_token)}'
-        '<button type="submit" class="btn ghost">Replay Threat Model</button>'
-        '</form>'
-    )
     return "".join(toolbar_actions)
 
 
@@ -904,8 +892,6 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
       <button type="submit" class="btn alt hidden" id="generate-findings-html-btn" name="export_type" value="html" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">Generate HTML Report</button>
       <button type="submit" class="btn alt hidden" id="generate-findings-csv-btn" name="export_type" value="csv" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">CSV</button>
       <button type="submit" class="btn alt hidden" id="generate-findings-json-btn" name="export_type" value="json" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">JSON</button>
-      <button type="submit" class="btn alt hidden" id="generate-findings-sarif-btn" name="export_type" value="sarif" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">SARIF</button>
-      <button type="submit" class="btn alt hidden" id="generate-findings-threat-dragon-btn" name="export_type" value="threat_dragon" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">Threat Dragon</button>
       <button type="submit" class="warn hidden" id="apply-findings-action-btn">Apply to Selected</button>
     </div>
       <div class="table-shell findings-table-shell">
@@ -949,8 +935,6 @@ def render_results_page(
     html_detail_mode: str = "",
     csv_name: str = "",
     json_name: str = "",
-    sarif_name: str = "",
-    threat_dragon_name: str = "",
     log_url: str = "",
     started_at_utc: str = "",
     can_generate_html: bool = False,
@@ -1438,7 +1422,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
           <tr><td>Detection</td><td>Finds AI provider usage, prompt handling risks, model-serving exposure, RAG/vector patterns, secret-to-AI correlation, policy violations, and suspicious flows.</td></tr>
           <tr><td>Analysis</td><td>Applies context-aware severity scoring, production relevance, evidence quality scoring, and policy mapping before optional LLM review.</td></tr>
           <tr><td>Review Workflow</td><td>Supports finding triage, suppressions, accepted risk, reviewed state, central findings management, scan history, and trend analysis.</td></tr>
-          <tr><td>Reporting</td><td>Produces CSV, JSON, SARIF, Threat Dragon JSON, and on-demand HTML reports, plus logs, inventory views, staged threat-model sections, attack trees, and trend summaries.</td></tr>
+          <tr><td>Reporting</td><td>Produces CSV, JSON, and on-demand HTML reports, plus logs, inventory views, and trend summaries.</td></tr>
           <tr><td>Execution Modes</td><td>Supports browser-driven scans plus a minimal CLI for both local-repo and Bitbucket project/repo scans that writes machine-readable artifacts.</td></tr>
         </tbody>
       </table>
@@ -1470,7 +1454,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
           <tr><td>Bitbucket Access</td><td><code>scanner.bitbucket</code> handles PAT-authenticated project/repo listing, metadata lookup, and cloning with TLS validation.</td></tr>
           <tr><td>Detector and Analyzer</td><td><code>scanner.detector</code> and <code>analyzer.security</code> produce findings, score them, and enrich them with policy context.</td></tr>
           <tr><td>Persistence</td><td>SQLite-backed scan history, scan logs, findings rollups, triage metadata, and exported artifacts.</td></tr>
-          <tr><td>Reports and Exports</td><td>CSV, JSON, SARIF, Threat Dragon JSON, and HTML reports live under the output directory and can be reopened from the UI.</td></tr>
+          <tr><td>Reports and Exports</td><td>CSV, JSON, and HTML reports live under the output directory and can be reopened from the UI.</td></tr>
         </tbody>
       </table>
     </section>
@@ -1482,7 +1466,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <tbody>
           <tr><td>Scanner</td><td>Repo access, clone helpers, detection, suppression logic, and LLM reviewer integration.</td></tr>
           <tr><td>Services</td><td>Active scan state, session/auth handling, API actions, runtime support, trends, findings rollups, and UI rendering helpers.</td></tr>
-          <tr><td>Reports</td><td>CSV, JSON, SARIF, HTML, delta comparison, and threat-model report content.</td></tr>
+          <tr><td>Reports</td><td>CSV, JSON, HTML, and delta comparison.</td></tr>
           <tr><td>Assets</td><td>Static CSS and JavaScript for pages such as scan activity, history, findings, results, and general layout.</td></tr>
           <tr><td>Tests</td><td>Regression, security, smoke, and report/settings coverage for the desktop web app and scan services.</td></tr>
         </tbody>
@@ -1496,7 +1480,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <li>Select repositories or a local path, choose scan scope, and choose an LLM model if LLM review is enabled.</li>
         <li>The tool resolves repo metadata, clones or opens the repo, scans files, applies policy analysis, and optionally runs LLM review.</li>
         <li>Structured telemetry, history, inventory, findings, and staged threat-model data are persisted as the scan progresses.</li>
-        <li>CSV, JSON, SARIF, and Threat Dragon exports are written automatically; HTML can be generated on demand from the Results page.</li>
+        <li>CSV and JSON exports are written automatically; HTML can be generated on demand from the Results page.</li>
         <li>Operators review findings through the Findings page, scan workspace, Past Scans, Trends, and report artifacts.</li>
       </ol>
     </section>
@@ -1538,8 +1522,6 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <tbody>
           <tr><td>CSV</td><td>Written automatically at scan completion for spreadsheet-style analysis and operational review.</td></tr>
           <tr><td>JSON</td><td>Written automatically at scan completion for machine-readable integration and custom processing.</td></tr>
-          <tr><td>SARIF</td><td>Written automatically at scan completion for interoperability with static-analysis and security tooling.</td></tr>
-          <tr><td>Threat Dragon JSON</td><td>Written automatically at scan completion as a starter threat-model file with inferred actors, processes, stores, flows, and attached threats.</td></tr>
           <tr><td>HTML</td><td>Generated on demand from the Results page and cached after generation.</td></tr>
           <tr><td>History Export</td><td>SQLite is the source of truth; compatibility JSON export is maintained for legacy consumers.</td></tr>
           <tr><td>Local Repo Input</td><td>Can scan a local repo path directly from the UI or from the CLI without Bitbucket cloning.</td></tr>
@@ -1554,8 +1536,8 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
         <tbody>
           <tr><td>Bitbucket</td><td>PAT-authenticated project/repo discovery and cloning over TLS with custom CA bundle support.</td></tr>
           <tr><td>Ollama</td><td>Optional local LLM review and report enrichment with model discovery, runtime checks, and timeout controls.</td></tr>
-          <tr><td>CLI</td><td>Headless local-repo or Bitbucket scans via <code>scan_cli.py</code> producing CSV, JSON, SARIF, and logs.</td></tr>
-          <tr><td>Downstream Tools</td><td>JSON, SARIF, and Threat Dragon exports are the first integration layer for pipelines, security tooling, and external threat-model refinement.</td></tr>
+          <tr><td>CLI</td><td>Headless local-repo or Bitbucket scans via <code>scan_cli.py</code> producing CSV, JSON, and logs.</td></tr>
+          <tr><td>Downstream Tools</td><td>JSON exports are the first integration layer for pipelines and external tooling.</td></tr>
         </tbody>
       </table>
     </section>
@@ -1567,7 +1549,7 @@ python C:\\aitool\\scan_cli.py C:\\path\\to\\repo --output-dir C:\\tmp\\scan-out
 python C:\\aitool\\scan_cli.py --project COGI --repo repo1
 python C:\\aitool\\scan_cli.py --project COGI --repo repo1 --repo repo2 --scope branch_diff --compare-ref master</code></pre>
       <p>The CLI is intentionally minimal but now supports both local-repo scans and Bitbucket project/repo scans. For Bitbucket mode, provide <code>--project</code> and one or more <code>--repo</code> values, plus a PAT through <code>--token</code>, <code>AI_SCANNER_PAT</code>, <code>BITBUCKET_PAT</code>, or the saved credential store.</p>
-      <p class="muted" style="margin:8px 0 0">CLI scans write CSV, JSON, SARIF, and Threat Dragon exports automatically. HTML remains on-demand in the web UI.</p>
+      <p class="muted" style="margin:8px 0 0">CLI scans write CSV and JSON exports automatically. HTML remains on-demand in the web UI.</p>
     </section>
 
     <section id="security" class="wiki-section">
@@ -1588,7 +1570,7 @@ python C:\\aitool\\scan_cli.py --project COGI --repo repo1 --repo repo2 --scope 
         <li>Static scanning identifies likely issues and suspicious patterns but does not prove exploitability by itself.</li>
         <li>Generated HTML reports are cached snapshots of the finding state at generation time; later triage changes do not automatically rewrite an already generated report file.</li>
         <li>Threat-model outputs are evidence-backed drafts; flows, boundaries, and attack trees should still be validated by a human reviewer.</li>
-        <li>JSON and SARIF exports are first-step integration outputs, not yet full issue-tracker or webhook pipelines.</li>
+        <li>JSON exports are first-step integration outputs, not yet full issue-tracker or webhook pipelines.</li>
       </ul>
     </section>
   </section>

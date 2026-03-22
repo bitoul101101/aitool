@@ -14,8 +14,6 @@
   const htmlBtn = document.getElementById("generate-findings-html-btn");
   const csvBtn = document.getElementById("generate-findings-csv-btn");
   const jsonBtn = document.getElementById("generate-findings-json-btn");
-  const sarifBtn = document.getElementById("generate-findings-sarif-btn");
-  const threatDragonBtn = document.getElementById("generate-findings-threat-dragon-btn");
   const prevBtn = document.getElementById("findings-prev-btn");
   const nextBtn = document.getElementById("findings-next-btn");
   const pageInfo = document.getElementById("findings-page-info");
@@ -132,8 +130,6 @@
     htmlBtn?.classList.toggle("hidden", !hasSelection);
     csvBtn?.classList.toggle("hidden", !hasSelection);
     jsonBtn?.classList.toggle("hidden", !hasSelection);
-    sarifBtn?.classList.toggle("hidden", !hasSelection);
-    threatDragonBtn?.classList.toggle("hidden", !hasSelection);
   }
 
   function displayedRows() {

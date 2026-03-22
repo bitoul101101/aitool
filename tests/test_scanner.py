@@ -22,7 +22,6 @@ from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
 from reports.html_report import HTMLReporter
 from reports.json_report import JSONReporter
-from reports.threat_dragon_report import ThreatDragonReporter
 from services.access_control import ROLE_ADMIN, ROLE_SCANNER, ROLE_TRIAGE, ROLE_VIEWER, UserContext
 from services.single_user_state import SingleUserConfig, SingleUserState
 from tests._support import install_browser_session as _install_browser_session
@@ -2405,7 +2404,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
         ],
         csrf_token="csrf-demo",
         scan_label="scan-2",
-        scan_actions_html='<a class="btn alt" href="/reports/scan.csv" download>Download CSV File</a><button type="button" class="btn ghost">Replay Threat Model</button>',
+        scan_actions_html='<a class="btn alt" href="/reports/scan.csv" download>Download CSV File</a>',
     ).decode("utf-8")
 
     assert "Findings" in html
@@ -2420,8 +2419,6 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'id="generate-findings-html-btn"' in html
     assert 'id="generate-findings-csv-btn"' in html
     assert 'id="generate-findings-json-btn"' in html
-    assert 'id="generate-findings-sarif-btn"' in html
-    assert 'id="generate-findings-threat-dragon-btn"' in html
     assert 'id="apply-findings-action-btn"' in html
     assert 'id="findings-select-all"' in html
     assert 'src="/assets/findings_page.js"' in html
@@ -2434,7 +2431,6 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert "Security" in html
     assert "Showing findings for scan scan-2." in html
     assert "Download CSV File" in html
-    assert "Replay Threat Model" in html
     assert 'class="finding-row"' in html
     assert 'data-match="OpenAI(api_key=' in html
     assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
@@ -2725,8 +2721,6 @@ def test_results_page_is_server_rendered():
         html_detail_mode="detailed",
         csv_name="scan.csv",
         json_name="scan.json",
-        sarif_name="scan.sarif",
-        threat_dragon_name="scan_threat_dragon.json",
         log_url="/api/history/log/20260318_140208",
         csrf_token="csrf-demo",
     ).decode("utf-8")
@@ -2758,8 +2752,6 @@ def test_results_page_keeps_detailed_generation_available_after_fast_html():
         html_detail_mode="fast",
         csv_name="scan.csv",
         json_name="scan.json",
-        sarif_name="scan.sarif",
-        threat_dragon_name="scan_threat_dragon.json",
         log_url="/api/history/log/20260318_140208",
         can_generate_html=True,
         csrf_token="csrf-demo",
@@ -2799,8 +2791,6 @@ def test_results_page_offers_on_demand_html_generation_when_findings_exist():
         html_name="",
         csv_name="scan.csv",
         json_name="scan.json",
-        sarif_name="scan.sarif",
-        threat_dragon_name="scan_threat_dragon.json",
         log_url="/api/history/log/20260318_140208",
         can_generate_html=True,
         csrf_token="csrf-demo",
@@ -2966,83 +2956,6 @@ def test_html_report_header_uses_png_logo_and_centered_band(tmp_path):
     assert "text-align:center" in html
 
 
-def test_threat_dragon_report_writes_model_file(tmp_path):
-    findings = [{
-        "provider_or_lib": "prompt_injection_risk",
-        "description": "Untrusted prompt content may influence model behavior.",
-        "file": "workflow.py",
-        "line": 44,
-        "severity": 2,
-        "context": "production",
-    }]
-    reporter = ThreatDragonReporter(str(tmp_path), "scan_demo")
-    path = reporter.write_json(findings, meta={"project_key": "LOCAL", "repo": "repo1"})
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-
-    assert payload["summary"]["title"].startswith("PhantomLM Threat Model")
-    assert payload["detail"]["diagrams"][0]["diagramType"] == "STRIDE"
-    assert payload["detail"]["diagrams"][0]["diagramJson"]["cells"]
-
-
-def test_scan_service_replay_threat_model_rewrites_exports_and_invalidates_html(tmp_path):
-    from services import scan_jobs
-
-    paths = scan_jobs.ScanJobPaths(
-        output_dir=str(tmp_path),
-        temp_dir=str(tmp_path / "tmp"),
-        history_file=str(tmp_path / "history.json"),
-        log_dir=str(tmp_path / "logs"),
-        db_file=str(tmp_path / "scan_jobs.db"),
-        suppressions_file=str(tmp_path / "suppressions.json"),
-        llm_cfg_file=str(tmp_path / "llm.json"),
-        policy_file=str(tmp_path / "policy.json"),
-        owner_map_file=str(tmp_path / "owner_map.json"),
-    )
-    service = scan_jobs.ScanJobService(
-        app_version="19.1",
-        paths=paths,
-        load_policy=lambda _path: {},
-        load_owner_map=lambda _path: {},
-        policy_version=lambda _path: "test-policy",
-        utc_now_iso=lambda: "2026-03-19T17:06:00Z",
-        git_head_commit=lambda _path: "abc123",
-        ollama_ping=lambda _url: False,
-    )
-    html_path = tmp_path / "ai_scan_demo.html"
-    html_path.write_text("old", encoding="utf-8")
-    record = {
-        "scan_id": "20260319_170000",
-        "project_key": "LOCAL",
-        "repo_slugs": ["repo1"],
-        "repo_details": {"repo1": {"owner": "User", "branch": "main", "commit": "abc123"}},
-        "started_at_utc": "2026-03-19T17:00:00Z",
-        "completed_at_utc": "2026-03-19T17:05:00Z",
-        "state": "done",
-        "total": 1,
-        "reports": {"__all__": {"html": str(html_path), "html_name": html_path.name}},
-        "findings": [{
-            "provider_or_lib": "prompt_injection_risk",
-            "description": "Prompt content may be influenced by untrusted data.",
-            "file": "agent.py",
-            "line": 21,
-            "severity": 2,
-            "context": "production",
-        }],
-        "inventory": {"repos_using_ai_count": 1, "provider_count": 1, "model_count": 0, "repo_profiles": []},
-    }
-    service._upsert_job_record(record)
-
-    updated = service.replay_threat_model("20260319_170000", replay_instructions="Focus on prompt injection")
-    reports = dict((updated.get("reports") or {}).get("__all__", {}) or {})
-
-    assert "html" not in reports
-    assert reports.get("json_name", "").endswith(".json")
-    assert reports.get("threat_dragon_name", "").endswith("_threat_dragon.json")
-    assert updated.get("threat_model_replay_count") == 1
-    assert updated.get("threat_model_replay_instructions") == "Focus on prompt injection"
-    assert not html_path.exists()
-
-
 def test_render_results_page_resolves_current_session_report():
     import app_server as srv
 
@@ -3085,7 +2998,7 @@ def test_render_results_page_resolves_current_session_report():
         srv._session = orig_session
 
 
-def test_report_access_matches_json_sarif_and_threat_dragon_exports():
+def test_report_access_matches_json_exports():
     from services.report_access import find_history_record_by_report_name
 
     record = {
@@ -3094,17 +3007,11 @@ def test_report_access_matches_json_sarif_and_threat_dragon_exports():
             "__all__": {
                 "json": r"C:\aitool\output\ai_scan_demo.json",
                 "json_name": "ai_scan_demo.json",
-                "sarif": r"C:\aitool\output\ai_scan_demo.sarif",
-                "sarif_name": "ai_scan_demo.sarif",
-                "threat_dragon": r"C:\aitool\output\ai_scan_demo_threat_dragon.json",
-                "threat_dragon_name": "ai_scan_demo_threat_dragon.json",
             }
         },
     }
 
     assert find_history_record_by_report_name([record], "ai_scan_demo.json") == record
-    assert find_history_record_by_report_name([record], "ai_scan_demo.sarif") == record
-    assert find_history_record_by_report_name([record], "ai_scan_demo_threat_dragon.json") == record
 
 
 def test_asset_route_serves_main_css():
@@ -4558,9 +4465,8 @@ def test_api_history_delete_removes_all_generated_artifacts():
     html = d / "ai_scan_report.html"
     csv = d / "ai_scan_report.csv"
     json_report = d / "ai_scan_report.json"
-    sarif = d / "ai_scan_report.sarif"
     log_file = logs_dir / "20250317_000004.txt"
-    for path in (html, csv, json_report, sarif, log_file):
+    for path in (html, csv, json_report, log_file):
         path.write_text("artifact", encoding="utf-8")
 
     orig_out = srv.OUTPUT_DIR
@@ -4584,7 +4490,6 @@ def test_api_history_delete_removes_all_generated_artifacts():
                     "html": str(html),
                     "csv": str(csv),
                     "json": str(json_report),
-                    "sarif": str(sarif),
                 }
             },
             "log_file": str(log_file),
@@ -4597,7 +4502,6 @@ def test_api_history_delete_removes_all_generated_artifacts():
         assert not html.exists()
         assert not csv.exists()
         assert not json_report.exists()
-        assert not sarif.exists()
         assert not log_file.exists()
         delete_mock.assert_called_once_with(["20250317_000004"])
     finally:
@@ -4736,34 +4640,7 @@ def test_json_reporter_writes_meta_and_findings(tmp_path):
     assert payload["findings"][0]["_hash"] == "hash-1"
 
 
-def test_sarif_reporter_writes_valid_run_structure(tmp_path):
-    from reports.sarif_report import SARIFReporter
-
-    path = SARIFReporter(str(tmp_path), "scan-demo").write_sarif(
-        [{
-            "_hash": "hash-1",
-            "repo": "repo1",
-            "project_key": "LOCAL",
-            "file": "app.py",
-            "line": 7,
-            "severity": 1,
-            "severity_label": "Critical",
-            "provider_or_lib": "openai_key",
-            "description": "Hardcoded key",
-            "delta_status": "new",
-        }],
-        meta={"scan_id": "scan-demo", "tool_version": "19.1"},
-    )
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-
-    assert payload["version"] == "2.1.0"
-    run = payload["runs"][0]
-    assert run["tool"]["driver"]["name"] == "PhantomLM"
-    assert run["results"][0]["ruleId"] == "openai_key"
-    assert run["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "app.py"
-
-
-def test_scan_cli_reports_json_and_sarif_paths(tmp_path, capsys, monkeypatch):
+def test_scan_cli_reports_json_and_csv_paths(tmp_path, capsys, monkeypatch):
     import scan_cli
 
     repo_dir = tmp_path / "repo"
@@ -4776,7 +4653,6 @@ def test_scan_cli_reports_json_and_sarif_paths(tmp_path, capsys, monkeypatch):
             "__all__": {
                 "csv": str(tmp_path / "scan.csv"),
                 "json": str(tmp_path / "scan.json"),
-                "sarif": str(tmp_path / "scan.sarif"),
             }
         }
         session.log("CLI run complete")
@@ -4789,7 +4665,7 @@ def test_scan_cli_reports_json_and_sarif_paths(tmp_path, capsys, monkeypatch):
 
     assert rc == 0
     assert "JSON report" in out
-    assert "SARIF report" in out
+    assert "CSV report" in out
     assert (tmp_path / "logs").exists()
 
 
@@ -4813,7 +4689,6 @@ def test_scan_cli_supports_bitbucket_project_repo_mode(tmp_path, capsys, monkeyp
             "__all__": {
                 "csv": str(tmp_path / "scan.csv"),
                 "json": str(tmp_path / "scan.json"),
-                "sarif": str(tmp_path / "scan.sarif"),
             }
         }
 
@@ -5091,8 +4966,6 @@ def test_run_scan_with_no_repos_completes_cleanly():
     report = dict((session.report_paths or {}).get("__all__", {}) or {})
     assert report.get("csv_name", "").endswith(".csv")
     assert report.get("json_name", "").endswith(".json")
-    assert report.get("sarif_name", "").endswith(".sarif")
-    assert report.get("threat_dragon_name", "").endswith("_threat_dragon.json")
     assert all(ord(ch) < 128 for entry in session.log_lines for ch in entry["msg"])
 
 

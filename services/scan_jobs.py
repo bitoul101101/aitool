@@ -24,8 +24,6 @@ from reports.csv_report import CSVReporter
 from reports.delta import build_delta_meta
 from reports.html_report import HTMLReporter
 from reports.json_report import JSONReporter
-from reports.sarif_report import SARIFReporter
-from reports.threat_dragon_report import ThreatDragonReporter
 from scanner.detector import AIUsageDetector
 from scanner.suppressions import (
     TRIAGE_ACCEPTED_RISK,
@@ -820,18 +818,6 @@ class ScanJobService:
         json_path = json_reporter.write_json(findings, meta=report_meta, replay_instructions=replay_instructions)
         reports["json"] = str(Path(json_path).resolve())
         reports["json_name"] = Path(json_path).name
-        sarif_reporter = SARIFReporter(output_dir=self.paths.output_dir, scan_id=base_name)
-        sarif_path = sarif_reporter.write_sarif(findings, meta=report_meta)
-        reports["sarif"] = str(Path(sarif_path).resolve())
-        reports["sarif_name"] = Path(sarif_path).name
-        threat_dragon_reporter = ThreatDragonReporter(output_dir=self.paths.output_dir, scan_id=base_name)
-        threat_dragon_path = threat_dragon_reporter.write_json(
-            findings,
-            meta=report_meta,
-            replay_instructions=replay_instructions,
-        )
-        reports["threat_dragon"] = str(Path(threat_dragon_path).resolve())
-        reports["threat_dragon_name"] = Path(threat_dragon_path).name
         return reports
 
     def generate_html_report(
@@ -879,45 +865,6 @@ class ScanJobService:
         reports["html_detail_mode"] = detail_mode
         updated = dict(record)
         updated["reports"] = {"__all__": reports}
-        self._upsert_job_record(updated)
-        self._sync_legacy_history_export()
-        return self._normalize_history_record(updated)
-
-    def replay_threat_model(self, scan_id: str, *, findings: list[dict] | None = None, replay_instructions: str = "") -> dict:
-        record = self._load_db_history_record(scan_id)
-        if not record:
-            raise RuntimeError("Stored scan record not found")
-        findings = list(findings if findings is not None else record.get("findings") or [])
-        if not findings:
-            raise RuntimeError("This scan does not have stored findings to build a threat model")
-
-        reports = dict((record.get("reports") or {}).get("__all__", {}) or {})
-        base_name = self._report_base_name(record)
-        Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
-        report_meta = self._report_meta_from_record(record)
-        updated_reports = self._write_structured_reports(
-            findings=findings,
-            base_name=base_name,
-            report_meta=report_meta,
-            write_csv=False,
-            existing_reports=reports,
-            replay_instructions=replay_instructions,
-        )
-
-        html_path = str(updated_reports.get("html", "") or "")
-        if html_path and Path(html_path).exists():
-            try:
-                Path(html_path).unlink()
-            except OSError:
-                pass
-        updated_reports.pop("html", None)
-        updated_reports.pop("html_name", None)
-
-        updated = dict(record)
-        updated["reports"] = {"__all__": updated_reports}
-        updated["threat_model_replay_count"] = int(record.get("threat_model_replay_count", 0) or 0) + 1
-        updated["threat_model_replay_instructions"] = str(replay_instructions or "")
-        updated["threat_model_generated_at_utc"] = self._utc_now_iso()
         self._upsert_job_record(updated)
         self._sync_legacy_history_export()
         return self._normalize_history_record(updated)
@@ -1620,8 +1567,6 @@ class ScanJobService:
 
             log("  Writing CSV report...", "dim")
             log("  Writing JSON report...", "dim")
-            log("  Writing SARIF report...", "dim")
-            log("  Writing Threat Dragon export...", "dim")
             structured_reports = self._write_structured_reports(
                 findings=final,
                 base_name=safe_name,
@@ -1639,9 +1584,7 @@ class ScanJobService:
             log(
                 "  OK Reports: "
                 f"{Path(structured_reports['csv']).name}, "
-                f"{Path(structured_reports['json']).name}, "
-                f"{Path(structured_reports['sarif']).name}, "
-                f"{Path(structured_reports['threat_dragon']).name}",
+                f"{Path(structured_reports['json']).name}",
                 "ok",
             )
         except EXPECTED_REPORT_ERRORS as exc:

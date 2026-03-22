@@ -157,7 +157,7 @@ def delete_history_records(
             errors.append(f"{sid}: not found")
             continue
         rp = (rec.get("reports") or {}).get("__all__", {})
-        for key in ("html", "csv", "json", "sarif", "threat_dragon"):
+        for key in ("html", "csv", "json"):
             fpath = rp.get(key, "")
             if fpath:
                 err = delete_managed_file(fpath, sid, key)
