@@ -19,11 +19,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scanner.detector import AIUsageDetector
 from scanner.suppressions import (
     TRIAGE_ACCEPTED_RISK,
+    TRIAGE_FALSE_POSITIVE,
     TRIAGE_IN_REMEDIATION,
     TRIAGE_REVIEWED,
     TRIAGE_SENT_FOR_REVIEW,
     list_suppressions,
     list_triage,
+    upsert_triage,
 )
 from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
@@ -4081,6 +4083,134 @@ def test_page_finding_triage_redirects_back_to_findings_and_ignores_none_scan_id
         srv._Handler._page_finding_triage(handler, {"hash": "hash-r1", "status": TRIAGE_SENT_FOR_REVIEW, "note": ""})
 
         assert handler.redirect_to == "/findings?notice=Finding+triage+updated"
+    finally:
+        srv.SUPPRESSIONS_FILE = orig_sup
+        srv._session = orig_session
+        srv._operator_state = orig_state
+
+
+def test_page_finding_triage_redirects_back_to_findings_for_all_statuses():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.redirect_to = None
+            self.headers = {"Referer": "http://127.0.0.1:5757/findings?scan_id=20250316_060606"}
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+        def _render_scan_page(self, error=""):
+            raise AssertionError(f"unexpected render_scan_page: {error}")
+
+    d = Path(tempfile.mkdtemp())
+    orig_sup = srv.SUPPRESSIONS_FILE
+    orig_session = srv._session
+    orig_state = srv._operator_state
+    srv.SUPPRESSIONS_FILE = str(d / "ai_scanner_suppressions.json")
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_ADMIN, ROLE_TRIAGE),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+
+    try:
+        session = srv.ScanSession()
+        finding = {
+            "_hash": "hash-r2",
+            "repo": "repo1",
+            "file": "service.py",
+            "line": 22,
+            "severity": 2,
+            "capability": "LLM Orchestration",
+            "description": "Detected orchestration usage",
+        }
+        session.scan_id = "20250316_060606"
+        session.project_key = "TEST"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.findings = [finding]
+        session.per_repo = {"repo1": [finding]}
+        srv._session = session
+
+        for status, note in [
+            (TRIAGE_SENT_FOR_REVIEW, ""),
+            (TRIAGE_IN_REMEDIATION, ""),
+            (TRIAGE_ACCEPTED_RISK, "known limitation"),
+            (TRIAGE_FALSE_POSITIVE, "test fixture"),
+        ]:
+            handler = DummyHandler()
+            srv._Handler._page_finding_triage(handler, {"hash": "hash-r2", "status": status, "note": note})
+            parsed = urllib.parse.urlparse(handler.redirect_to)
+            params = urllib.parse.parse_qs(parsed.query)
+            assert parsed.path == "/findings"
+            assert params == {"scan_id": ["20250316_060606"], "notice": ["Finding triage updated"]}
+    finally:
+        srv.SUPPRESSIONS_FILE = orig_sup
+        srv._session = orig_session
+        srv._operator_state = orig_state
+
+
+def test_page_finding_reset_redirects_back_to_findings():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.redirect_to = None
+            self.headers = {"Referer": "http://127.0.0.1:5757/findings?scan_id=20250316_060606"}
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+    d = Path(tempfile.mkdtemp())
+    orig_sup = srv.SUPPRESSIONS_FILE
+    orig_session = srv._session
+    orig_state = srv._operator_state
+    srv.SUPPRESSIONS_FILE = str(d / "ai_scanner_suppressions.json")
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_ADMIN, ROLE_TRIAGE),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+
+    try:
+        session = srv.ScanSession()
+        finding = {
+            "_hash": "hash-r3",
+            "repo": "repo1",
+            "file": "service.py",
+            "line": 23,
+            "severity": 2,
+            "provider_or_lib": "demo_rule",
+            "description": "Detected issue",
+        }
+        session.scan_id = "20250316_060606"
+        session.project_key = "TEST"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.findings = [finding]
+        srv._session = session
+        upsert_triage(srv.SUPPRESSIONS_FILE, finding, status=TRIAGE_IN_REMEDIATION, note="", marked_by="analyst")
+
+        handler = DummyHandler()
+        srv._Handler._page_finding_reset(handler, {"hash": "hash-r3"})
+
+        parsed = urllib.parse.urlparse(handler.redirect_to)
+        params = urllib.parse.parse_qs(parsed.query)
+        assert parsed.path == "/findings"
+        assert params == {"scan_id": ["20250316_060606"], "notice": ["Finding triage reset"]}
     finally:
         srv.SUPPRESSIONS_FILE = orig_sup
         srv._session = orig_session
