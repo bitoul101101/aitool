@@ -84,7 +84,7 @@ from services.report_access import (
     find_history_record_by_scan_id,
     history_records_for_context,
 )
-from services.findings import build_findings_rollups, findings_history_notice
+from services.findings import build_findings_rollups, build_scan_findings, findings_history_notice
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
@@ -1914,15 +1914,40 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         qs = parse_qs(urlparse(self.path).query)
         history = _history_records_for_user()
-        findings_notice = findings_history_notice(history)
+        requested_scan_id = Path(str(qs.get("scan_id", [""])[0] or "")).name
+        triage = _triage_by_hash()
+        scan_label = ""
+        if requested_scan_id:
+            record = _scan_record_for_id(requested_scan_id)
+            if not record:
+                findings = build_findings_rollups(history, triage)
+                findings_notice = findings_history_notice(history)
+                merged_notice = " ".join(part for part in [notice or (qs.get("notice", [""])[0] or ""), findings_notice] if part).strip()
+                html = render_findings_page(
+                    findings=findings,
+                    csrf_token=_current_csrf_token(self),
+                    notice=merged_notice,
+                    error=f"Scan {requested_scan_id} was not found.",
+                    show_scan_results=_has_scan_results(),
+                    current_scan=_current_scan_nav_context(),
+                )
+                self._send(200, "text/html; charset=utf-8", html)
+                return
+            findings = build_scan_findings(record, triage)
+            scan_label = requested_scan_id
+            findings_notice = ""
+        else:
+            findings = build_findings_rollups(history, triage)
+            findings_notice = findings_history_notice(history)
         merged_notice = " ".join(part for part in [notice or (qs.get("notice", [""])[0] or ""), findings_notice] if part).strip()
         html = render_findings_page(
-            findings=build_findings_rollups(history, _triage_by_hash()),
+            findings=findings,
             csrf_token=_current_csrf_token(self),
             notice=merged_notice,
             error=error or (qs.get("error", [""])[0] or ""),
             show_scan_results=_has_scan_results(),
             current_scan=_current_scan_nav_context(),
+            scan_label=scan_label,
         )
         self._send(200, "text/html; charset=utf-8", html)
 

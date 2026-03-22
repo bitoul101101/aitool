@@ -164,6 +164,67 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
     )
 
 
+def build_scan_findings(record: dict, triage: dict[str, dict]) -> list[dict]:
+    scan_id = str(record.get("scan_id", "") or "")
+    started_at = str(record.get("started_at_utc", "") or "")
+    rows: list[dict] = []
+    for finding in list(record.get("findings") or []):
+        hash_ = str(finding.get("_hash", "") or "")
+        if not hash_:
+            continue
+        status = str((triage.get(hash_, {}) or {}).get("status", "open") or "open")
+        triage_meta = dict(triage.get(hash_, {}) or {})
+        rows.append({
+            "hash": hash_,
+            "project_key": str(finding.get("project_key", record.get("project_key", "")) or ""),
+            "repo": str(finding.get("repo", "") or ""),
+            "file": str(finding.get("file", "") or ""),
+            "line": str(finding.get("line", "") or ""),
+            "severity": int(finding.get("severity", 4) or 4),
+            "severity_label": _severity_label(
+                finding.get("severity", 4),
+                str(finding.get("severity_label", "") or ""),
+            ),
+            "rule": str(finding.get("provider_or_lib", "") or finding.get("category", "") or "unknown"),
+            "capability": str(finding.get("capability", "") or ""),
+            "rule_label": format_rule_label(
+                str(finding.get("provider_or_lib", "") or finding.get("category", "") or "unknown"),
+                str(finding.get("capability", "") or ""),
+            ),
+            "ai_category": str(finding.get("ai_category", "") or ""),
+            "description": str(finding.get("description", "") or ""),
+            "match": str(finding.get("match", "") or ""),
+            "snippet": str(finding.get("snippet", "") or ""),
+            "llm_reason": str(finding.get("llm_reason", "") or ""),
+            "remediation": str(finding.get("remediation", "") or ""),
+            "llm_secure_example": str(finding.get("llm_secure_example", "") or ""),
+            "llm_verdict": str(finding.get("llm_verdict", "") or ""),
+            "llm_reviewed": bool(finding.get("llm_reviewed", False)),
+            "policy_status": str(finding.get("policy_status", "") or ""),
+            "context": str(finding.get("context", "production") or "production"),
+            "first_seen_at": started_at,
+            "last_seen_at": started_at,
+            "first_seen_scan_id": scan_id,
+            "last_seen_scan_id": scan_id,
+            "scan_count": 1,
+            "status": status,
+            "status_label": _status_label(status),
+            "triage_note": str(triage_meta.get("note", "") or ""),
+            "triage_by": str(triage_meta.get("marked_by", "") or ""),
+            "triage_at": str(triage_meta.get("marked_at", "") or ""),
+            "suppression_hits": 1 if status == TRIAGE_FALSE_POSITIVE else 0,
+        })
+    return sorted(
+        rows,
+        key=lambda item: (
+            int(item.get("severity", 4) or 4),
+            str(item.get("repo", "")),
+            str(item.get("file", "")),
+            str(item.get("line", "")),
+        ),
+    )
+
+
 def findings_filter_options(findings: list[dict]) -> dict[str, list[str]]:
     return {
         "projects": sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")}),

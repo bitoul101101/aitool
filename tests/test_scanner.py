@@ -2242,6 +2242,7 @@ def test_render_history_page_hides_phases_and_error_columns():
 
     assert ">Phases<" not in html
     assert ">Error<" not in html
+    assert 'href="/findings?scan_id=20260319_120000"' in html
 
 
 def test_build_findings_rollups_applies_triage_and_fixed_state():
@@ -2305,6 +2306,39 @@ def test_build_findings_rollups_applies_triage_and_fixed_state():
     assert rows[0]["triage_note"] == "Known exception"
     fixed = next(item for item in rows if item["hash"] == "hash-fixed")
     assert fixed["status"] == "fixed"
+
+
+def test_build_scan_findings_returns_only_requested_scan_details():
+    from services.findings import build_scan_findings
+
+    record = {
+        "scan_id": "scan-7",
+        "started_at_utc": "2026-03-19T10:00:00Z",
+        "project_key": "COGI",
+        "findings": [
+            {
+                "_hash": "hash-a",
+                "project_key": "COGI",
+                "repo": "repo1",
+                "file": "app.py",
+                "line": 14,
+                "severity": 1,
+                "severity_label": "Critical",
+                "provider_or_lib": "openai_key",
+                "ai_category": "Security",
+                "description": "Hardcoded key",
+                "llm_reason": "Hardcoded credential in code.",
+            }
+        ],
+    }
+
+    rows = build_scan_findings(record, {"hash-a": {"status": "accepted_risk", "note": "known"}})
+
+    assert len(rows) == 1
+    assert rows[0]["last_seen_scan_id"] == "scan-7"
+    assert rows[0]["scan_count"] == 1
+    assert rows[0]["status"] == "accepted_risk"
+    assert rows[0]["llm_reason"] == "Hardcoded credential in code."
 
 
 def test_build_findings_rollups_normalizes_legacy_severity_labels():

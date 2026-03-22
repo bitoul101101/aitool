@@ -644,7 +644,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
         repo_label = ", ".join(rec.get("repo_slugs", rec.get("repos", [])))
         scan_id = str(rec.get("scan_id", "") or "")
         details_link = (
-            f'<a class="icon-link" href="/scan/{_esc(scan_id)}?tab=activity" title="Open scan details"><img src="{DETAILS_ICON}" alt="Details"></a>'
+            f'<a class="icon-link" href="/findings?scan_id={_esc(scan_id)}" title="Open findings for this scan"><img src="{DETAILS_ICON}" alt="Details"></a>'
             if scan_id
             else ""
         )
@@ -721,7 +721,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
     return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
+def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None, scan_label: str = "") -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")})
     repos = sorted({str(item.get("repo", "")) for item in findings if item.get("repo")})
     rules = sorted({
@@ -807,6 +807,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
   <section class="card findings-shell">
     <form method="post" action="/findings/bulk" id="findings-form" class="findings-form">
     {_csrf_field(csrf_token)}
+    {f'<div class="warn-box" style="margin-bottom:8px">Showing findings for scan {_esc(scan_label)}.</div>' if scan_label else ''}
     <section class="trend-summary-grid" style="margin-bottom:12px">
       <div class="trend-summary-card"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
       <div class="trend-summary-card"><span class="baseline-label">Open</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "open"))}</strong></div>
