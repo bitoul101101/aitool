@@ -593,7 +593,6 @@ class HTMLReporter:
   {self._header(findings)}
   {self._section_delta(findings, delta)}
   {self._section_inventory(findings)}
-  {self._section_threat_model(findings)}
   {self._section_summary(stats, findings, policy)}
   {self._section_findings(findings, delta)}
   {self._section_remediation(findings)}

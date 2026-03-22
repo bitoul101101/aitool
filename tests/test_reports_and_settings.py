@@ -36,7 +36,7 @@ def test_html_report_header_excludes_triage_summary_stats():
     assert "Suppressed" not in html
 
 
-def test_html_report_includes_evidence_backed_threat_model_section():
+def test_html_report_excludes_threat_model_section():
     reporter = HTMLReporter(
         output_dir=tempfile.mkdtemp(),
         scan_id="20260319_140000",
@@ -107,12 +107,9 @@ def test_html_report_includes_evidence_backed_threat_model_section():
 
     html = reporter._render(findings, policy={})
 
-    assert "Threat Model" in html
-    assert "Secret leakage into AI workflows" in html
-    assert "Prompt injection from untrusted content" in html
-    assert "RAG poisoning or malicious retrieval influence" in html
-    assert "Unsafe tool execution from agent decisions" in html
-    assert "Review Gaps / Open Questions" in html
+    assert "Threat Model" not in html
+    assert "Threat Scenarios" not in html
+    assert "Review Gaps / Open Questions" not in html
 
 
 def test_html_report_missing_llm_detail_message_points_to_detailed_html():
