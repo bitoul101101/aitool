@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+import hashlib
 from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -65,6 +66,40 @@ EXPECTED_METADATA_ERRORS = (
     TypeError,
     KeyError,
 )
+
+
+def html_report_source_fingerprint(findings: list[dict] | None) -> str:
+    normalized: list[dict[str, Any]] = []
+    for finding in list(findings or []):
+        if not isinstance(finding, dict):
+            continue
+        normalized.append(
+            {
+                "hash": str(finding.get("hash", "") or finding.get("_hash", "") or ""),
+                "repo": str(finding.get("repo", "") or ""),
+                "file": str(finding.get("file", "") or ""),
+                "line": str(finding.get("line", "") or ""),
+                "severity": int(finding.get("severity", 4) or 4),
+                "status": str(finding.get("status", "") or finding.get("triage_status", "") or "open"),
+                "note": str(finding.get("triage_note", "") or ""),
+                "rule": str(finding.get("provider_or_lib", "") or finding.get("rule", "") or ""),
+                "description": str(finding.get("description", "") or ""),
+                "llm_reason": str(finding.get("llm_reason", "") or ""),
+                "remediation": str(finding.get("remediation", "") or ""),
+                "llm_secure_example": str(finding.get("llm_secure_example", "") or ""),
+            }
+        )
+    normalized.sort(
+        key=lambda item: (
+            item["hash"],
+            item["repo"],
+            item["file"],
+            item["line"],
+            item["rule"],
+        )
+    )
+    payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 class ScanSession:
@@ -714,10 +749,25 @@ class ScanJobService:
         time_part = scan_id[9:15] if len(scan_id) >= 15 else datetime.now().strftime("%H%M%S")
         return f"AI_Scan_Report_{project_key}_{label}_{date_part}_{time_part}"
 
-    def _report_meta_from_record(self, record: dict) -> dict:
+    def _report_meta_from_record(self, record: dict, findings: list[dict] | None = None) -> dict:
         repo_slugs = [str(slug).strip() for slug in list(record.get("repo_slugs", record.get("repos", [])) or []) if str(slug).strip()]
         repo_details = dict(record.get("repo_details") or {})
         llm_cfg = load_llm_config(self.paths.llm_cfg_file) if self.paths.llm_cfg_file else {}
+        findings_list = list(findings or [])
+        if findings_list:
+            status_counts = Counter(
+                str(item.get("status", "") or item.get("triage_status", "") or "open")
+                for item in findings_list
+            )
+            post_llm_count = len(findings_list)
+            suppressed_count = int(status_counts.get(TRIAGE_FALSE_POSITIVE, 0) or 0)
+            reviewed_count = int(status_counts.get(TRIAGE_REVIEWED, 0) or 0)
+            accepted_risk_count = int(status_counts.get(TRIAGE_ACCEPTED_RISK, 0) or 0)
+        else:
+            post_llm_count = int(record.get("post_llm_count", record.get("total", 0)) or 0)
+            suppressed_count = int(record.get("suppressed_total", 0) or 0)
+            reviewed_count = int(record.get("reviewed_count", 0) or 0)
+            accepted_risk_count = int(record.get("accepted_risk_count", 0) or 0)
         if len(repo_slugs) > 1:
             repos_meta = [
                 {
@@ -746,10 +796,10 @@ class ScanJobService:
                 "report_detail_timeout_s": int(record.get("report_detail_timeout_s", llm_cfg.get("report_detail_timeout_s", 180)) or 180),
                 "scan_duration_s": int(record.get("duration_s", 0) or 0),
                 "pre_llm_count": int(record.get("pre_llm_count", 0) or 0),
-                "post_llm_count": int(record.get("post_llm_count", record.get("total", 0)) or 0),
-                "suppressed_count": int(record.get("suppressed_total", 0) or 0),
-                "reviewed_count": int(record.get("reviewed_count", 0) or 0),
-                "accepted_risk_count": int(record.get("accepted_risk_count", 0) or 0),
+                "post_llm_count": post_llm_count,
+                "suppressed_count": suppressed_count,
+                "reviewed_count": reviewed_count,
+                "accepted_risk_count": accepted_risk_count,
             }
         single_slug = repo_slugs[0] if repo_slugs else Path(str(record.get("local_repo_path", "") or "")).name or "results"
         detail = dict(repo_details.get(single_slug) or {})
@@ -771,10 +821,10 @@ class ScanJobService:
             "report_detail_timeout_s": int(record.get("report_detail_timeout_s", llm_cfg.get("report_detail_timeout_s", 180)) or 180),
             "scan_duration_s": int(record.get("duration_s", 0) or 0),
             "pre_llm_count": int(record.get("pre_llm_count", 0) or 0),
-            "post_llm_count": int(record.get("post_llm_count", record.get("total", 0)) or 0),
-            "suppressed_count": int(record.get("suppressed_total", 0) or 0),
-            "reviewed_count": int(record.get("reviewed_count", 0) or 0),
-            "accepted_risk_count": int(record.get("accepted_risk_count", 0) or 0),
+            "post_llm_count": post_llm_count,
+            "suppressed_count": suppressed_count,
+            "reviewed_count": reviewed_count,
+            "accepted_risk_count": accepted_risk_count,
         }
 
     def _report_meta_from_session(self, session: ScanSession, findings: list[dict]) -> dict:
@@ -845,7 +895,14 @@ class ScanJobService:
         detail_mode = "fast" if str(detail_mode or "").strip().lower() == "fast" else "detailed"
         existing_html = str(reports.get("html", "") or "")
         existing_mode = str(reports.get("html_detail_mode", "detailed") or "detailed").strip().lower()
-        if existing_html and Path(existing_html).exists() and existing_mode == detail_mode:
+        current_fingerprint = html_report_source_fingerprint(findings)
+        existing_fingerprint = str(reports.get("html_source_fingerprint", "") or "")
+        if (
+            existing_html
+            and Path(existing_html).exists()
+            and existing_mode == detail_mode
+            and existing_fingerprint == current_fingerprint
+        ):
             return record
 
         base_name = self._report_base_name(record)
@@ -854,7 +911,7 @@ class ScanJobService:
             output_dir=self.paths.output_dir,
             scan_id=base_name,
             include_snippets=True,
-            meta=self._report_meta_from_record(record),
+            meta=self._report_meta_from_record(record, findings=findings),
         )
         llm_cfg = load_llm_config(self.paths.llm_cfg_file) if self.paths.llm_cfg_file else load_llm_config()
         ollama_url = str(llm_cfg.get("base_url", "") or "").strip()
@@ -870,6 +927,7 @@ class ScanJobService:
         reports["html"] = str(Path(html_path).resolve())
         reports["html_name"] = Path(html_path).name
         reports["html_detail_mode"] = detail_mode
+        reports["html_source_fingerprint"] = current_fingerprint
         updated = dict(record)
         updated["reports"] = {"__all__": reports}
         self._upsert_job_record(updated)

@@ -813,7 +813,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
     return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None, scan_label: str = "", scan_actions_html: str = "") -> bytes:
+def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None, scan_label: str = "", scan_actions_html: str = "", html_generation: dict | None = None) -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")})
     repos = sorted({str(item.get("repo", "")) for item in findings if item.get("repo")})
     rules = sorted({
@@ -864,6 +864,34 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         }.get(key, ("?", "ctx-prod"))
         return f'<span class="ctx-chip {css}">{_esc(label)}</span>'
 
+    html_generation = dict(html_generation or {})
+    generation_state = str(html_generation.get("state", "") or "").lower()
+    generation_active = generation_state in {"queued", "running"}
+    generation_mode = str(html_generation.get("detail_mode", "") or "").strip().lower()
+    generation_mode_label = "Fast" if generation_mode == "fast" else "Detailed"
+    progress_card = ""
+    if scan_label and generation_state:
+        progress_text = str(html_generation.get("message", "") or "")
+        current = int(html_generation.get("current", 0) or 0)
+        total = int(html_generation.get("total", 0) or 0)
+        pct = int(round((current / total) * 100)) if total > 0 else (100 if generation_state == "done" else 0)
+        state_label = {
+            "queued": "Queued",
+            "running": "Running",
+            "done": "Ready",
+            "error": "Failed",
+        }.get(generation_state, generation_state.title())
+        meta_text = f"{current}/{total}" if total > 0 else ("Complete" if generation_state == "done" else "")
+        progress_card = (
+            f'<section class="card report-progress-card" id="report-progress-card" data-scan-id="{_esc(scan_label)}" '
+            f'data-report-generation-active="{"1" if generation_active else "0"}">'
+            f'<div class="report-progress-head"><strong>{_esc(generation_mode_label)} HTML Report Generation</strong><span class="pill">{_esc(state_label)}</span></div>'
+            f'<div class="muted" id="report-progress-message">{_esc(progress_text or "Preparing report generation...")}</div>'
+            f'<div class="report-progress-bar"><div class="report-progress-fill" id="report-progress-fill" style="width:{pct}%"></div></div>'
+            f'<div class="report-progress-meta" id="report-progress-meta">{_esc(meta_text)}</div>'
+            '</section>'
+        )
+
     rows = []
     for item in findings:
         date_text, time_text, ts = _fmt_dt(str(item.get("last_seen_at", "") or item.get("first_seen_at", "")))
@@ -905,6 +933,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     <form method="post" action="/findings/bulk" id="findings-form" class="findings-form">
     {_csrf_field(csrf_token)}
     {f'<input type="hidden" name="scan_id" value="{_esc(scan_label)}">' if scan_label else ''}
+    {progress_card}
     {f'<section class="card findings-scan-actions-card"><div class="results-actions findings-scan-actions">{scan_actions_html}</div></section>' if scan_actions_html else ''}
     {f'<div class="warn-box" style="margin-bottom:8px">Showing findings for scan {_esc(scan_label)}.</div>' if scan_label else ''}
     <section class="findings-summary-strip">
@@ -967,7 +996,8 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     </div>
   </form>
 </section>
-<script src="/assets/findings_page.js" defer></script>"""
+<script src="/assets/findings_page.js" defer></script>
+{'<script src="/assets/results_page.js" defer></script>' if progress_card else ''}"""
     return _layout(title="Findings", body=body, active="findings", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 

@@ -2473,6 +2473,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
         csrf_token="csrf-demo",
         scan_label="scan-2",
         scan_actions_html='<form method="post" action="/findings/generate-html" class="triage-form inline-only" target="_blank"><input type="hidden" name="scan_id" value="scan-2" /><button type="submit" class="btn alt" name="export_type" value="csv">Generate CSV</button></form>',
+        html_generation={"state": "running", "message": "Generating LLM analysis 1/2...", "current": 1, "total": 2, "detail_mode": "detailed"},
     ).decode("utf-8")
 
     assert "Findings" in html
@@ -2507,6 +2508,9 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert "Security" in html
     assert "Showing findings for scan scan-2." in html
     assert "Generate CSV" in html
+    assert "Detailed HTML Report Generation" in html
+    assert 'data-report-generation-active="1"' in html
+    assert 'src="/assets/results_page.js"' in html
     assert 'class="finding-row"' in html
     assert 'data-match="OpenAI(api_key=' in html
     assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
@@ -2915,11 +2919,12 @@ def test_generate_html_report_for_scan_uses_stored_scan_record(monkeypatch):
     record = {
         "scan_id": "20260322_100000",
         "reports": {"__all__": {}},
-        "findings": [{"file": "stored.py", "llm_reason": "stored detail"}],
+        "findings": [{"_hash": "h1", "file": "stored.py", "llm_reason": "stored detail"}],
     }
     called = {}
 
     monkeypatch.setattr(srv, "_scan_record_for_id", lambda scan_id: record if scan_id == "20260322_100000" else None)
+    monkeypatch.setattr(srv, "_triage_by_hash", lambda: {"h1": {"status": "accepted_risk", "note": "waived"}})
     monkeypatch.setattr(
         srv,
         "_current_session_snapshot",
@@ -2943,7 +2948,66 @@ def test_generate_html_report_for_scan_uses_stored_scan_record(monkeypatch):
 
     assert updated["reports"]["__all__"]["html"] == "scan.html"
     assert called["scan_id"] == "20260322_100000"
-    assert called["findings"] is None
+    assert called["findings"] is not None
+    assert called["findings"][0]["file"] == "stored.py"
+    assert called["findings"][0]["status"] == "accepted_risk"
+    assert called["findings"][0]["triage_note"] == "waived"
+
+
+def test_start_html_report_generation_does_not_reuse_stale_snapshot(monkeypatch, tmp_path):
+    import app_server as srv
+
+    html_path = tmp_path / "existing.html"
+    html_path.write_text("<html>stale</html>", encoding="utf-8")
+    record = {
+        "scan_id": "20260322_140000",
+        "project_key": "LOCAL",
+        "reports": {
+            "__all__": {
+                "html": str(html_path),
+                "html_detail_mode": "detailed",
+                "html_source_fingerprint": "old-fingerprint",
+            }
+        },
+        "findings": [{"_hash": "hx", "file": "stored.py"}],
+    }
+    calls = []
+    status_store = {}
+
+    monkeypatch.setattr(srv, "_scan_record_for_id", lambda scan_id: record if scan_id == "20260322_140000" else None)
+    monkeypatch.setattr(srv, "_triage_by_hash", lambda: {"hx": {"status": "accepted_risk"}})
+    monkeypatch.setattr(srv, "_report_generation_status", lambda scan_id: dict(status_store))
+    monkeypatch.setattr(srv, "_clear_report_generation_status", lambda scan_id: calls.append(("clear", scan_id)))
+    monkeypatch.setattr(
+        srv,
+        "_set_report_generation_status",
+        lambda scan_id, **kwargs: (status_store.clear(), status_store.update(kwargs), calls.append(("status", scan_id, kwargs.get("state"), kwargs.get("detail_mode")))),
+    )
+
+    class ImmediateThread:
+        def __init__(self, target=None, daemon=None):
+            self._target = target
+
+        def start(self):
+            if self._target:
+                self._target()
+
+    class _StubService:
+        def generate_html_report(self, scan_id, findings=None, **kwargs):
+            calls.append(("generate", scan_id, findings, kwargs.get("detail_mode")))
+            return {"reports": {"__all__": {"html": str(html_path)}}}
+
+    monkeypatch.setattr(srv.threading, "Thread", ImmediateThread)
+    monkeypatch.setattr(srv, "_scan_service", _StubService())
+    monkeypatch.setattr(srv, "_current_session_snapshot", lambda: {"scan_id": ""})
+
+    status = srv._start_html_report_generation("20260322_140000", "detailed")
+
+    assert status["state"] == "done"
+    generate_calls = [item for item in calls if item[0] == "generate"]
+    assert len(generate_calls) == 1
+    assert generate_calls[0][1] == "20260322_140000"
+    assert generate_calls[0][2][0]["status"] == "accepted_risk"
 
 
 def test_page_generate_html_report_redirects_back_to_scan_findings(monkeypatch):
@@ -3167,6 +3231,14 @@ def test_asset_route_serves_layout_js():
     assert b"history.replaceState" in handler.payload[2]
     assert b"phantomlm.triage.updated" in handler.payload[2]
     assert b"phantomlm.settings.updated" in handler.payload[2]
+    assert b"phantomlm.report.updated." in handler.payload[2]
+
+
+def test_results_page_asset_broadcasts_report_completion():
+    script = Path("C:/aitool/assets/results_page.js").read_text(encoding="utf-8")
+
+    assert "phantomlm.report.updated." in script
+    assert "window.location.reload()" in script
 
 
 def test_asset_route_serves_history_page_js():
@@ -5537,6 +5609,40 @@ def test_api_history_delete_clears_matching_stopped_current_session():
         assert srv._current_session().state == "idle"
     finally:
         srv._replace_current_session(orig_session)
+
+
+def test_api_history_delete_clears_report_generation_status_for_deleted_scan():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+    handler = DummyHandler()
+    target_scan_id = "20250317_888888"
+    record = {
+        "scan_id": target_scan_id,
+        "project_key": "LOCAL",
+        "repo_slugs": ["repo1"],
+        "state": "done",
+        "reports": {"__all__": {}},
+        "log_file": "",
+    }
+    srv._set_report_generation_status(target_scan_id, state="running", message="Building HTML report...")
+
+    try:
+        with patch.object(srv, "_load_history", return_value=[record]), patch.object(srv, "_delete_history") as delete_mock:
+            srv._Handler._api_history_delete(handler, {"scan_ids": [target_scan_id]})
+
+        assert handler.payload[0] == 200
+        assert handler.payload[1]["deleted"] == [target_scan_id]
+        delete_mock.assert_called_once_with([target_scan_id])
+        assert srv._report_generation_status(target_scan_id) == {}
+    finally:
+        srv._clear_report_generation_status(target_scan_id)
 
 
 def test_start_attempts_to_boot_ollama_before_opening_browser():

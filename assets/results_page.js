@@ -19,6 +19,10 @@
     if (fillEl) fillEl.style.width = pct + "%";
     if (metaEl) metaEl.textContent = total > 0 ? `${current}/${total}` : (state === "done" ? "Complete" : "");
     if (state === "done") {
+      try {
+        localStorage.setItem(`phantomlm.report.updated.${scanId}`, String(Date.now()));
+      } catch (_err) {
+      }
       window.setTimeout(() => window.location.reload(), 600);
     }
     if (state === "error") {

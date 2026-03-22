@@ -91,7 +91,7 @@ from services.findings import build_findings_rollups, build_scan_findings, findi
 from reports.html_report import HTMLReporter
 from reports.csv_report import CSVReporter
 from reports.json_report import JSONReporter
-from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
+from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession, html_report_source_fingerprint
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
 from services.scan_runtime_views import (
@@ -567,6 +567,13 @@ def _clear_deleted_stopped_session(scan_ids: List[str]) -> None:
             _replace_current_session(replacement)
 
 
+def _clear_deleted_report_generation_status(scan_ids: List[str]) -> None:
+    for scan_id in list(scan_ids or []):
+        safe_scan_id = str(scan_id or "").strip()
+        if safe_scan_id:
+            _clear_report_generation_status(safe_scan_id)
+
+
 def _is_within_roots(path: Path, roots: List[Path]) -> bool:
     try:
         resolved = path.resolve()
@@ -843,12 +850,17 @@ def _generate_html_report_for_scan(scan_id: str) -> dict:
     if not record:
         raise RuntimeError("Scan results not found")
     report = dict((record.get("reports") or {}).get("__all__", {}) or {})
+    findings = build_scan_findings(record, _triage_by_hash())
     html_path = str(report.get("html", "") or "")
-    if html_path and Path(html_path).exists():
+    if (
+        html_path
+        and Path(html_path).exists()
+        and str(report.get("html_source_fingerprint", "") or "") == html_report_source_fingerprint(findings)
+    ):
         return record
 
     snapshot = _current_session_snapshot()
-    updated = _scan_service.generate_html_report(safe_scan_id)
+    updated = _scan_service.generate_html_report(safe_scan_id, findings=findings)
     if snapshot["scan_id"] == safe_scan_id:
         with _state_lock:
             current = _current_session()
@@ -862,11 +874,18 @@ def _start_html_report_generation(scan_id: str, detail_mode: str = "detailed") -
     if not record:
         raise RuntimeError("Scan results not found")
     report = dict((record.get("reports") or {}).get("__all__", {}) or {})
+    findings = build_scan_findings(record, _triage_by_hash())
     detail_mode = "fast" if str(detail_mode or "").strip().lower() == "fast" else "detailed"
     mode_label = "Fast" if detail_mode == "fast" else "Detailed"
     html_path = str(report.get("html", "") or "")
     existing_mode = str(report.get("html_detail_mode", "detailed") or "detailed").strip().lower()
-    if html_path and Path(html_path).exists() and existing_mode == detail_mode:
+    current_fingerprint = html_report_source_fingerprint(findings)
+    if (
+        html_path
+        and Path(html_path).exists()
+        and existing_mode == detail_mode
+        and str(report.get("html_source_fingerprint", "") or "") == current_fingerprint
+    ):
         _clear_report_generation_status(safe_scan_id)
         return {"state": "done", "message": f"{mode_label} HTML report already generated.", "current": 1, "total": 1, "detail_mode": detail_mode}
 
@@ -905,6 +924,7 @@ def _start_html_report_generation(scan_id: str, detail_mode: str = "detailed") -
             )
             updated = _scan_service.generate_html_report(
                 safe_scan_id,
+                findings=findings,
                 progress_fn=_progress,
                 detail_mode=detail_mode,
             )
@@ -2082,6 +2102,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             scan_label = requested_scan_id
             findings_notice = ""
             report = dict((record.get("reports") or {}).get("__all__", {}) or {})
+            html_generation = _report_generation_status(requested_scan_id)
             report_actions_html = _scan_results_toolbar_actions(
                 scan_id=requested_scan_id,
                 html_name=report.get("html_name", ""),
@@ -2090,13 +2111,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 json_name=report.get("json_name", ""),
                 log_url=f"/api/history/log/{requested_scan_id}",
                 can_generate_html=bool(list(record.get("findings") or [])),
-                html_generation=_report_generation_status(requested_scan_id),
+                html_generation=html_generation,
                 csrf_token=_current_csrf_token(self),
             )
         else:
             findings = build_findings_rollups(history, triage)
             findings_notice = findings_history_notice(history)
             report_actions_html = ""
+            html_generation = {}
         merged_notice = " ".join(part for part in [notice or (qs.get("notice", [""])[0] or ""), findings_notice] if part).strip()
         html = render_findings_page(
             findings=findings,
@@ -2107,6 +2129,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             current_scan=_current_scan_nav_context(),
             scan_label=scan_label,
             scan_actions_html=report_actions_html,
+            html_generation=html_generation,
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -2319,6 +2342,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if result["errors"]:
             return self._render_history_page(error="; ".join(result["errors"]))
         _clear_deleted_stopped_session(result["deleted"])
+        _clear_deleted_report_generation_status(result["deleted"])
         self._redirect(_with_query("/history", notice=f"Deleted {len(result['deleted'])} scan record(s)"))
 
     def _page_findings_bulk(self, body: dict):
@@ -2781,6 +2805,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 audit_event=_audit_event,
             )
             _clear_deleted_stopped_session(result["deleted"])
+            _clear_deleted_report_generation_status(result["deleted"])
             self._json(result)
         except ValueError as e:
             return self._err(400, str(e))

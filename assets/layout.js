@@ -146,6 +146,13 @@ setTimeout(() => {
     }
   });
   window.addEventListener("storage", (event) => {
+    if (String(event.key || "").startsWith("phantomlm.report.updated.")) {
+      const updatedScanId = String(event.key || "").slice("phantomlm.report.updated.".length);
+      if (updatedScanId && updatedScanId === currentScanId()) {
+        window.location.reload();
+      }
+      return;
+    }
     if (!syncableStorageKeys.has(event.key)) {
       return;
     }
@@ -155,3 +162,12 @@ setTimeout(() => {
     window.location.reload();
   });
 })();
+  function currentScanId() {
+    if (window.location.pathname.startsWith("/scan/")) {
+      return decodeURIComponent(window.location.pathname.slice("/scan/".length).split("/")[0] || "");
+    }
+    if (window.location.pathname === "/findings") {
+      return String(new URL(window.location.href).searchParams.get("scan_id") || "");
+    }
+    return "";
+  }
