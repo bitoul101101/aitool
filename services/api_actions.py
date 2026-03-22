@@ -9,7 +9,10 @@ from scanner.pat_store import backend_name, delete_pat, load_pat, save_pat
 from scanner.suppressions import (
     TRIAGE_ACCEPTED_RISK,
     TRIAGE_FALSE_POSITIVE,
+    TRIAGE_IN_REMEDIATION,
     TRIAGE_REVIEWED,
+    TRIAGE_SENT_FOR_REVIEW,
+    normalize_triage_status,
     remove_triage,
     upsert_triage,
 )
@@ -192,7 +195,13 @@ def triage_finding(
     note = body.get("note", "").strip()
     if not hash_:
         raise ValueError("hash required")
-    if status not in {TRIAGE_REVIEWED, TRIAGE_ACCEPTED_RISK, TRIAGE_FALSE_POSITIVE}:
+    status = normalize_triage_status(status)
+    if status not in {
+        TRIAGE_SENT_FOR_REVIEW,
+        TRIAGE_IN_REMEDIATION,
+        TRIAGE_ACCEPTED_RISK,
+        TRIAGE_FALSE_POSITIVE,
+    }:
         raise ValueError("invalid triage status")
     if status in {TRIAGE_ACCEPTED_RISK, TRIAGE_FALSE_POSITIVE} and not note:
         raise ValueError("note required")

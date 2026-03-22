@@ -17,7 +17,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scanner.detector import AIUsageDetector
-from scanner.suppressions import TRIAGE_REVIEWED, list_suppressions, list_triage
+from scanner.suppressions import (
+    TRIAGE_ACCEPTED_RISK,
+    TRIAGE_IN_REMEDIATION,
+    TRIAGE_REVIEWED,
+    TRIAGE_SENT_FOR_REVIEW,
+    list_suppressions,
+    list_triage,
+)
 from analyzer.security import SecurityAnalyzer
 from aggregator.aggregator import Aggregator
 from reports.html_report import HTMLReporter
@@ -2296,7 +2303,10 @@ def test_build_findings_rollups_applies_triage_and_fixed_state():
             ],
         },
     ]
-    triage = {"hash-open": {"status": "accepted_risk", "note": "Known exception", "marked_by": "analyst", "marked_at": "2026-03-19"}}
+    triage = {
+        "hash-open": {"status": TRIAGE_ACCEPTED_RISK, "note": "Known exception", "marked_by": "analyst", "marked_at": "2026-03-19"},
+        "hash-fixed": {"status": TRIAGE_SENT_FOR_REVIEW, "note": "Sent to owner", "marked_by": "analyst", "marked_at": "2026-03-18"},
+    }
 
     rows = build_findings_rollups(history, triage)
 
@@ -2305,6 +2315,7 @@ def test_build_findings_rollups_applies_triage_and_fixed_state():
     assert rows[0]["triage_note"] == "Known exception"
     fixed = next(item for item in rows if item["hash"] == "hash-fixed")
     assert fixed["status"] == "fixed"
+    assert fixed["status_label"] == "Fixed"
 
 
 def test_build_scan_findings_returns_only_requested_scan_details():
@@ -2422,6 +2433,9 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'id="apply-findings-action-btn"' in html
     assert 'id="findings-select-all"' in html
     assert 'src="/assets/findings_page.js"' in html
+    assert "Sent for Review" in html
+    assert "In Remediation" in html
+    assert "FP - Dismiss" in html
     assert "File : Line / Code" in html
     assert "<th>Note</th>" not in html
     assert 'sev-chip sev-critical' in html
@@ -3924,7 +3938,7 @@ def test_settings_save_writes_audit_record():
         srv._sync_scan_service_paths()
 
 
-def test_api_finding_triage_marks_reviewed_and_reset_clears_it():
+def test_api_finding_triage_marks_sent_for_review_and_reset_clears_it():
     import app_server as srv
 
     class DummyHandler:
@@ -3986,13 +4000,13 @@ def test_api_finding_triage_marks_reviewed_and_reset_clears_it():
         handler = DummyHandler()
         srv._Handler._api_finding_triage(
             handler,
-            {"hash": "hash-2", "status": TRIAGE_REVIEWED, "note": "Manually reviewed"},
+            {"hash": "hash-2", "status": TRIAGE_SENT_FOR_REVIEW, "note": "Shared with repo owner"},
         )
 
         assert handler.payload[0] == 200
-        assert srv._session.findings[0]["triage_status"] == TRIAGE_REVIEWED
-        assert srv._session.findings[0]["triage_note"] == "Manually reviewed"
-        assert any(rec["hash"] == "hash-2" and rec["status"] == TRIAGE_REVIEWED for rec in list_triage(srv.SUPPRESSIONS_FILE))
+        assert srv._session.findings[0]["triage_status"] == TRIAGE_SENT_FOR_REVIEW
+        assert srv._session.findings[0]["triage_note"] == "Shared with repo owner"
+        assert any(rec["hash"] == "hash-2" and rec["status"] == TRIAGE_SENT_FOR_REVIEW for rec in list_triage(srv.SUPPRESSIONS_FILE))
 
         srv._Handler._api_finding_reset(handler, {"hash": "hash-2"})
 

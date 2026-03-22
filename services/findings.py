@@ -7,7 +7,10 @@ from services.rule_labels import format_rule_label
 from scanner.suppressions import (
     TRIAGE_ACCEPTED_RISK,
     TRIAGE_FALSE_POSITIVE,
+    TRIAGE_IN_REMEDIATION,
     TRIAGE_REVIEWED,
+    TRIAGE_SENT_FOR_REVIEW,
+    normalize_triage_status,
 )
 
 
@@ -23,9 +26,11 @@ def _safe_dt(value: str) -> tuple[int, str]:
 
 def _status_label(status: str) -> str:
     return {
-        TRIAGE_FALSE_POSITIVE: "Suppressed",
+        TRIAGE_FALSE_POSITIVE: "FP - Dismissed",
         TRIAGE_ACCEPTED_RISK: "Accepted Risk",
-        TRIAGE_REVIEWED: "Reviewed",
+        TRIAGE_SENT_FOR_REVIEW: "Sent for Review",
+        TRIAGE_IN_REMEDIATION: "In Remediation",
+        TRIAGE_REVIEWED: "In Remediation",
         "fixed": "Fixed",
         "open": "Open",
     }.get(status, "Open")
@@ -141,14 +146,20 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
         triage_meta = dict(triage.get(hash_, {}) or {})
         fixed_at = fixed_marks.get(hash_, (0, ""))
         last_seen_ts = _safe_dt(str(row.get("last_seen_at", "") or ""))
+        triage_status = normalize_triage_status(str(triage_meta.get("status", "") or ""))
         status = "open"
-        if triage_meta.get("status"):
-            status = str(triage_meta.get("status"))
+        if triage_status in {TRIAGE_ACCEPTED_RISK, TRIAGE_FALSE_POSITIVE}:
+            status = triage_status
             row["triage_note"] = str(triage_meta.get("note", "") or "")
             row["triage_by"] = str(triage_meta.get("marked_by", "") or "")
             row["triage_at"] = str(triage_meta.get("marked_at", "") or "")
         elif fixed_at[0] and fixed_at[0] >= last_seen_ts[0]:
             status = "fixed"
+        elif triage_status:
+            status = triage_status
+            row["triage_note"] = str(triage_meta.get("note", "") or "")
+            row["triage_by"] = str(triage_meta.get("marked_by", "") or "")
+            row["triage_at"] = str(triage_meta.get("marked_at", "") or "")
         row["status"] = status
         row["status_label"] = _status_label(status)
 
@@ -172,7 +183,7 @@ def build_scan_findings(record: dict, triage: dict[str, dict]) -> list[dict]:
         hash_ = str(finding.get("_hash", "") or "")
         if not hash_:
             continue
-        status = str((triage.get(hash_, {}) or {}).get("status", "open") or "open")
+        status = normalize_triage_status(str((triage.get(hash_, {}) or {}).get("status", "open") or "open"))
         triage_meta = dict(triage.get(hash_, {}) or {})
         rows.append({
             "hash": hash_,
@@ -240,7 +251,8 @@ def findings_summary(findings: list[dict]) -> dict[str, int]:
     return {
         "total": len(findings),
         "open": counts.get("open", 0),
-        "reviewed": counts.get(TRIAGE_REVIEWED, 0),
+        "sent_for_review": counts.get(TRIAGE_SENT_FOR_REVIEW, 0),
+        "in_remediation": counts.get(TRIAGE_IN_REMEDIATION, 0) + counts.get(TRIAGE_REVIEWED, 0),
         "accepted_risk": counts.get(TRIAGE_ACCEPTED_RISK, 0),
         "suppressed": counts.get(TRIAGE_FALSE_POSITIVE, 0),
         "fixed": counts.get("fixed", 0),

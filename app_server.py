@@ -55,8 +55,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from scanner.pat_store import load_pat
 from scanner.suppressions import (
     TRIAGE_FALSE_POSITIVE,
+    TRIAGE_IN_REMEDIATION,
+    TRIAGE_SENT_FOR_REVIEW,
     list_suppressions,
     list_triage,
+    normalize_triage_status,
     remove_triage,
     triage_by_hash,
     upsert_triage,
@@ -1261,7 +1264,7 @@ def _clear_finding_triage(finding: dict) -> dict:
 
 def _apply_triage_metadata(finding: dict, meta: dict) -> dict:
     updated = dict(finding)
-    status = meta.get("status", "")
+    status = normalize_triage_status(str(meta.get("status", "") or ""))
     note = meta.get("note", "")
     marked_by = meta.get("marked_by", "")
     marked_at = meta.get("marked_at", "")
@@ -2255,18 +2258,29 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _page_findings_bulk(self, body: dict):
         if _require_role(self, ROLE_TRIAGE):
             return
+        requested_scan_id = Path(str(body.get("scan_id", "") or "")).name
+        target = _with_query("/findings", scan_id=requested_scan_id) if requested_scan_id else "/findings"
         hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
         action = str(body.get("action", "") or "").strip()
         note = str(body.get("note", "") or "").strip()
         if not hashes:
-            return self._render_findings_page(error="Select at least one finding.")
-        if action not in {"reviewed", "accepted_risk", "false_positive", "reset"}:
-            return self._render_findings_page(error="Choose a valid bulk action.")
+            self._redirect(_with_query(target, error="Select at least one finding."))
+            return
+        action = normalize_triage_status(action)
+        if action not in {"sent_for_review", "in_remediation", "accepted_risk", "false_positive", "reset"}:
+            self._redirect(_with_query(target, error="Choose a valid bulk action."))
+            return
         if action in {"accepted_risk", "false_positive"} and not note:
-            return self._render_findings_page(error="A note is required for Accept Risk and Suppress.")
+            self._redirect(_with_query(target, error="A short justification is required for Accepted Risk and FP - Dismiss."))
+            return
 
         triage_lookup = _triage_by_hash()
-        findings_by_hash = {item.get("hash", ""): item for item in _findings_for_user() if item.get("hash")}
+        if requested_scan_id:
+            record = _scan_record_for_id(requested_scan_id)
+            source_findings = build_scan_findings(record, triage_lookup) if record else []
+        else:
+            source_findings = _findings_for_user()
+        findings_by_hash = {item.get("hash", ""): item for item in source_findings if item.get("hash")}
         current_session = _current_session()
 
         for hash_ in hashes:
@@ -2322,7 +2336,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             _audit_event("finding_triage", scan_id=_current_session_snapshot().get("scan_id", ""), finding_hash=hash_, triage_status=action, note=note)
 
         _persist_session_state()
-        self._redirect(_with_query("/findings", notice=f"Updated {len(hashes)} finding(s)"))
+        self._redirect(_with_query(target, notice=f"Updated {len(hashes)} finding(s)"))
 
     def _page_findings_generate_html(self, body: dict):
         if _require_role(self, ROLE_VIEWER):

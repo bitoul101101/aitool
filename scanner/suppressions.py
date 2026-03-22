@@ -13,17 +13,28 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-_VERSION = 2
+_VERSION = 3
 _DEFAULT_FILE = "ai_scanner_suppressions.json"
 
+TRIAGE_SENT_FOR_REVIEW = "sent_for_review"
+TRIAGE_IN_REMEDIATION = "in_remediation"
 TRIAGE_FALSE_POSITIVE = "false_positive"
 TRIAGE_REVIEWED = "reviewed"
 TRIAGE_ACCEPTED_RISK = "accepted_risk"
 TRIAGE_STATUSES = {
+    TRIAGE_SENT_FOR_REVIEW,
+    TRIAGE_IN_REMEDIATION,
     TRIAGE_FALSE_POSITIVE,
     TRIAGE_REVIEWED,
     TRIAGE_ACCEPTED_RISK,
 }
+
+
+def normalize_triage_status(status: str) -> str:
+    value = str(status or "").strip().lower()
+    if value == TRIAGE_REVIEWED:
+        return TRIAGE_IN_REMEDIATION
+    return value
 
 
 def _read(path: Path) -> dict:
@@ -77,7 +88,12 @@ def load_suppressions(path: str | Path) -> Set[str]:
 def list_triage(path: str | Path) -> List[Dict[str, Any]]:
     """Return the stored triage records."""
     data = _read(Path(path))
-    return list(data["triage"])
+    records: list[dict[str, Any]] = []
+    for rec in list(data["triage"]):
+        updated = dict(rec)
+        updated["status"] = normalize_triage_status(str(rec.get("status", "") or ""))
+        records.append(updated)
+    return records
 
 
 def triage_by_hash(path: str | Path) -> Dict[str, Dict[str, Any]]:
@@ -114,6 +130,7 @@ def upsert_triage(
     marked_by: str = "",
 ) -> None:
     """Create or update a triage record for *finding*."""
+    status = normalize_triage_status(status)
     if status not in TRIAGE_STATUSES:
         raise ValueError(f"Unsupported triage status: {status}")
 

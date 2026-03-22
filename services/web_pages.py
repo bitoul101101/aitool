@@ -5,6 +5,13 @@ from html import escape
 from urllib.parse import quote
 
 from services.rule_labels import format_rule_label
+from scanner.suppressions import (
+    TRIAGE_ACCEPTED_RISK,
+    TRIAGE_FALSE_POSITIVE,
+    TRIAGE_IN_REMEDIATION,
+    TRIAGE_SENT_FOR_REVIEW,
+    normalize_triage_status,
+)
 from dateutil import tz
 
 
@@ -283,10 +290,12 @@ def render_scan_page(
     def triage_badge(status_name: str) -> str:
         if not status_name:
             return ""
+        status_name = normalize_triage_status(status_name)
         label_map = {
-            "reviewed": "To Mitigate",
+            TRIAGE_SENT_FOR_REVIEW: "Sent for Review",
+            TRIAGE_IN_REMEDIATION: "In Remediation",
             "accepted_risk": "Accepted Risk",
-            "false_positive": "Suppressed",
+            "false_positive": "FP - Dismissed",
         }
         label = label_map.get(status_name, status_name.replace("_", " "))
         return f'<span class="triage-state triage-{_esc(status_name)}">{_esc(label)}</span>'
@@ -319,16 +328,25 @@ def render_scan_page(
         )
         if suppressed:
             return reset_form
-        status_name = detail.get("triage_status", "")
-        if status_name in {"reviewed", "accepted_risk"}:
+        status_name = normalize_triage_status(str(detail.get("triage_status", "") or ""))
+        if status_name in {TRIAGE_SENT_FOR_REVIEW, TRIAGE_IN_REMEDIATION, TRIAGE_ACCEPTED_RISK}:
             return f'<div class="triage-actions">{reset_form}</div>'
-        reviewed_form = (
+        sent_form = (
             f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
             f'{_csrf_field(csrf_token)}'
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
-            '<input type="hidden" name="status" value="reviewed">'
+            f'<input type="hidden" name="status" value="{TRIAGE_SENT_FOR_REVIEW}">'
             '<input type="hidden" name="note" value="">'
-            '<button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, \'To Mitigate\')">To Mitigate</button>'
+            '<button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, \'Sent for Review\')">Sent for Review</button>'
+            "</form>"
+        )
+        remediation_form = (
+            f'<form class="triage-form inline-only" method="post" action="/findings/triage">'
+            f'{_csrf_field(csrf_token)}'
+            f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
+            f'<input type="hidden" name="status" value="{TRIAGE_IN_REMEDIATION}">'
+            '<input type="hidden" name="note" value="">'
+            '<button type="submit" class="ghost" onclick="return triagePromptSubmit(this.form, \'In Remediation\')">In Remediation</button>'
             "</form>"
         )
         accepted_form = (
@@ -346,10 +364,10 @@ def render_scan_page(
             f'<input type="hidden" name="hash" value="{_esc(hash_)}">'
             '<input type="hidden" name="status" value="false_positive">'
             '<input type="hidden" name="note" value="">'
-            '<button type="submit" class="warn" onclick="return triagePromptSubmit(this.form, \'Suppress\')">Suppress</button>'
+            '<button type="submit" class="warn" onclick="return triagePromptSubmit(this.form, \'FP - Dismiss\')">FP - Dismiss</button>'
             "</form>"
         )
-        return f'<div class="triage-actions">{reviewed_form}{accepted_form}{suppress_form}</div>'
+        return f'<div class="triage-actions">{sent_form}{remediation_form}{accepted_form}{suppress_form}</div>'
 
     def severity_chip(detail: dict) -> str:
         sev = int(detail.get("severity", 4) or 4)
@@ -463,13 +481,21 @@ def render_scan_page(
         ]
     )
     all_findings = status.get("finding_details", [])
-    current_findings = [f for f in all_findings if f.get("triage_status") not in {"reviewed", "accepted_risk"}][:20]
-    mitigate_findings = [f for f in all_findings if f.get("triage_status") == "reviewed"][:20]
+    current_findings = [
+        f for f in all_findings
+        if normalize_triage_status(str(f.get("triage_status", "") or ""))
+        not in {TRIAGE_SENT_FOR_REVIEW, TRIAGE_IN_REMEDIATION, TRIAGE_ACCEPTED_RISK, TRIAGE_FALSE_POSITIVE}
+    ][:20]
+    mitigate_findings = [
+        f for f in all_findings
+        if normalize_triage_status(str(f.get("triage_status", "") or ""))
+        in {TRIAGE_SENT_FOR_REVIEW, TRIAGE_IN_REMEDIATION}
+    ][:20]
     accepted_or_suppressed = [f for f in all_findings if f.get("triage_status") == "accepted_risk"] + status.get("suppressed_details", [])
     accepted_or_suppressed = accepted_or_suppressed[:30]
     findings_rows = "".join(finding_row(f) for f in current_findings) or '<tr><td colspan="5">No current findings.</td></tr>'
-    mitigate_rows = "".join(mitigated_row(f) for f in mitigate_findings) or '<tr><td colspan="5">No findings marked to mitigate.</td></tr>'
-    suppressed_rows = "".join(suppressed_row(f) for f in accepted_or_suppressed) or '<tr><td colspan="5">No suppressed or accepted findings.</td></tr>'
+    mitigate_rows = "".join(mitigated_row(f) for f in mitigate_findings) or '<tr><td colspan="5">No findings sent for owner remediation yet.</td></tr>'
+    suppressed_rows = "".join(suppressed_row(f) for f in accepted_or_suppressed) or '<tr><td colspan="5">No accepted-risk or dismissed findings.</td></tr>'
     normalized_timeline = []
     for item in phase_timeline:
         if isinstance(item, dict):
@@ -794,8 +820,10 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         key = str(status or "").lower().replace(" ", "_")
         css = {
             "open": "status-running",
-            "reviewed": "status-done",
+            "sent_for_review": "status-queued",
+            "in_remediation": "status-done",
             "accepted_risk": "status-stopped",
+            "fp_-_dismissed": "status-stopped",
             "suppressed": "status-stopped",
             "fixed": "",
         }.get(key, "")
@@ -868,8 +896,11 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     <section class="trend-summary-grid" style="margin-bottom:12px">
       <div class="trend-summary-card"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
       <div class="trend-summary-card"><span class="baseline-label">Open</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "open"))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Sent for Review</span><strong>{_esc(sum(1 for item in findings if item.get("status") == TRIAGE_SENT_FOR_REVIEW))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">In Remediation</span><strong>{_esc(sum(1 for item in findings if item.get("status") in {TRIAGE_IN_REMEDIATION, "reviewed"}))}</strong></div>
       <div class="trend-summary-card"><span class="baseline-label">Accepted Risk</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "accepted_risk"))}</strong></div>
-      <div class="trend-summary-card"><span class="baseline-label">Suppressed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "false_positive"))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">FP - Dismissed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "false_positive"))}</strong></div>
+      <div class="trend-summary-card"><span class="baseline-label">Fixed</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "fixed"))}</strong></div>
     </section>
     <div class="history-toolbar filters-row">
       <input type="search" id="findings-search" placeholder="Search findings">
@@ -880,19 +911,20 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
       <select id="findings-filter-rule">{_opts(rules, 'All Rules')}</select>
       <button type="button" class="ghost" id="reset-findings-filters">Reset</button>
     </div>
-    <div class="history-toolbar filters-row" style="margin-top:10px">
+    <div class="history-toolbar filters-row findings-bulk-toolbar" style="margin-top:10px">
       <select name="action" id="findings-bulk-action">
         <option value="">Bulk Action</option>
-        <option value="reviewed">Mark Reviewed</option>
+        <option value="sent_for_review">Sent for Review</option>
+        <option value="in_remediation">In Remediation</option>
         <option value="accepted_risk">Accept Risk</option>
-        <option value="false_positive">Suppress</option>
+        <option value="false_positive">FP - Dismiss</option>
         <option value="reset">Reset</option>
       </select>
-      <input type="text" name="note" id="findings-bulk-note" placeholder="Note for Accept Risk / Suppress">
+      <button type="submit" class="warn hidden" id="apply-findings-action-btn">Apply to Selected</button>
+      <input type="text" name="note" id="findings-bulk-note" placeholder="Short justification for Accepted Risk / FP - Dismiss">
       <button type="submit" class="btn alt hidden" id="generate-findings-html-btn" name="export_type" value="html" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">Generate HTML Report</button>
       <button type="submit" class="btn alt hidden" id="generate-findings-csv-btn" name="export_type" value="csv" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">CSV</button>
       <button type="submit" class="btn alt hidden" id="generate-findings-json-btn" name="export_type" value="json" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">JSON</button>
-      <button type="submit" class="warn hidden" id="apply-findings-action-btn">Apply to Selected</button>
     </div>
       <div class="table-shell findings-table-shell">
         <table id="findings-table">
@@ -1421,7 +1453,7 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
           <tr><td>Repository Scanning</td><td>Scans Bitbucket repositories and local folders, including full scans, changed-files scans, branch diffs, and baseline-aware rescans.</td></tr>
           <tr><td>Detection</td><td>Finds AI provider usage, prompt handling risks, model-serving exposure, RAG/vector patterns, secret-to-AI correlation, policy violations, and suspicious flows.</td></tr>
           <tr><td>Analysis</td><td>Applies context-aware severity scoring, production relevance, evidence quality scoring, and policy mapping before optional LLM review.</td></tr>
-          <tr><td>Review Workflow</td><td>Supports finding triage, suppressions, accepted risk, reviewed state, central findings management, scan history, and trend analysis.</td></tr>
+          <tr><td>Review Workflow</td><td>Supports owner handoff, remediation tracking, accepted risk, FP dismissal with justification, central findings management, scan history, and trend analysis.</td></tr>
           <tr><td>Reporting</td><td>Produces CSV, JSON, and on-demand HTML reports, plus logs, inventory views, and trend summaries.</td></tr>
           <tr><td>Execution Modes</td><td>Supports browser-driven scans plus a minimal CLI for both local-repo and Bitbucket project/repo scans that writes machine-readable artifacts.</td></tr>
         </tbody>
@@ -1490,10 +1522,11 @@ def render_help_page(*, notice: str = "", error: str = "", show_scan_results: bo
       <table>
         <thead><tr><th>State</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td>Open</td><td>Active finding with no triage decision yet.</td></tr>
-          <tr><td>Reviewed</td><td>Analyst reviewed the finding but did not suppress or accept risk.</td></tr>
-          <tr><td>Accepted Risk</td><td>Finding remains acknowledged with a documented reason.</td></tr>
-          <tr><td>Suppressed</td><td>Finding is intentionally hidden as noise or not actionable.</td></tr>
+          <tr><td>Open</td><td>Active finding with no remediation decision yet.</td></tr>
+          <tr><td>Sent for Review</td><td>The finding and mitigation guidance were sent to the repo owner for action.</td></tr>
+          <tr><td>In Remediation</td><td>The owner acknowledged the issue and is actively working on a fix.</td></tr>
+          <tr><td>Accepted Risk</td><td>The finding is real but remains acknowledged with a documented justification.</td></tr>
+          <tr><td>FP - Dismissed</td><td>The finding was judged to be a false positive and requires a short justification.</td></tr>
           <tr><td>Fixed</td><td>Finding existed in a prior full/baseline comparison but is absent from a later relevant scan.</td></tr>
         </tbody>
       </table>
