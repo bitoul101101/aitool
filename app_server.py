@@ -2680,6 +2680,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if record is None and not _runtime_report_allowed(safe):
             return self._err(403, "Report access denied")
         path = Path(OUTPUT_DIR).resolve() / safe
+        scan_id = str((record or {}).get("scan_id", "") or "")
         if record is not None:
             reports = dict((record.get("reports") or {}).get("__all__", {}) or {})
             for key in ("html", "csv", "json"):
@@ -2688,8 +2689,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     path = Path(candidate).resolve()
                     break
         if not path.exists():
-            return self._404()
-        ct = "text/html; charset=utf-8" if safe.endswith(".html") else "text/csv"
+            if safe.endswith(".html") and scan_id:
+                return self._redirect(_with_query("/findings", scan_id=scan_id, error="HTML report file is missing. Generate it again from this page."))
+            message = "Requested report file is missing."
+            if scan_id:
+                message += " Re-generate it from the Findings page for this scan."
+            return self._send(404, "text/plain; charset=utf-8", message.encode("utf-8"))
+        ct = {
+            ".html": "text/html; charset=utf-8",
+            ".csv": "text/csv; charset=utf-8",
+            ".json": "application/json; charset=utf-8",
+        }.get(path.suffix.lower(), "application/octet-stream")
         self._send(200, ct, path.read_bytes())
 
     def _serve_log(self, scan_id: str):
@@ -2699,7 +2709,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._err(403, "Log access denied")
         log_text = _get_log_text(safe)
         if not log_text:
-            return self._err(404, "Log not found")
+            return self._send(404, "text/plain; charset=utf-8", b"Log file is missing for this scan.")
         body = log_text.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")

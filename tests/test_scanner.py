@@ -4842,6 +4842,101 @@ def test_serve_report_uses_stored_history_artifact_path_when_output_dir_changes(
         srv.OUTPUT_DIR = orig_out
 
 
+def test_serve_report_redirects_missing_html_artifact_back_to_scan_findings():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.redirect_to = None
+            self.sent = None
+            self.errors = []
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+        def _send(self, status, content_type, body):
+            self.sent = (status, content_type, body)
+
+        def _err(self, status, msg):
+            self.errors.append((status, msg))
+            return None
+
+    record = {
+        "scan_id": "20260323_120001",
+        "project_key": "COGI",
+        "reports": {"__all__": {"html": r"C:\missing\scan.html", "html_name": "scan.html"}},
+    }
+    handler = DummyHandler()
+    with patch.object(srv, "_find_history_record_by_report_name", return_value=record):
+        srv._Handler._serve_report(handler, "scan.html")
+
+    assert handler.redirect_to == "/findings?scan_id=20260323_120001&error=HTML+report+file+is+missing.+Generate+it+again+from+this+page."
+    assert handler.sent is None
+    assert handler.errors == []
+
+
+def test_serve_report_returns_plain_text_for_missing_json_artifact():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.redirect_to = None
+            self.sent = None
+            self.errors = []
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+        def _send(self, status, content_type, body):
+            self.sent = (status, content_type, body)
+
+        def _err(self, status, msg):
+            self.errors.append((status, msg))
+            return None
+
+    record = {
+        "scan_id": "20260323_120002",
+        "project_key": "COGI",
+        "reports": {"__all__": {"json": r"C:\missing\scan.json", "json_name": "scan.json"}},
+    }
+    handler = DummyHandler()
+    with patch.object(srv, "_find_history_record_by_report_name", return_value=record):
+        srv._Handler._serve_report(handler, "scan.json")
+
+    assert handler.redirect_to is None
+    assert handler.errors == []
+    assert handler.sent[0] == 404
+    assert handler.sent[1] == "text/plain; charset=utf-8"
+    assert b"Requested report file is missing." in handler.sent[2]
+    assert b"Findings page" in handler.sent[2]
+
+
+def test_serve_log_returns_plain_text_when_scan_log_is_missing():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.sent = None
+            self.errors = []
+
+        def _send(self, status, content_type, body):
+            self.sent = (status, content_type, body)
+
+        def _err(self, status, msg):
+            self.errors.append((status, msg))
+            return None
+
+    handler = DummyHandler()
+    with patch.object(srv, "_find_history_record_by_scan_id", return_value={"scan_id": "20260323_120003"}), \
+         patch.object(srv, "_get_log_text", return_value=""):
+        srv._Handler._serve_log(handler, "20260323_120003")
+
+    assert handler.errors == []
+    assert handler.sent[0] == 404
+    assert handler.sent[1] == "text/plain; charset=utf-8"
+    assert handler.sent[2] == b"Log file is missing for this scan."
+
+
 def test_cleanup_stale_temp_clones_removes_leftovers():
     import app_server as srv
 
