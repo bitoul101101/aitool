@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlparse
 
 
 DEFAULT_LLM_CONFIG = {
@@ -122,6 +123,17 @@ def ollama_list_models(base_url: str, *, timeout: int = 6) -> list[str]:
     return list(ollama_snapshot(base_url, timeout=timeout, refresh=True).get("models", []))
 
 
+def is_local_ollama_url(base_url: str) -> bool:
+    """Return True only for local Ollama URLs that this process can reasonably start."""
+    normalized = (base_url or DEFAULT_LLM_CONFIG["base_url"]).strip()
+    try:
+        parsed = urlparse(normalized)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").strip().lower()
+    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
 def ensure_ollama_running(
     base_url: str,
     *,
@@ -134,6 +146,12 @@ def ensure_ollama_running(
     """
     if ollama_ping(base_url):
         return True, "already_running"
+
+    if not is_local_ollama_url(base_url):
+        msg = f"Ollama auto-start is only supported for local URLs ({base_url})"
+        if log_fn:
+            log_fn(f"  [LLM] {msg}")
+        return False, msg
 
     if log_fn:
         log_fn("  [LLM] Ollama not running - starting `ollama serve`...")

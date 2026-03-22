@@ -678,7 +678,16 @@ def render_scan_page(
       <h2>Activity Log</h2>
       <div class="scan-actions">{stop_button if running else ""}</div>
     </div>
-    <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
+    <div class="terminal-shell">
+      <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
+      <pre class="terminal-brand" aria-hidden="true">{_esc(r"""
+  ____  _                 _                 __  __
+ |  _ \| |__   __ _ _ __ | |_ ___  _ __ ___|  \/  |
+ | |_) | '_ \ / _` | '_ \| __/ _ \| '_ ` _ \ |\/| |
+ |  __/| | | | (_| | | | | || (_) | | | | | | |  | |
+ |_|   |_| |_|\__,_|_| |_|\__\___/|_| |_| |_|_|  |_|
+""").strip()}</pre>
+    </div>
   </section>
   <aside class="stack">
     <section class="card timeline-card">

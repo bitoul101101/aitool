@@ -337,6 +337,10 @@ def _ollama_ensure_running(base_url: str) -> dict:
     return {"ok": False, "error": status}
 
 
+def _scan_ollama_ensure_running(base_url: str, log_fn=None) -> tuple[bool, str]:
+    return ensure_ollama_running(base_url, timeout_s=OLLAMA_START_TIMEOUT, log_fn=log_fn)
+
+
 # ── Global app state ──────────────────────────────────────────────────────────
 
 _operator_state = SingleUserState(load_single_user_config(ACCESS_FILE))
@@ -399,6 +403,7 @@ _scan_service = ScanJobService(
     utc_now_iso=_utc_now_iso,
     git_head_commit=_git_head_commit,
     ollama_ping=_ollama_ping,
+    ensure_ollama_running=_scan_ollama_ensure_running,
 )
 
 

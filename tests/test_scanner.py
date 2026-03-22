@@ -1705,6 +1705,9 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'id="perf-llm-outcomes"' not in html
     assert '<div class="workspace-header">' in html
     assert 'id="new-scan-btn"' not in html
+    assert 'class="terminal-shell"' in html
+    assert 'class="terminal-brand"' in html
+    assert "____  _" in html
     assert "Results Actions" not in html
     assert 'id="reports-card"' not in html
     assert 'id="hardware-process"' not in html
@@ -2167,7 +2170,7 @@ def test_phase_timeline_assigns_residual_seconds_to_last_started_phase():
     entries = [
         {"ts": 0.0, "msg": "Scan ID  : 1"},
         {"ts": 4.0, "msg": "repo  branch:main  owner:User"},
-        {"ts": 4.0, "msg": "Starting parallel scan (workers=1)..."},
+        {"ts": 4.0, "msg": "Starting scan (workers=1)..."},
         {"ts": 6.0, "msg": "[LLM] Evaluating 3 finding(s) for review..."},
         {"ts": 55.0, "msg": "Scan complete."},
     ]
@@ -2188,7 +2191,7 @@ def test_phase_timeline_total_matches_sum_of_displayed_finished_phases():
     entries = [
         {"ts": 0.0, "msg": "Scan ID  : 1"},
         {"ts": 3.0, "msg": "repo  branch:main  owner:User"},
-        {"ts": 3.0, "msg": "Starting parallel scan (workers=1)..."},
+        {"ts": 3.0, "msg": "Starting scan (workers=1)..."},
         {"ts": 3.0, "msg": "[LLM] Evaluating 2 finding(s) for review..."},
         {"ts": 10.0, "msg": "Scan complete."},
     ]
@@ -5303,6 +5306,7 @@ def test_run_scan_with_no_repos_completes_cleanly():
     session.state = "running"
 
     with patch.object(srv, "_ollama_ping", return_value=False), \
+         patch.object(srv._scan_service, "_ensure_ollama_running", return_value=(False, "unavailable")), \
          patch.object(srv, "_save_history_record", lambda session, findings: None):
         srv._run_scan(session)
 
@@ -5341,6 +5345,7 @@ def test_run_scan_logs_structured_metadata_fetch_errors():
             Path(dest).mkdir(parents=True, exist_ok=True)
 
         with patch.object(srv, "_ollama_ping", return_value=False), \
+             patch.object(srv._scan_service, "_ensure_ollama_running", return_value=(False, "unavailable")), \
              patch.object(srv, "_save_history_record", lambda session, findings: None), \
              patch.object(srv._scan_service, "_git_head_commit", return_value="abc123"), \
              patch("scanner.bitbucket.shallow_clone", side_effect=_fake_clone), \
@@ -5401,6 +5406,7 @@ def test_run_scan_defers_html_report_generation_until_requested():
             (dest_path / "app.py").write_text("import openai\n", encoding="utf-8")
 
         with patch.object(srv, "_ollama_ping", return_value=False), \
+             patch.object(srv._scan_service, "_ensure_ollama_running", return_value=(False, "unavailable")), \
              patch.object(srv, "_save_history_record", lambda session, findings: None), \
              patch.object(srv._scan_service, "_git_head_commit", return_value="abc123"), \
              patch("scanner.bitbucket.shallow_clone", side_effect=_fake_clone), \
@@ -5411,11 +5417,33 @@ def test_run_scan_defers_html_report_generation_until_requested():
              patch("services.scan_jobs.CSVReporter.write_csv", return_value=str(d / "output" / "report.csv")):
             srv._run_scan(session)
 
-        assert any("HTML report deferred until requested from the Results tab." in entry["msg"] for entry in session.log_lines)
+        assert any("HTML report deferred until requested from the Findings page." in entry["msg"] for entry in session.log_lines)
         assert not any("Writing HTML report" in entry["msg"] for entry in session.log_lines)
     finally:
         srv.OUTPUT_DIR = orig_out
         srv._operator_state.client = orig_client
+
+
+def test_run_scan_attempts_to_start_ollama_before_disabling_llm():
+    import app_server as srv
+
+    session = srv.ScanSession()
+    session.scan_id = "20250316_040404"
+    session.project_key = "EMPTY"
+    session.repo_slugs = []
+    session.total = 0
+    session.state = "running"
+
+    with patch.object(srv, "_ollama_ping", side_effect=[False, True]), \
+         patch.object(srv._scan_service, "_ensure_ollama_running", side_effect=lambda url, log_fn=None: (log_fn("  [LLM] Ollama not running - starting `ollama serve`..."), log_fn("  [LLM] Ollama started"), (True, "started"))[-1]) as ensure_mock, \
+         patch("scanner.llm_reviewer.LLMReviewer.model_info", return_value={"name": session.llm_model}), \
+         patch.object(srv, "_save_history_record", lambda session, findings: None):
+        srv._run_scan(session)
+
+    ensure_mock.assert_called_once()
+    assert any("starting `ollama serve`" in entry["msg"] for entry in session.log_lines)
+    assert any("LLM      :" in entry["msg"] for entry in session.log_lines)
+    assert not any("running without LLM review" in entry["msg"] for entry in session.log_lines)
 
 if __name__ == "__main__":
     tests = [

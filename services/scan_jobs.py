@@ -309,6 +309,7 @@ class ScanJobService:
         utc_now_iso: Callable[[], str],
         git_head_commit: Callable[[Path], str],
         ollama_ping: Callable[[str], bool],
+        ensure_ollama_running: Callable[[str, Callable[[str], None] | None], tuple[bool, str]] | None = None,
     ):
         self.app_version = app_version
         self.paths = paths
@@ -318,6 +319,7 @@ class ScanJobService:
         self._utc_now_iso = utc_now_iso
         self._git_head_commit = git_head_commit
         self._ollama_ping = ollama_ping
+        self._ensure_ollama_running = ensure_ollama_running
         self._ensure_db()
 
     @staticmethod
@@ -1130,10 +1132,22 @@ class ScanJobService:
         llm_enabled = True
 
         if not self._ollama_ping(session.llm_url):
-            session.record_error("OLLAMA_UNREACHABLE", "llm_setup", session.llm_url)
-            log("  [LLM] Ollama not reachable - running without LLM review", "warn")
-            llm_enabled = False
-        else:
+            started = False
+            if self._ensure_ollama_running is not None:
+                def _llm_boot_log(message: str) -> None:
+                    text = str(message or "")
+                    level = "warn"
+                    if "starting `ollama serve`" in text or text.endswith("Ollama started"):
+                        level = "dim"
+                    log(text, level)
+
+                started, _status = self._ensure_ollama_running(session.llm_url, _llm_boot_log)
+            if not started and not self._ollama_ping(session.llm_url):
+                session.record_error("OLLAMA_UNREACHABLE", "llm_setup", session.llm_url)
+                log("  [LLM] Ollama not reachable - running without LLM review", "warn")
+                llm_enabled = False
+
+        if llm_enabled:
             try:
                 info = LLMReviewer(
                     base_url=session.llm_url, model=session.llm_model
@@ -1202,7 +1216,8 @@ class ScanJobService:
             session.record_error("WORKER_PLAN_FALLBACK", "planning", str(exc))
             log(f"  [WORKER_PLAN] fallback=4 reason={exc}", "dim")
 
-        log(f"Starting parallel scan (workers={workers})...", "info")
+        mode_label = "parallel" if workers > 1 else "scan"
+        log(f"Starting {mode_label} (workers={workers})...", "info")
 
         from scanner.bitbucket import (
             cleanup_clone,
@@ -1574,7 +1589,7 @@ class ScanJobService:
                 write_csv=True,
             )
             if final:
-                log("  HTML report deferred until requested from the Results tab.", "dim")
+                log("  HTML report deferred until requested from the Findings page.", "dim")
             else:
                 log("  No findings - HTML report skipped.", "dim")
             report_paths["__all__"] = structured_reports

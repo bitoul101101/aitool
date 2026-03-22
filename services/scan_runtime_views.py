@@ -87,7 +87,7 @@ def phase_timeline(entries: list[dict], state: str = "") -> list[dict]:
         ts = _entry_ts(entry, first_ts)
         if markers["clone"] is None and "branch:" in msg:
             markers["clone"] = ts
-        if markers["scan"] is None and "Starting parallel scan" in msg:
+        if markers["scan"] is None and ("Starting parallel scan" in msg or "Starting scan" in msg):
             markers["scan"] = ts
         if markers["llm review"] is None and "[LLM]" in msg and ("Evaluating" in msg or "Reviewing" in msg):
             markers["llm review"] = ts
