@@ -83,6 +83,11 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                     str(finding.get("capability", "") or ""),
                 ),
                 "description": str(finding.get("description", "") or ""),
+                "snippet": str(finding.get("snippet", "") or ""),
+                "llm_reason": str(finding.get("llm_reason", "") or ""),
+                "remediation": str(finding.get("remediation", "") or ""),
+                "llm_verdict": str(finding.get("llm_verdict", "") or ""),
+                "llm_reviewed": bool(finding.get("llm_reviewed", False)),
                 "policy_status": str(finding.get("policy_status", "") or ""),
                 "context": str(finding.get("context", "production") or "production"),
                 "first_seen_at": started_at,
@@ -115,6 +120,11 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                     str(finding.get("capability", row.get("capability", "")) or row.get("capability", "")),
                 )
                 row["description"] = str(finding.get("description", row["description"]) or row["description"])
+                row["snippet"] = str(finding.get("snippet", row.get("snippet", "")) or row.get("snippet", ""))
+                row["llm_reason"] = str(finding.get("llm_reason", row.get("llm_reason", "")) or row.get("llm_reason", ""))
+                row["remediation"] = str(finding.get("remediation", row.get("remediation", "")) or row.get("remediation", ""))
+                row["llm_verdict"] = str(finding.get("llm_verdict", row.get("llm_verdict", "")) or row.get("llm_verdict", ""))
+                row["llm_reviewed"] = bool(finding.get("llm_reviewed", row.get("llm_reviewed", False)))
                 row["policy_status"] = str(finding.get("policy_status", row["policy_status"]) or row["policy_status"])
                 row["file"] = str(finding.get("file", row["file"]) or row["file"])
                 row["line"] = str(finding.get("line", row["line"]) or row["line"])

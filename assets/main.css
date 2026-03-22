@@ -215,6 +215,17 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 #findings-table .sev-chip{font-size:11px;padding:3px 8px}
 #findings-table th:nth-child(9),#findings-table td:nth-child(9),
 #findings-table th:nth-child(10),#findings-table td:nth-child(10){text-align:center}
+#findings-table tr.finding-row{cursor:pointer}
+#findings-table tr.finding-row:hover td{background:#f4eadb}
+#findings-table tr.row-expanded td{background:#fbf2e8}
+.finding-detail-row td{padding:0!important;border-bottom:2px solid #d8b995!important}
+.finding-detail-panel{padding:16px 20px;font-size:13px;line-height:1.6;border-left:4px solid #8a6c50;background:#fbf2e8}
+.finding-detail-panel h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6d3514;margin:14px 0 6px}
+.finding-detail-panel h4:first-child{margin-top:0}
+.finding-detail-panel p{margin:0 0 8px}
+.finding-detail-note{color:#7a5d3e;font-size:12px}
+.finding-detail-panel .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.finding-detail-panel .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid #d8b995;color:#5f3f1c;font-size:11px;font-weight:700}
 #history-table{font-size:13px}
 #history-table th,#history-table td{font-size:13px;line-height:1.25}
 #history-table th:nth-child(5),#history-table td:nth-child(5),

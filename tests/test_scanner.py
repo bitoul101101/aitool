@@ -2344,6 +2344,11 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
                 "capability": "Debug mode in production",
                 "rule_label": "Debug mode in production",
                 "description": "Hardcoded key next to AI client use",
+                "llm_reason": "The code sends a hardcoded credential to an AI provider.",
+                "remediation": "Move the credential to an environment variable and rotate it.",
+                "llm_verdict": "kept",
+                "llm_reviewed": True,
+                "snippet": "client = OpenAI(api_key='sk-test')",
                 "last_seen_at": "2026-03-19T10:00:00Z",
                 "scan_count": 2,
                 "status": "open",
@@ -2371,6 +2376,8 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'sev-chip sev-critical' in html
     assert "Debug mode in production" in html
     assert '?tab=results' in html
+    assert 'class="finding-row"' in html
+    assert 'data-llm-reason="The code sends a hardcoded credential to an AI provider."' in html
 
 
 def test_findings_history_notice_reports_summary_only_scans():

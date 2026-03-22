@@ -20,7 +20,59 @@
   let sortState = { index: null, dir: 1, kind: "text" };
 
   function rows() {
-    return Array.from(body.querySelectorAll("tr")).filter((row) => row.querySelectorAll("td").length > 1);
+    return Array.from(body.querySelectorAll("tr.finding-row")).filter((row) => row.querySelectorAll("td").length > 1);
+  }
+
+  function closeDetailRow(row) {
+    const next = row?.nextElementSibling;
+    if (next && next.classList.contains("finding-detail-row")) {
+      next.remove();
+      row.classList.remove("row-expanded");
+    }
+  }
+
+  function closeAllDetailRows() {
+    rows().forEach((row) => closeDetailRow(row));
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function detailBlock(title, content) {
+    if (!content) {
+      return "";
+    }
+    return `<h4>${title}</h4><p>${escapeHtml(content).replace(/\n/g, "<br>")}</p>`;
+  }
+
+  function toggleDetailRow(row) {
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains("finding-detail-row")) {
+      closeDetailRow(row);
+      return;
+    }
+    closeAllDetailRows();
+    const detailRow = document.createElement("tr");
+    detailRow.className = "finding-detail-row";
+    const detailCell = document.createElement("td");
+    detailCell.colSpan = row.children.length;
+    const verdict = row.dataset.llmVerdict ? `<div class="scorecard"><span class="scorechip">LLM Verdict: ${escapeHtml(row.dataset.llmVerdict)}</span></div>` : "";
+    const reviewed = row.dataset.llmReviewed === "1";
+    const reason = row.dataset.llmReason || "";
+    const remediation = row.dataset.remediation || "";
+    const snippet = row.dataset.snippet || "";
+    const fallback = reviewed
+      ? '<p class="finding-detail-note">LLM reviewed this finding, but no explanation was stored in history.</p>'
+      : '<p class="finding-detail-note">No LLM explanation is stored for this finding yet.</p>';
+    detailCell.innerHTML = `<div class="finding-detail-panel">${verdict}${detailBlock("Why It's Problematic", reason)}${detailBlock("How to Fix It", remediation)}${detailBlock("Code Snippet", snippet)}${(!reason && !remediation && !snippet) ? fallback : ""}</div>`;
+    detailRow.appendChild(detailCell);
+    row.after(detailRow);
+    row.classList.add("row-expanded");
   }
 
   function updateBulkAction() {
@@ -62,6 +114,11 @@
     const end = start + PAGE_SIZE;
     rows().forEach((row) => { row.style.display = "none"; });
     visible.slice(start, end).forEach((row) => { row.style.display = ""; });
+    rows().forEach((row) => {
+      if (row.style.display === "none") {
+        closeDetailRow(row);
+      }
+    });
     if (pageInfo) {
       pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
     }
@@ -131,6 +188,12 @@
   rows().forEach((row) => row.querySelector(".finding-check")?.addEventListener("change", () => {
     updateBulkAction();
     updateSelectAllState();
+  }));
+  rows().forEach((row) => row.addEventListener("click", (event) => {
+    if (event.target.closest("a,button,input,label,select")) {
+      return;
+    }
+    toggleDetailRow(row);
   }));
   selectAll?.addEventListener("change", () => {
     displayedRows().forEach((row) => {

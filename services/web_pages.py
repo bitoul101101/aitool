@@ -756,8 +756,13 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         line_value = str(item.get("line", "") or "").strip()
         if line_value:
             file_line += f":{_esc(line_value)}"
+        llm_reason = _esc(item.get("llm_reason", ""))
+        remediation = _esc(item.get("remediation", ""))
+        snippet = _esc(item.get("snippet", ""))
+        llm_verdict = _esc(item.get("llm_verdict", ""))
+        llm_reviewed = "1" if item.get("llm_reviewed") else "0"
         rows.append(
-            f'<tr data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-ts="{ts}">'
+            f'<tr class="finding-row" data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-ts="{ts}" data-llm-reason="{llm_reason}" data-remediation="{remediation}" data-snippet="{snippet}" data-llm-verdict="{llm_verdict}" data-llm-reviewed="{llm_reviewed}">'
             f'<td><input type="checkbox" class="finding-check" name="hashes" value="{_esc(item.get("hash", ""))}"></td>'
             f'<td>{_pill(item.get("status_label", "Open"))}</td>'
             f'<td>{_severity_chip(item)}</td>'
