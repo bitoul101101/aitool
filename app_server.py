@@ -1279,7 +1279,16 @@ def _request_app_shutdown() -> None:
     _app_exit_event.set()
     server = _server_instance
     if server is not None:
-        threading.Thread(target=server.shutdown, daemon=True).start()
+        def _stop_server():
+            try:
+                server.shutdown()
+            finally:
+                try:
+                    server.server_close()
+                except Exception:
+                    pass
+
+        threading.Thread(target=_stop_server, daemon=True).start()
 
 
 def _run_scan(session: ScanSession):
@@ -1609,8 +1618,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     return self._err(403, "CSRF validation failed")
             if p in ("/login", "/connect"):
                 return self._page_connect(body)
-            elif p == "/app/exit":
-                return self._page_app_exit()
             elif p == "/scan/start":
                 return self._page_scan_start(body)
             elif p == "/scan/stop":
@@ -1655,8 +1662,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._api_finding_triage(body)
             elif p == "/api/findings/reset":
                 self._api_finding_reset(body)
-            elif p == "/api/app/shutdown":
-                self._api_app_shutdown()
+            elif p in {"/api/app/exit", "/api/app/shutdown"}:
+                self._api_app_exit()
             else:
                 self._404()
         except Exception as exc:
@@ -2003,7 +2010,6 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_ADMIN):
             return
         _audit_event("app_shutdown_requested")
-        _request_app_shutdown()
         body = b"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2042,6 +2048,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             "text/html; charset=utf-8",
             body,
         )
+        _request_app_shutdown()
 
     def _page_scan_start(self, body: dict):
         if _require_role(self, ROLE_SCANNER):
@@ -2371,12 +2378,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         self._json({"ok": True, "path": selected})
 
-    def _api_app_shutdown(self):
+    def _api_app_exit(self):
         if _require_role(self, ROLE_ADMIN):
             return
         _audit_event("app_shutdown_requested")
+        self._json({"ok": True, "message": "Shutting down"})
         _request_app_shutdown()
-        self._json({"ok": True})
 
 
     def _api_llm_config(self, body: dict):

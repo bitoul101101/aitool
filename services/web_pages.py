@@ -130,7 +130,7 @@ def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, s
             + f'<a class="nav{" active" if active == "help" else ""}" href="/help">Help</a>'
             + '</div>'
             + '<div class="header-actions">'
-            + f'<form class="exit-form" method="post" action="/app/exit">{_csrf_field(csrf_token)}<button type="submit" class="warn">Exit</button></form>'
+            + f'<button type="button" class="warn exit-button" id="exit-app-btn" data-csrf="{_esc(csrf_token)}">Exit</button>'
             + "</div>"
         )
         header_html = f'<header><a class="brand-lockup" href="/scan" aria-label="PhantomLM home"><img src="/assets/phantomlm_logo.png" alt="PhantomLM"></a>{nav}</header>'

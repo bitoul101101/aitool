@@ -4522,6 +4522,32 @@ def test_page_app_exit_returns_shutdown_fallback_page():
         srv._require_role = orig_require_role
 
 
+def test_api_app_exit_returns_before_shutdown():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.calls = []
+
+        def _json(self, data, status=200):
+            self.calls.append(("json", status, data))
+
+    handler = DummyHandler()
+    orig_request_shutdown = srv._request_app_shutdown
+    orig_require_role = srv._require_role
+    try:
+        srv._request_app_shutdown = lambda: handler.calls.append(("shutdown",))
+        srv._require_role = lambda _handler, _role: False
+        srv._Handler._api_app_exit(handler)
+        assert handler.calls == [
+            ("json", 200, {"ok": True, "message": "Shutting down"}),
+            ("shutdown",),
+        ]
+    finally:
+        srv._request_app_shutdown = orig_request_shutdown
+        srv._require_role = orig_require_role
+
+
 def test_json_reporter_writes_meta_and_findings(tmp_path):
     from reports.json_report import JSONReporter
 
