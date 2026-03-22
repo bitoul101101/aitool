@@ -73,6 +73,9 @@ setTimeout(() => {
     if (path === "/findings" && (notice.startsWith("Updated ") || notice.startsWith("Finding triage "))) {
       localStorage.setItem("phantomlm.triage.updated", String(Date.now()));
     }
+    if (path === "/settings" && notice === "Settings saved") {
+      localStorage.setItem("phantomlm.settings.updated", String(Date.now()));
+    }
   } catch (_err) {
   }
 
@@ -89,7 +92,7 @@ setTimeout(() => {
   }
 
   const syncablePaths = new Set(["/history", "/findings", "/trends", "/inventory"]);
-  const syncableStorageKeys = new Set(["phantomlm.history.updated", "phantomlm.triage.updated"]);
+  const syncableStorageKeys = new Set(["phantomlm.history.updated", "phantomlm.triage.updated", "phantomlm.settings.updated"]);
 
   const banner = document.getElementById("connection-banner");
   let failures = 0;

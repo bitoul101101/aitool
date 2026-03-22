@@ -679,4 +679,11 @@
   statusPollTimer = window.setInterval(pollStatus, 3000);
   window.addEventListener("pagehide", cleanupPageActivity);
   window.addEventListener("beforeunload", cleanupPageActivity);
+  window.addEventListener("storage", (event) => {
+    if (event.key !== "phantomlm.settings.updated") {
+      return;
+    }
+    refreshModels();
+    pollStatus();
+  });
 })();

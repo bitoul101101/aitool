@@ -2676,9 +2676,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _serve_report(self, filename: str):
         """Serve a file from OUTPUT_DIR by name."""
         safe = Path(filename).name   # strip any path traversal
-        if _find_history_record_by_report_name(safe) is None and not _runtime_report_allowed(safe):
+        record = _find_history_record_by_report_name(safe)
+        if record is None and not _runtime_report_allowed(safe):
             return self._err(403, "Report access denied")
         path = Path(OUTPUT_DIR).resolve() / safe
+        if record is not None:
+            reports = dict((record.get("reports") or {}).get("__all__", {}) or {})
+            for key in ("html", "csv", "json"):
+                candidate = str(reports.get(key, "") or "")
+                if candidate and Path(candidate).name == safe:
+                    path = Path(candidate).resolve()
+                    break
         if not path.exists():
             return self._404()
         ct = "text/html; charset=utf-8" if safe.endswith(".html") else "text/csv"

@@ -3146,6 +3146,7 @@ def test_asset_route_serves_layout_js():
     assert handler.payload[1] == "application/javascript; charset=utf-8"
     assert b"history.replaceState" in handler.payload[2]
     assert b"phantomlm.triage.updated" in handler.payload[2]
+    assert b"phantomlm.settings.updated" in handler.payload[2]
 
 
 def test_asset_route_serves_history_page_js():
@@ -3193,6 +3194,30 @@ def test_asset_route_serves_findings_page_js():
     assert handler.payload[0] == 200
     assert handler.payload[1] == "application/javascript; charset=utf-8"
     assert b"box.checked = false;" in handler.payload[2]
+
+
+def test_asset_route_serves_scan_page_js_with_settings_sync_refresh():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/assets/scan_page.js"
+
+        def __init__(self):
+            self.payload = None
+
+        def _send(self, status, content_type, body):
+            self.payload = (status, content_type, body)
+
+        def _404(self):
+            self.payload = ("404", None, None)
+
+    handler = DummyHandler()
+    srv._Handler.do_GET(handler)
+
+    assert handler.payload[0] == 200
+    assert handler.payload[1] == "application/javascript; charset=utf-8"
+    assert b'event.key !== "phantomlm.settings.updated"' in handler.payload[2]
+    assert b"refreshModels();" in handler.payload[2]
 
 
 def test_scan_workspace_results_page_handles_missing_report():
@@ -4056,6 +4081,96 @@ def test_api_connect_rotates_browser_sessions_and_invalidates_old_cookie():
         srv._operator_state = orig_state
 
 
+def test_rotated_old_browser_session_redirects_page_requests_to_login():
+    import app_server as srv
+    from urllib.parse import urlparse
+
+    class DummyHandler:
+        def __init__(self):
+            self.headers = {"Cookie": "ai_scanner_session=old-session"}
+            self.redirect_to = None
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+        def _require_browser_session(self):
+            return srv._Handler._require_browser_session(self)
+
+    original_sessions = dict(srv._browser_sessions)
+    orig_state = srv._operator_state
+    srv._browser_sessions.clear()
+    srv._browser_sessions["old-session"] = {"csrf_token": "old-csrf", "issued_at": time.time()}
+    try:
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Viewer",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Viewer",
+                    roles=(ROLE_VIEWER,),
+                    allowed_projects=("*",),
+                ),
+            )
+        )
+        new_session_id, _csrf = srv._rotate_browser_session()
+        assert new_session_id != "old-session"
+
+        handler = DummyHandler()
+        handled = srv._Handler._handle_page_get(handler, urlparse("/scan"))
+
+        assert handled is True
+        assert handler.redirect_to == "/login"
+    finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
+def test_rotated_old_browser_session_gets_401_on_api_requests():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/api/projects"
+
+        def __init__(self):
+            self.headers = {"Cookie": "ai_scanner_session=old-session"}
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    original_sessions = dict(srv._browser_sessions)
+    orig_state = srv._operator_state
+    srv._browser_sessions.clear()
+    srv._browser_sessions["old-session"] = {"csrf_token": "old-csrf", "issued_at": time.time()}
+    try:
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Viewer",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Viewer",
+                    roles=(ROLE_VIEWER,),
+                    allowed_projects=("*",),
+                ),
+            )
+        )
+        srv._rotate_browser_session()
+
+        handler = DummyHandler()
+        srv._Handler.do_GET(handler)
+
+        assert handler.payload == (401, {"error": "Authentication required"})
+    finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
 def test_viewer_cannot_read_triage_or_suppressions_api():
     import app_server as srv
 
@@ -4635,6 +4750,52 @@ def test_handle_page_get_redirects_legacy_findings_path_to_query_form():
         assert handler.redirect_to == "/findings?scan_id=20250316_060606"
     finally:
         srv._is_connected = orig_is_connected
+
+
+def test_serve_report_uses_stored_history_artifact_path_when_output_dir_changes(tmp_path):
+    import app_server as srv
+
+    old_output = tmp_path / "old-output"
+    new_output = tmp_path / "new-output"
+    old_output.mkdir()
+    new_output.mkdir()
+    html_path = old_output / "scan.html"
+    html_path.write_text("<html>old report</html>", encoding="utf-8")
+
+    class DummyHandler:
+        def __init__(self):
+            self.sent = None
+            self.errors = []
+
+        def _send(self, status, content_type, body):
+            self.sent = (status, content_type, body)
+
+        def _err(self, status, msg):
+            self.errors.append((status, msg))
+            return None
+
+        def _404(self):
+            self.errors.append((404, "not found"))
+            return None
+
+    orig_out = srv.OUTPUT_DIR
+    try:
+        srv.OUTPUT_DIR = str(new_output)
+        record = {
+            "scan_id": "20260323_120000",
+            "project_key": "COGI",
+            "reports": {"__all__": {"html": str(html_path), "html_name": html_path.name}},
+        }
+        handler = DummyHandler()
+        with patch.object(srv, "_find_history_record_by_report_name", return_value=record):
+            srv._Handler._serve_report(handler, "scan.html")
+
+        assert handler.sent[0] == 200
+        assert handler.sent[1] == "text/html; charset=utf-8"
+        assert b"old report" in handler.sent[2]
+        assert handler.errors == []
+    finally:
+        srv.OUTPUT_DIR = orig_out
 
 
 def test_cleanup_stale_temp_clones_removes_leftovers():
