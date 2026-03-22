@@ -610,10 +610,6 @@ def render_scan_page(
         + '</section>'
         if structured_errors else ""
     )
-    new_scan_button = ""
-    if scan_complete:
-        project_q = f"?project={quote(selected_project)}&new=1" if selected_project else "?new=1"
-        new_scan_button = f'<a class="btn" id="new-scan-btn" href="/scan{project_q}">New Scan</a>'
     model_warning = ""
     if _model_size_billions(llm_cfg.get("model", "")) and _model_size_billions(llm_cfg.get("model", "")) < 4:
         model_warning = "Selected model is below 4B and may be unreliable for LLM review."
@@ -674,14 +670,13 @@ def render_scan_page(
   </section>
 </section>
 <form method="post" action="/scan/stop" id="stop-form">{_csrf_field(csrf_token)}</form>"""
-    workspace_tabs = _scan_workspace_tabs(scan_id, workspace_tab, results_enabled=scan_complete, include_results=False) if scan_id else ""
     running_view = f"""
 <section class="running-shell">
   <section class="card activity-panel">
     <div class="workspace-header">
-      {workspace_tabs}
+      <div></div>
       <h2>Activity Log</h2>
-      <div class="scan-actions">{stop_button if running else ""}{new_scan_button}</div>
+      <div class="scan-actions">{stop_button if running else ""}</div>
     </div>
     <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
   </section>

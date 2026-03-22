@@ -1687,12 +1687,11 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert '<div class="findings-panel">' not in html
     assert '<div class="mitigate-section">' not in html
     assert '<div class="suppressed-section">' not in html
-    assert 'id="new-scan-btn"' in html
     assert "Performance" in html
     assert "LLM Batch Timings" not in html
     assert "LLM Stats" not in html
     assert html.index("Phase Timeline") < html.index("Performance")
-    assert 'href="/scan/20260317_154037?tab=activity"' in html
+    assert 'href="/scan/20260317_154037?tab=activity"' not in html
     assert '>Results</a>' not in html
     assert 'id="hardware-gpu"' in html
     assert 'id="hardware-disk-io"' in html
@@ -1705,7 +1704,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'id="perf-reviewed-skipped"' not in html
     assert 'id="perf-llm-outcomes"' not in html
     assert '<div class="workspace-header">' in html
-    assert html.index("Activity Log") < html.index('id="new-scan-btn"')
+    assert 'id="new-scan-btn"' not in html
     assert "Results Actions" not in html
     assert 'id="reports-card"' not in html
     assert 'id="hardware-process"' not in html
@@ -1731,6 +1730,10 @@ def test_scan_page_asset_refreshes_after_running_to_terminal_transition():
     assert "!redirectedToResults && justFinished" in script
     assert '?tab=activity' in script
     assert "function renderLlmStats(data)" not in script
+    assert "function currentModelOptions()" in script
+    assert "allowShrink = true" in script
+    assert "const seemsPartial = models.length === 1 && beforeCount > 1;" in script
+    assert "for (let attempt = 0; attempt < 3; attempt += 1)" in script
 
 
 def test_scan_page_renders_incremental_scope_controls():

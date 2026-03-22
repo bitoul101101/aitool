@@ -172,12 +172,25 @@
     setLocalRepoPickerStatus("", false);
   }
 
-  function setModelOptions(models) {
+  function currentModelOptions() {
+    if (!modelSelect) {
+      return [];
+    }
+    return Array.from(modelSelect.options).map(function (opt) {
+      return String(opt.value || "").trim();
+    }).filter(Boolean);
+  }
+
+  function setModelOptions(models, { allowShrink = true } = {}) {
     if (!modelSelect || !Array.isArray(models) || !models.length) {
       return;
     }
     const currentValue = modelSelect.value || "";
-    const uniqueModels = Array.from(new Set(models.filter(Boolean)));
+    const existingOptions = currentModelOptions();
+    let uniqueModels = Array.from(new Set(models.filter(Boolean)));
+    if (!allowShrink && existingOptions.length > uniqueModels.length) {
+      uniqueModels = Array.from(new Set(existingOptions.concat(uniqueModels)));
+    }
     if (currentValue && !uniqueModels.includes(currentValue)) {
       uniqueModels.unshift(currentValue);
     }
@@ -195,16 +208,29 @@
     if (!modelSelect) {
       return;
     }
-    try {
-      const url = new URL("/api/ollama/models", window.location.origin);
-      url.searchParams.set("refresh", "1");
-      const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
-      if (!res.ok) {
+    const beforeCount = currentModelOptions().length;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const url = new URL("/api/ollama/models", window.location.origin);
+        url.searchParams.set("refresh", "1");
+        const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        const models = Array.isArray(data.models) ? data.models.filter(Boolean) : [];
+        if (!models.length) {
+          return;
+        }
+        const seemsPartial = models.length === 1 && beforeCount > 1;
+        setModelOptions(models, { allowShrink: !seemsPartial });
+        if (!seemsPartial || attempt === 2) {
+          return;
+        }
+        await new Promise(function (resolve) { window.setTimeout(resolve, 700); });
+      } catch (_err) {
         return;
       }
-      const data = await res.json();
-      setModelOptions(data.models || []);
-    } catch (_err) {
     }
   }
 
