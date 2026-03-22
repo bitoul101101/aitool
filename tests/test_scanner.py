@@ -4921,6 +4921,30 @@ def test_request_app_shutdown_sets_exit_event_and_stops_server():
         srv._app_exit_event.clear()
 
 
+def test_start_attempts_to_boot_ollama_before_opening_browser():
+    import app_server as srv
+
+    class FakeServer:
+        def serve_forever(self):
+            return None
+
+    opened = []
+    orig_server_instance = srv._server_instance
+    try:
+        with patch.object(srv.http.server, "ThreadingHTTPServer", return_value=FakeServer()), \
+             patch.object(srv, "_cleanup_stale_temp_clones"), \
+             patch.object(srv, "_legacy_runtime_artifacts", return_value=[]), \
+             patch.object(srv, "_startup_ensure_ollama") as ollama_boot, \
+             patch.object(srv.webbrowser, "open", side_effect=lambda url: opened.append(url)), \
+             patch.object(srv.threading, "Timer", side_effect=lambda _delay, fn: type("ImmediateTimer", (), {"start": staticmethod(fn)})()):
+            srv.start(open_browser=True)
+
+        ollama_boot.assert_called_once_with()
+        assert opened and opened[0].startswith("http://127.0.0.1:")
+    finally:
+        srv._server_instance = orig_server_instance
+
+
 def test_page_app_exit_returns_shutdown_fallback_page():
     import app_server as srv
 
@@ -5434,7 +5458,7 @@ def test_run_scan_attempts_to_start_ollama_before_disabling_llm():
     session.total = 0
     session.state = "running"
 
-    with patch.object(srv, "_ollama_ping", side_effect=[False, True]), \
+    with patch.object(srv._scan_service, "_ollama_ping", side_effect=[False, True]), \
          patch.object(srv._scan_service, "_ensure_ollama_running", side_effect=lambda url, log_fn=None: (log_fn("  [LLM] Ollama not running - starting `ollama serve`..."), log_fn("  [LLM] Ollama started"), (True, "started"))[-1]) as ensure_mock, \
          patch("scanner.llm_reviewer.LLMReviewer.model_info", return_value={"name": session.llm_model}), \
          patch.object(srv, "_save_history_record", lambda session, findings: None):

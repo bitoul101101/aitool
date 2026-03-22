@@ -341,6 +341,18 @@ def _scan_ollama_ensure_running(base_url: str, log_fn=None) -> tuple[bool, str]:
     return ensure_ollama_running(base_url, timeout_s=OLLAMA_START_TIMEOUT, log_fn=log_fn)
 
 
+def _startup_ensure_ollama() -> None:
+    llm_cfg = load_llm_config()
+    base_url = str(llm_cfg.get("base_url", "http://localhost:11434") or "").strip() or "http://localhost:11434"
+    ok, status = ensure_ollama_running(
+        base_url,
+        timeout_s=OLLAMA_START_TIMEOUT,
+        log_fn=lambda message: print(message),
+    )
+    if not ok:
+        print(f"  [LLM] Startup continuing without Ollama: {status}")
+
+
 # ── Global app state ──────────────────────────────────────────────────────────
 
 _operator_state = SingleUserState(load_single_user_config(ACCESS_FILE))
@@ -2891,6 +2903,8 @@ def start(port: int = APP_PORT, open_browser: bool = True) -> http.server.Thread
         print(f"  Active state dir -> {Path(STATE_DIR).resolve()}")
         for item in legacy_runtime_files:
             print(f"  Legacy file     -> {item['legacy_path']}")
+
+    _startup_ensure_ollama()
 
     if open_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
