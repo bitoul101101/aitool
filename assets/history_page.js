@@ -163,11 +163,6 @@
       event.preventDefault();
       return;
     }
-    try {
-      localStorage.setItem("phantomlm.history.updated", String(Date.now()));
-    } catch (_err) {
-      // Ignore storage failures.
-    }
   });
   prevBtn?.addEventListener("click", () => {
     if (currentPage > 1) {

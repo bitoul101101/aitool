@@ -1709,7 +1709,7 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'class="activity-side-stack"' in html
     assert 'class="terminal-log-text"' in html
     assert 'class="terminal-brand-inline"' in html
-    assert "____  _                 _                  _     __  __" in html
+    assert "___ _             _             _    __  __" in html
     assert "Results Actions" not in html
     assert 'id="reports-card"' not in html
     assert 'id="hardware-process"' not in html
@@ -3145,6 +3145,7 @@ def test_asset_route_serves_layout_js():
     assert handler.payload[0] == 200
     assert handler.payload[1] == "application/javascript; charset=utf-8"
     assert b"history.replaceState" in handler.payload[2]
+    assert b"phantomlm.triage.updated" in handler.payload[2]
 
 
 def test_asset_route_serves_history_page_js():
@@ -3168,6 +3169,7 @@ def test_asset_route_serves_history_page_js():
     assert handler.payload[0] == 200
     assert handler.payload[1] == "application/javascript; charset=utf-8"
     assert b"sortHistory" in handler.payload[2]
+    assert b"phantomlm.history.updated" not in handler.payload[2]
 
 
 def test_asset_route_serves_findings_page_js():
@@ -3507,6 +3509,37 @@ def test_trends_over_time_use_all_past_scans_not_only_recent_subset():
     assert len(trends["findings_over_time"]) == 15
     assert trends["findings_over_time"][0]["value"] == 1
     assert trends["findings_over_time"][-1]["value"] == 15
+
+
+def test_trends_apply_live_false_positive_triage_overlay_to_rule_metrics():
+    from services.trends import compute_history_trends
+
+    records = [{
+        "scan_id": "20260322_150000",
+        "started_at_utc": "2026-03-22T15:00:00Z",
+        "repo_slugs": ["repo1"],
+        "total": 2,
+        "findings": [
+            {"_hash": "hash-1", "repo": "repo1", "provider_or_lib": "debug_mode"},
+            {"_hash": "hash-2", "repo": "repo1", "provider_or_lib": "debug_mode"},
+        ],
+        "trend": {
+            "rules": {
+                "active": {"debug_mode": 2},
+                "suppressed": {},
+            }
+        },
+    }]
+
+    trends = compute_history_trends(records, {"hash-2": {"status": TRIAGE_FALSE_POSITIVE}})
+
+    assert trends["top_noisy_rules"][0]["rule"] == "debug_mode"
+    assert trends["top_noisy_rules"][0]["hits"] == 2
+    assert trends["top_noisy_rules"][0]["suppressed"] == 1
+    assert trends["suppression_rate_by_rule"][0]["rule"] == "debug_mode"
+    assert trends["suppression_rate_by_rule"][0]["suppressed"] == 1
+    assert trends["suppression_rate_by_rule"][0]["total"] == 2
+    assert trends["suppression_rate_by_rule"][0]["rate_pct"] == 50
 
 
 def test_inventory_page_is_server_rendered():
@@ -3967,6 +4000,92 @@ def test_api_repos_rejects_project_outside_scope():
         srv._Handler.do_GET(handler)
         assert handler.payload[0] == 403
         assert "project access denied" in handler.payload[1]["error"]
+    finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
+def test_viewer_cannot_read_triage_or_suppressions_api():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self, path):
+            self.path = path
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
+    try:
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Viewer",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Viewer",
+                    roles=(ROLE_VIEWER,),
+                    allowed_projects=("*",),
+                ),
+            )
+        )
+        for path in ("/api/suppressions", "/api/triage"):
+            handler = DummyHandler(path)
+            srv._Handler.do_GET(handler)
+            assert handler.payload[0] == 403
+            assert "triage role required" in handler.payload[1]["error"]
+    finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
+def test_triage_role_can_read_triage_and_suppressions_api():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self, path):
+            self.path = path
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
+    try:
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Analyst",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Analyst",
+                    roles=(ROLE_VIEWER, ROLE_TRIAGE),
+                    allowed_projects=("*",),
+                ),
+            )
+        )
+        with patch.object(srv, "list_suppressions", return_value=[{"hash": "h1"}]), \
+             patch.object(srv, "list_triage", return_value=[{"hash": "h1", "status": "accepted_risk"}]):
+            handler = DummyHandler("/api/suppressions")
+            srv._Handler.do_GET(handler)
+            assert handler.payload == (200, {"suppressions": [{"hash": "h1"}]})
+
+            handler = DummyHandler("/api/triage")
+            srv._Handler.do_GET(handler)
+            assert handler.payload == (200, {"triage": [{"hash": "h1", "status": "accepted_risk"}]})
     finally:
         srv._browser_sessions.clear()
         srv._browser_sessions.update(original_sessions)
@@ -5562,6 +5681,83 @@ def test_run_scan_attempts_to_start_ollama_before_disabling_llm():
     assert any("starting `ollama serve`" in entry["msg"] for entry in session.log_lines)
     assert any("LLM      :" in entry["msg"] for entry in session.log_lines)
     assert not any("running without LLM review" in entry["msg"] for entry in session.log_lines)
+
+
+def test_run_scan_keeps_completed_findings_when_stop_is_requested_before_future_is_collected():
+    import app_server as srv
+    import concurrent.futures
+
+    d = Path(tempfile.mkdtemp())
+    orig_out = srv.OUTPUT_DIR
+    orig_client = srv._operator_state.client
+    try:
+        srv.OUTPUT_DIR = str(d / "output")
+        session = srv.ScanSession()
+        session.scan_id = "20250316_050505"
+        session.project_key = "COGI"
+        session.repo_slugs = ["repo1"]
+        session.total = 1
+        session.state = "running"
+
+        fake_client = MagicMock()
+        fake_client.build_git_auth_env.return_value = {}
+        fake_client.get_repo_metadata.return_value = {
+            "branch": "main",
+            "owner": "Owner",
+            "clone_url": "https://example.invalid/repo1.git",
+        }
+        srv._operator_state.client = fake_client
+
+        finding = {
+            **make_finding(),
+            "repo": "repo1",
+            "file": "app.py",
+            "line": 10,
+            "_hash": "hash-stop-finished",
+            "severity": 1,
+            "severity_label": "Critical",
+            "risk": "Critical",
+            "context": "production",
+            "match": "import openai",
+            "description": "Test finding",
+            "last_seen": session.scan_id,
+            "is_notebook": False,
+        }
+
+        def _fake_clone(_url, dest, **_kwargs):
+            dest_path = Path(dest)
+            dest_path.mkdir(parents=True, exist_ok=True)
+            (dest_path / "app.py").write_text("import openai\n", encoding="utf-8")
+
+        wait_calls = {"count": 0}
+        real_wait = concurrent.futures.wait
+
+        def _stop_then_wait(fs, return_when=None, timeout=None):
+            done, pending = real_wait(fs, return_when=return_when, timeout=timeout)
+            if wait_calls["count"] == 0 and done:
+                session.stop_event.set()
+            wait_calls["count"] += 1
+            return done, pending
+
+        with patch.object(srv, "_ollama_ping", return_value=False), \
+             patch.object(srv._scan_service, "_ensure_ollama_running", return_value=(False, "unavailable")), \
+             patch.object(srv, "_save_history_record", lambda session, findings: None), \
+             patch.object(srv._scan_service, "_git_head_commit", return_value="abc123"), \
+             patch("scanner.bitbucket.shallow_clone", side_effect=_fake_clone), \
+             patch("scanner.bitbucket.cleanup_clone", return_value=None), \
+             patch("services.scan_jobs.wait", side_effect=_stop_then_wait), \
+             patch("services.scan_jobs.AIUsageDetector.scan", return_value=([finding], {"app.py": "import openai\n"})), \
+             patch("services.scan_jobs.SecurityAnalyzer.analyze", side_effect=lambda rows: rows), \
+             patch("services.scan_jobs.Aggregator.process", side_effect=lambda rows: rows):
+            srv._run_scan(session)
+
+        assert session.state == "stopped"
+        assert len(session.findings) == 1
+        assert session.findings[0]["_hash"] == "hash-stop-finished"
+        assert any("Total findings (deduped): 1" in entry["msg"] for entry in session.log_lines)
+    finally:
+        srv.OUTPUT_DIR = orig_out
+        srv._operator_state.client = orig_client
 
 
 def test_ensure_ollama_running_clears_stale_snapshot_cache_after_success():

@@ -1672,12 +1672,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._json({"history": list(reversed(_history_records_for_user()))})
             return True
         if p == "/api/suppressions":
-            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_TRIAGE):
                 return True
             self._json({"suppressions": list_suppressions(SUPPRESSIONS_FILE)})
             return True
         if p == "/api/triage":
-            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_VIEWER):
+            if _Handler._require_browser_api_session(self) or _require_role(self, ROLE_TRIAGE):
                 return True
             self._json({"triage": list_triage(SUPPRESSIONS_FILE)})
             return True
@@ -2130,7 +2130,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         qs = parse_qs(urlparse(self.path).query)
         html = render_trends_page(
-            trends=compute_history_trends(list(reversed(_history_records_for_user()))),
+            trends=compute_history_trends(list(reversed(_history_records_for_user())), _triage_by_hash()),
             csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),

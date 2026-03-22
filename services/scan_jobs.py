@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime
 from json import JSONDecodeError
@@ -1471,72 +1471,77 @@ class ScanJobService:
             with session.state_lock:
                 session._active_pool = pool
             futures = {pool.submit(_scan_one, slug): slug for slug in session.repo_slugs}
-            for fut in as_completed(futures):
-                if stop.is_set():
-                    for future in futures:
-                        future.cancel()
-                    break
-
-                slug, analyzed, bb_owner, pre_llm, skip_reason = fut.result()
-                completed += 1
-                with session.state_lock:
-                    session.progress = completed
-                    session.current_repo = slug
-
-                if analyzed is None:
-                    reason_str = f": {skip_reason}" if skip_reason else ""
-                    log(f"  SKIP {slug}: skipped{reason_str}", "err")
-                    per_repo[slug] = None
-                    session.per_repo = dict(per_repo)
-                    self.record_job_snapshot(session, session.findings)
-                    continue
-
-                sev_critical = sum(1 for f in analyzed if f.get("severity") == 1)
-                sev_high = sum(1 for f in analyzed if f.get("severity") == 2)
-                log(
-                    f"\nOK {slug} -> {len(analyzed)} findings  (Crit:{sev_critical} High:{sev_high})",
-                    "info",
-                )
-                if sev_critical:
-                    log(f"  WARN {sev_critical} Critical finding(s)!", "err")
-
-                total_pre_llm += pre_llm
-                active_findings, suppressed_findings = apply_suppressions(
-                    analyzed, suppressed_hashes
-                )
-                for finding in suppressed_findings:
-                    meta = triage_records.get(finding.get("_hash", ""), {})
-                    if meta:
-                        finding["triage_status"] = meta.get("status", TRIAGE_FALSE_POSITIVE)
-                        finding["triage_note"] = meta.get("note", "")
-                        finding["triage_by"] = meta.get("marked_by", "")
-                        finding["triage_at"] = meta.get("marked_at", "")
-                        finding["suppressed_reason"] = meta.get("note", "")
-                        finding["suppressed_by"] = meta.get("marked_by", "")
-                        finding["suppressed_at"] = meta.get("marked_at", "")
-                for finding in active_findings:
-                    meta = triage_records.get(finding.get("_hash", ""), {})
-                    if meta and meta.get("status") != TRIAGE_FALSE_POSITIVE:
-                        finding["triage_status"] = meta.get("status", "")
-                        finding["triage_note"] = meta.get("note", "")
-                        finding["triage_by"] = meta.get("marked_by", "")
-                        finding["triage_at"] = meta.get("marked_at", "")
-                if suppressed_findings:
+            pending = set(futures)
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for fut in done:
+                    if fut.cancelled():
+                        continue
+                    slug, analyzed, bb_owner, pre_llm, skip_reason = fut.result()
+                    completed += 1
                     with session.state_lock:
-                        session.suppressed_findings.extend(suppressed_findings)
-                    log(f"  [FP] Suppressed {len(suppressed_findings)} finding(s)", "dim")
-                total_post_llm += len(active_findings)
+                        session.progress = completed
+                        session.current_repo = slug
 
-                for finding in active_findings:
-                    finding["project_key"] = session.project_key
-                    finding["owner"] = bb_owner
-                    finding["last_seen"] = session.scan_id
-                all_findings.extend(active_findings)
-                per_repo[slug] = active_findings
-                with session.state_lock:
-                    session.per_repo = dict(per_repo)
-                    session.findings = list(all_findings)
-                self.record_job_snapshot(session, session.findings)
+                    if analyzed is None:
+                        reason_str = f": {skip_reason}" if skip_reason else ""
+                        log(f"  SKIP {slug}: skipped{reason_str}", "err")
+                        per_repo[slug] = None
+                        session.per_repo = dict(per_repo)
+                        self.record_job_snapshot(session, session.findings)
+                        continue
+
+                    sev_critical = sum(1 for f in analyzed if f.get("severity") == 1)
+                    sev_high = sum(1 for f in analyzed if f.get("severity") == 2)
+                    log(
+                        f"\nOK {slug} -> {len(analyzed)} findings  (Crit:{sev_critical} High:{sev_high})",
+                        "info",
+                    )
+                    if sev_critical:
+                        log(f"  WARN {sev_critical} Critical finding(s)!", "err")
+
+                    total_pre_llm += pre_llm
+                    active_findings, suppressed_findings = apply_suppressions(
+                        analyzed, suppressed_hashes
+                    )
+                    for finding in suppressed_findings:
+                        meta = triage_records.get(finding.get("_hash", ""), {})
+                        if meta:
+                            finding["triage_status"] = meta.get("status", TRIAGE_FALSE_POSITIVE)
+                            finding["triage_note"] = meta.get("note", "")
+                            finding["triage_by"] = meta.get("marked_by", "")
+                            finding["triage_at"] = meta.get("marked_at", "")
+                            finding["suppressed_reason"] = meta.get("note", "")
+                            finding["suppressed_by"] = meta.get("marked_by", "")
+                            finding["suppressed_at"] = meta.get("marked_at", "")
+                    for finding in active_findings:
+                        meta = triage_records.get(finding.get("_hash", ""), {})
+                        if meta and meta.get("status") != TRIAGE_FALSE_POSITIVE:
+                            finding["triage_status"] = meta.get("status", "")
+                            finding["triage_note"] = meta.get("note", "")
+                            finding["triage_by"] = meta.get("marked_by", "")
+                            finding["triage_at"] = meta.get("marked_at", "")
+                    if suppressed_findings:
+                        with session.state_lock:
+                            session.suppressed_findings.extend(suppressed_findings)
+                        log(f"  [FP] Suppressed {len(suppressed_findings)} finding(s)", "dim")
+                    total_post_llm += len(active_findings)
+
+                    for finding in active_findings:
+                        finding["project_key"] = session.project_key
+                        finding["owner"] = bb_owner
+                        finding["last_seen"] = session.scan_id
+                    all_findings.extend(active_findings)
+                    per_repo[slug] = active_findings
+                    with session.state_lock:
+                        session.per_repo = dict(per_repo)
+                        session.findings = list(all_findings)
+                    self.record_job_snapshot(session, session.findings)
+
+                if stop.is_set() and pending:
+                    for future in list(pending):
+                        future.cancel()
+                    pending = {future for future in pending if not future.cancelled()}
 
         log("\n" + "=" * 58, "dim")
         final = aggregator.process(all_findings)

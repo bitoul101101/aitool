@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+from scanner.suppressions import TRIAGE_FALSE_POSITIVE, normalize_triage_status
 from services.scan_runtime_views import llm_stats, parse_log_text_entries
 
 
@@ -131,7 +132,32 @@ def _repo_entries(record: dict) -> list[dict]:
     return entries
 
 
-def compute_history_trends(records: list[dict]) -> dict:
+def _rule_counters(record: dict, triage: dict[str, dict] | None = None) -> tuple[Counter, Counter]:
+    findings = list(record.get("findings") or [])
+    if findings:
+        active = Counter()
+        suppressed = Counter()
+        triage_lookup = triage or {}
+        for finding in findings:
+            rule = str(finding.get("provider_or_lib", "") or finding.get("category", "") or "unknown")
+            hash_ = str(finding.get("_hash", "") or "")
+            triage_meta = dict(triage_lookup.get(hash_, {}) or {})
+            status = normalize_triage_status(
+                str(triage_meta.get("status", finding.get("triage_status", "")) or finding.get("triage_status", "") or "")
+            )
+            if status == TRIAGE_FALSE_POSITIVE:
+                suppressed[rule] += 1
+            else:
+                active[rule] += 1
+        return active, suppressed
+
+    rules = dict((record.get("trend") or {}).get("rules") or {})
+    active = Counter({str(rule): int(count or 0) for rule, count in dict(rules.get("active") or {}).items()})
+    suppressed = Counter({str(rule): int(count or 0) for rule, count in dict(rules.get("suppressed") or {}).items()})
+    return active, suppressed
+
+
+def compute_history_trends(records: list[dict], triage: dict[str, dict] | None = None) -> dict:
     prepared: list[dict] = []
     for raw in records or []:
         record = dict(raw or {})
@@ -193,10 +219,10 @@ def compute_history_trends(records: list[dict]) -> dict:
                 agg["last_seen"] = str(record.get("completed_at_utc", "") or record.get("started_at_utc", "") or "")
                 agg["_last_dt"] = record_dt
 
-        rules = dict((record.get("trend") or {}).get("rules") or {})
-        for rule, count in dict(rules.get("active") or {}).items():
+        active_rule_counts, suppressed_rule_counts = _rule_counters(record, triage)
+        for rule, count in active_rule_counts.items():
             noisy_rules[str(rule)] += int(count or 0)
-        for rule, count in dict(rules.get("suppressed") or {}).items():
+        for rule, count in suppressed_rule_counts.items():
             suppressed_rules[str(rule)] += int(count or 0)
             noisy_rules[str(rule)] += int(count or 0)
 

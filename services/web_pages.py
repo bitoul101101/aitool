@@ -681,11 +681,10 @@ def render_scan_page(
       <div class="terminal" id="scan-log">
         <div class="terminal-log-text">{_esc(log_text or "No activity yet.")}</div>
         <pre class="terminal-brand-inline" aria-hidden="true">{_esc(r"""
-  ____  _                 _                  _     __  __
- |  _ \| |__   __ _ _ __ | |_ ___  _ __ ___ | |   |  \/  |
- | |_) | '_ \ / _` | '_ \| __/ _ \| '_ ` _ \| |   | |\/| |
- |  __/| | | | (_| | | | | || (_) | | | | | | |___| |  | |
- |_|   |_| |_|\__,_|_| |_|\__\___/|_| |_| |_|_____|_|  |_|
+  ___ _             _             _    __  __
+ | _ \ |_  __ _ _ _| |_ ___ _ __ | |  |  \/  |
+ |  _/ ' \/ _` | ' \  _/ _ \ '  \| |__| |\/| |
+ |_| |_||_\__,_|_||_\__\___/_|_|_|____|_|  |_|
 """).strip()}</pre>
       </div>
       <div class="activity-side-stack">

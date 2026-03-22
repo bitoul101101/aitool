@@ -63,6 +63,19 @@ setTimeout(() => {
 
 (() => {
   const url = new URL(window.location.href);
+  const notice = String(url.searchParams.get("notice") || "");
+  const path = window.location.pathname;
+
+  try {
+    if (path === "/history" && /^Deleted \d+ scan record\(s\)/.test(notice)) {
+      localStorage.setItem("phantomlm.history.updated", String(Date.now()));
+    }
+    if (path === "/findings" && (notice.startsWith("Updated ") || notice.startsWith("Finding triage "))) {
+      localStorage.setItem("phantomlm.triage.updated", String(Date.now()));
+    }
+  } catch (_err) {
+  }
+
   if (url.searchParams.has("notice") || url.searchParams.has("error")) {
     url.searchParams.delete("notice");
     url.searchParams.delete("error");
@@ -76,6 +89,7 @@ setTimeout(() => {
   }
 
   const syncablePaths = new Set(["/history", "/findings", "/trends", "/inventory"]);
+  const syncableStorageKeys = new Set(["phantomlm.history.updated", "phantomlm.triage.updated"]);
 
   const banner = document.getElementById("connection-banner");
   let failures = 0;
@@ -129,7 +143,7 @@ setTimeout(() => {
     }
   });
   window.addEventListener("storage", (event) => {
-    if (event.key !== "phantomlm.history.updated") {
+    if (!syncableStorageKeys.has(event.key)) {
       return;
     }
     if (!syncablePaths.has(window.location.pathname)) {
