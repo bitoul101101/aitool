@@ -3142,6 +3142,29 @@ def test_asset_route_serves_history_page_js():
     assert b"sortHistory" in handler.payload[2]
 
 
+def test_asset_route_serves_findings_page_js():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/assets/findings_page.js"
+
+        def __init__(self):
+            self.payload = None
+
+        def _send(self, status, content_type, body):
+            self.payload = (status, content_type, body)
+
+        def _404(self):
+            self.payload = ("404", None, None)
+
+    handler = DummyHandler()
+    srv._Handler.do_GET(handler)
+
+    assert handler.payload[0] == 200
+    assert handler.payload[1] == "application/javascript; charset=utf-8"
+    assert b"box.checked = false;" in handler.payload[2]
+
+
 def test_scan_workspace_results_page_handles_missing_report():
     import app_server as srv
 
@@ -4818,7 +4841,8 @@ def test_api_history_delete_removes_all_generated_artifacts():
     csv = d / "ai_scan_report.csv"
     json_report = d / "ai_scan_report.json"
     log_file = logs_dir / "20250317_000004.txt"
-    for path in (html, csv, json_report, log_file):
+    llm_debug_log = logs_dir / "20250317_000004_llm_debug.log"
+    for path in (html, csv, json_report, log_file, llm_debug_log):
         path.write_text("artifact", encoding="utf-8")
 
     orig_out = srv.OUTPUT_DIR
@@ -4845,6 +4869,7 @@ def test_api_history_delete_removes_all_generated_artifacts():
                 }
             },
             "log_file": str(log_file),
+            "llm_debug_log_file": str(llm_debug_log),
         }
         with patch.object(srv, "_load_history", return_value=[record]), patch.object(srv, "_delete_history") as delete_mock:
             srv._Handler._api_history_delete(handler, {"scan_ids": ["20250317_000004"]})
@@ -4855,6 +4880,7 @@ def test_api_history_delete_removes_all_generated_artifacts():
         assert not csv.exists()
         assert not json_report.exists()
         assert not log_file.exists()
+        assert not llm_debug_log.exists()
         delete_mock.assert_called_once_with(["20250317_000004"])
     finally:
         srv.OUTPUT_DIR = orig_out

@@ -119,6 +119,7 @@ class ScanSession:
         self.llm_batch_metrics: List[dict] = []
         self.cache_metrics: Dict[str, int] = {}
         self.errors: List[dict] = []
+        self.llm_debug_log_file: str = ""
 
     @staticmethod
     def _finding_detail(finding: dict) -> dict:
@@ -440,8 +441,11 @@ class ScanJobService:
         findings: list,
         *,
         log_file: str = "",
+        llm_debug_log_file: str = "",
         log_lines: list[dict] | None = None,
     ) -> dict:
+        if not llm_debug_log_file:
+            llm_debug_log_file = str(session.llm_debug_log_file or "")
         sev = Counter(f.get("severity", 4) for f in findings)
         ctx = Counter(f.get("context", "production") for f in findings)
         llm_name = (session.llm_model_info or {}).get("name", session.llm_model)
@@ -507,6 +511,7 @@ class ScanJobService:
             "repo_details": session.repo_details,
             "scoped_files_by_repo": dict(session.scoped_files_by_repo),
             "log_file": log_file,
+            "llm_debug_log_file": llm_debug_log_file,
             "reports": session.report_paths,
             "findings": list(findings),
             "trend": {
@@ -1050,7 +1055,13 @@ class ScanJobService:
                 fh.write(f"[{ts}] {entry.get('msg', '')}\n")
 
         with session.state_lock:
-            record = self._build_record(session, findings, log_file=str(log_path), log_lines=log_lines)
+            record = self._build_record(
+                session,
+                findings,
+                log_file=str(log_path),
+                llm_debug_log_file=str(session.llm_debug_log_file or ""),
+                log_lines=log_lines,
+            )
         try:
             self._upsert_job_record(record)
             self._replace_scan_logs(session.scan_id, log_lines)
@@ -1080,6 +1091,7 @@ class ScanJobService:
 
         Path(self.paths.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.paths.temp_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.paths.log_dir).mkdir(parents=True, exist_ok=True)
         scan_temp_root = self._scan_temp_root(session)
         scan_temp_root.mkdir(parents=True, exist_ok=True)
         self.cleanup_stale_temp_clones(current_scan_id=session.scan_id)
@@ -1099,6 +1111,7 @@ class ScanJobService:
             session.llm_batch_metrics = []
             session.cache_metrics = {}
             session.errors = []
+            session.llm_debug_log_file = str(Path(self.paths.log_dir) / f"{session.scan_id}_llm_debug.log")
         all_findings: List[dict] = []
         per_repo: Dict[str, Any] = {}
         per_branch: Dict[str, str] = {}
@@ -1412,6 +1425,7 @@ class ScanJobService:
                             log_fn=log,
                             stop_event=stop,
                             batch_callback=_llm_batch_metric,
+                            debug_log_path=str(session.llm_debug_log_file or ""),
                         )
                         log(f"  [LLM] Evaluating {len(analyzed)} finding(s) for review...", "dim")
                         llm_started = time.perf_counter()

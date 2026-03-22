@@ -420,11 +420,11 @@ _SYSTEM = textwrap.dedent("""\
 
 # ── Debug logger ──────────────────────────────────────────────────────
 
-def _debug_log(label: str, text: str) -> None:
+def _debug_log(label: str, text: str, debug_log_path: str = LLM_DEBUG_LOG) -> None:
     """Append raw model output to the debug log file for post-mortem inspection."""
     try:
-        Path(LLM_DEBUG_LOG).parent.mkdir(parents=True, exist_ok=True)
-        with open(LLM_DEBUG_LOG, "a", encoding="utf-8") as f:
+        Path(debug_log_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(debug_log_path, "a", encoding="utf-8") as f:
             f.write(f"\n{'='*60}\n{label}\n{'='*60}\n{text}\n")
     except Exception:
         pass
@@ -652,7 +652,8 @@ def _call_ollama_single(base_url: str,
                         model: str,
                         user_message: str,
                         log_fn: Callable,
-                        stop_event=None) -> Optional[Dict]:
+                        stop_event=None,
+                        debug_log_path: str = LLM_DEBUG_LOG) -> Optional[Dict]:
     """
     Call Ollama for a single-object response (challenge pass).
     Returns a dict with verdict+reason, or None on failure.
@@ -707,7 +708,7 @@ def _call_ollama_single(base_url: str,
             if not _rb: raise urllib.error.URLError("no response")
             raw_obj = _rb[0]
             text = raw_obj.get("message", {}).get("content", "")
-            _debug_log(f"CHALLENGE use_schema={use_schema}", text)
+            _debug_log(f"CHALLENGE use_schema={use_schema}", text, debug_log_path)
             # Parse single object
             text = re.sub(r"```[a-zA-Z]*\n?", "", text).strip().replace("```", "").strip()
             try:
@@ -826,7 +827,8 @@ def _call_ollama(base_url: str,
                  model: str,
                  user_message: str,
                  log_fn: Callable[[str], None],
-                 stop_event=None) -> Optional[List[Dict]]:
+                 stop_event=None,
+                 debug_log_path: str = LLM_DEBUG_LOG) -> Optional[List[Dict]]:
     """
     Try two strategies in order:
       1. Structured schema (Ollama ≥ 0.5) — most reliable
@@ -848,7 +850,8 @@ def _call_ollama(base_url: str,
                 raw = _post(url, payload, _request_timeout(model), stop_event=stop_event)
                 _debug_log(
                     f"mode={mode} attempt={attempt} model={model}",
-                    raw
+                    raw,
+                    debug_log_path,
                 )
 
                 verdicts = _extract_json_array(raw)
@@ -858,6 +861,7 @@ def _call_ollama(base_url: str,
                         _debug_log(
                             f"fallback parse mode={mode} attempt={attempt} model={model}",
                             raw,
+                            debug_log_path,
                         )
                     return verdicts
 
@@ -867,6 +871,7 @@ def _call_ollama(base_url: str,
                     _debug_log(
                         f"parse retry mode={mode} attempt={attempt} model={model}",
                         raw,
+                        debug_log_path,
                     )
                 if attempt <= MAX_RETRIES:
                     time.sleep(RETRY_DELAY)
@@ -877,6 +882,7 @@ def _call_ollama(base_url: str,
                     _debug_log(
                         f"schema unsupported model={model} code={e.code}",
                         str(e).encode("utf-8", errors="replace"),
+                        debug_log_path,
                     )
                     break
                 log_fn(f"  [LLM] [{mode}] HTTP {e.code} (attempt {attempt})")
@@ -947,13 +953,15 @@ class LLMReviewer:
                  model: str    = DEFAULT_MODEL,
                  log_fn: Callable[[str], None] = print,
                  stop_event=None,
-                 batch_callback: Optional[Callable[[dict], None]] = None):
+                 batch_callback: Optional[Callable[[dict], None]] = None,
+                 debug_log_path: str = LLM_DEBUG_LOG):
         self.base_url           = base_url.rstrip("/")
         self.model              = model
         self.log_fn             = log_fn
         self._model_param_size  = ""   # populated by model_info()
         self._stop_event        = stop_event  # threading.Event or None
         self._batch_callback    = batch_callback
+        self._debug_log_path    = str(debug_log_path or LLM_DEBUG_LOG)
 
     def is_available(self) -> bool:
         """Return True if Ollama is reachable and the model is present."""
@@ -1071,6 +1079,7 @@ class LLMReviewer:
             verdicts = _call_ollama(
                 self.base_url, self.model, user_msg, self.log_fn,
                 stop_event=self._stop_event,
+                debug_log_path=self._debug_log_path,
             )
 
             if verdicts is None:
@@ -1157,6 +1166,7 @@ class LLMReviewer:
                 result_obj = _call_ollama_single(
                     self.base_url, self.model, msg, self.log_fn,
                     stop_event=self._stop_event,
+                    debug_log_path=self._debug_log_path,
                 )
                 if result_obj is None:
                     # Call failed — safe default: reinstate the finding
@@ -1214,6 +1224,6 @@ class LLMReviewer:
                 "results kept without LLM refinement"
             )
         self.log_fn(f"  [LLM] Done — " + "  ".join(parts))
-        self.log_fn(f"  [LLM] Debug log: {LLM_DEBUG_LOG}")
+        self.log_fn(f"  [LLM] Debug log: {self._debug_log_path}")
 
         return result

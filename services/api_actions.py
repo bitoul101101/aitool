@@ -171,6 +171,11 @@ def delete_history_records(
             err = delete_managed_file(log_file, sid, "log")
             if err:
                 errors.append(f"{sid} log: {err}")
+        llm_debug_log_file = rec.get("llm_debug_log_file", "")
+        if llm_debug_log_file:
+            err = delete_managed_file(llm_debug_log_file, sid, "llm_debug_log")
+            if err:
+                errors.append(f"{sid} llm_debug_log: {err}")
         deleted.append(sid)
 
     if deleted:

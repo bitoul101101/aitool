@@ -206,6 +206,10 @@
     visible.slice(start, end).forEach((row) => { row.style.display = ""; });
     rows().forEach((row) => {
       if (row.style.display === "none") {
+        const box = row.querySelector(".finding-check");
+        if (box) {
+          box.checked = false;
+        }
         closeDetailRow(row);
       }
     });

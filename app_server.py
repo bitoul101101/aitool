@@ -590,6 +590,8 @@ def _is_tool_generated_legacy_file(path: Path, *, scan_id: str, artifact: str) -
         return False
     if artifact == "log":
         return path.name in {f"{scan_id}.txt", f"{scan_id}.log"} and path.parent.name.lower() == "logs"
+    if artifact == "llm_debug_log":
+        return path.name == f"{scan_id}_llm_debug.log" and path.parent.name.lower() == "logs"
     if artifact == "html":
         return path.suffix.lower() == ".html" and path.name.lower().startswith("ai_scan_")
     if artifact == "csv":
@@ -1024,6 +1026,7 @@ def _current_session_history_record() -> dict | None:
         "reports": report_paths,
         "inventory": inventory,
         "log_file": "",
+        "llm_debug_log_file": str(snapshot["session"].llm_debug_log_file or ""),
     }
 
 
