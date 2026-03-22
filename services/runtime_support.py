@@ -123,6 +123,13 @@ def ollama_list_models(base_url: str, *, timeout: int = 6) -> list[str]:
     return list(ollama_snapshot(base_url, timeout=timeout, refresh=True).get("models", []))
 
 
+def clear_ollama_snapshot(base_url: str) -> None:
+    """Drop cached reachability/model data for one Ollama endpoint."""
+    normalized = (base_url or DEFAULT_LLM_CONFIG["base_url"]).rstrip("/")
+    with _OLLAMA_CACHE_LOCK:
+        _OLLAMA_CACHE.pop(normalized, None)
+
+
 def is_local_ollama_url(base_url: str) -> bool:
     """Return True only for local Ollama URLs that this process can reasonably start."""
     normalized = (base_url or DEFAULT_LLM_CONFIG["base_url"]).strip()
@@ -145,6 +152,7 @@ def ensure_ollama_running(
     Returns (True, "already_running"/"started") or (False, "<error>").
     """
     if ollama_ping(base_url):
+        clear_ollama_snapshot(base_url)
         return True, "already_running"
 
     if not is_local_ollama_url(base_url):
@@ -178,6 +186,7 @@ def ensure_ollama_running(
     while time.time() < deadline:
         time.sleep(1)
         if ollama_ping(base_url):
+            clear_ollama_snapshot(base_url)
             if log_fn:
                 log_fn("  [LLM] Ollama started")
             return True, "started"

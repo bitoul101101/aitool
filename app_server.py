@@ -2291,9 +2291,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             _start_html_report_generation(safe_scan_id, detail_mode=detail_mode)
         except Exception as e:
-            self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", error=str(e)))
+            self._redirect(_with_query("/findings", scan_id=safe_scan_id, error=str(e)))
             return
-        self._redirect(_with_query(f"/scan/{safe_scan_id}", tab="results", notice=f"{mode_label} HTML report generation started"))
+        self._redirect(_with_query("/findings", scan_id=safe_scan_id, notice=f"{mode_label} HTML report generation started"))
 
     def _page_history_delete(self, body: dict):
         if _require_role(self, ROLE_ADMIN):

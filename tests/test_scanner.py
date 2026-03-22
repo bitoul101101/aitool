@@ -2926,6 +2926,34 @@ def test_generate_html_report_for_scan_uses_stored_scan_record(monkeypatch):
     assert called["findings"] is None
 
 
+def test_page_generate_html_report_redirects_back_to_scan_findings(monkeypatch):
+    import app_server as srv
+
+    record = {
+        "scan_id": "20260322_120000",
+        "project_key": "LOCAL",
+        "reports": {"__all__": {}},
+        "findings": [{"file": "stored.py"}],
+    }
+    redirects = []
+
+    class DummyHandler:
+        def _redirect(self, location):
+            redirects.append(location)
+
+        def _err(self, status, msg):
+            raise AssertionError(f"{status}: {msg}")
+
+    monkeypatch.setattr(srv, "_require_role", lambda handler, role: False)
+    monkeypatch.setattr(srv, "_scan_record_for_id", lambda scan_id: record if scan_id == "20260322_120000" else None)
+    monkeypatch.setattr(srv, "_require_project_access", lambda handler, project_key: False)
+    monkeypatch.setattr(srv, "_start_html_report_generation", lambda scan_id, detail_mode="detailed": {"state": "queued"})
+
+    srv._Handler._page_generate_html_report(DummyHandler(), "20260322_120000", {"html_detail_mode": "detailed"})
+
+    assert redirects == ["/findings?scan_id=20260322_120000&notice=Detailed+HTML+report+generation+started"]
+
+
 def test_html_report_fast_mode_skips_llm_detail_fetch(tmp_path):
     reporter = HTMLReporter(str(tmp_path), "demo")
     called = {"fetch": False}
@@ -5534,6 +5562,32 @@ def test_run_scan_attempts_to_start_ollama_before_disabling_llm():
     assert any("starting `ollama serve`" in entry["msg"] for entry in session.log_lines)
     assert any("LLM      :" in entry["msg"] for entry in session.log_lines)
     assert not any("running without LLM review" in entry["msg"] for entry in session.log_lines)
+
+
+def test_ensure_ollama_running_clears_stale_snapshot_cache_after_success():
+    from services import runtime_support as rs
+
+    base_url = "http://localhost:11434"
+    with rs._OLLAMA_CACHE_LOCK:
+        rs._OLLAMA_CACHE[base_url] = {
+            "base_url": base_url,
+            "reachable": False,
+            "models": [],
+            "fetched_at": 1.0,
+            "stale": True,
+        }
+
+    ping_results = iter([False, True])
+    with patch.object(rs, "ollama_ping", side_effect=lambda url, timeout=4: next(ping_results)), \
+         patch.object(rs.subprocess, "Popen") as popen_mock, \
+         patch.object(rs.time, "sleep", return_value=None):
+        ok, status = rs.ensure_ollama_running(base_url, timeout_s=2)
+
+    assert ok is True
+    assert status == "started"
+    popen_mock.assert_called_once()
+    with rs._OLLAMA_CACHE_LOCK:
+        assert base_url not in rs._OLLAMA_CACHE
 
 if __name__ == "__main__":
     tests = [
