@@ -2405,9 +2405,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
         requested_scan_id = _clean_scan_id_param(body.get("scan_id", ""))
-        target = _with_query("/findings", scan_id=requested_scan_id) if requested_scan_id else "/findings"
-        if not hashes:
-            self._redirect(_with_query(target, error="Select at least one finding."))
+        target_path = "/findings"
+        target_params = {"scan_id": requested_scan_id} if requested_scan_id else {}
+        if not hashes and not requested_scan_id:
+            self._redirect(_with_query(target_path, error="Select at least one finding.", **target_params))
             return
         if requested_scan_id:
             record = _scan_record_for_id(requested_scan_id)
@@ -2419,14 +2420,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             source_findings = _findings_for_user()
         findings_by_hash = {str(item.get("hash", "") or ""): item for item in source_findings if str(item.get("hash", "") or "")}
         selected = [findings_by_hash[hash_] for hash_ in hashes if hash_ in findings_by_hash]
+        if requested_scan_id and not hashes:
+            selected = list(source_findings)
         if not selected:
-            self._redirect(_with_query(target, error="Selected findings are no longer available."))
+            self._redirect(_with_query(target_path, error="Selected findings are no longer available.", **target_params))
             return
         export_type = str(body.get("export_type", "html") or "html").strip().lower()
         try:
             report_name = _generate_selected_findings_artifact(selected, export_type=export_type, scan_id=requested_scan_id)
         except Exception as exc:
-            self._redirect(_with_query(target, error=str(exc)))
+            self._redirect(_with_query(target_path, error=str(exc), **target_params))
             return
         self._redirect(f"/reports/{quote(report_name)}")
 

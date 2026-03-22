@@ -4497,6 +4497,61 @@ def test_page_finding_reset_redirects_back_to_findings():
         srv._operator_state = orig_state
 
 
+def test_page_findings_generate_html_exports_whole_scan_when_scan_action_sends_no_hashes():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.redirect_to = None
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+    orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Viewer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Viewer",
+                roles=(ROLE_VIEWER,),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+
+    record = {
+        "scan_id": "20250316_070707",
+        "project_key": "COGI",
+        "repo_slugs": ["repo1"],
+        "findings": [{"_hash": "hash-a"}, {"_hash": "hash-b"}],
+    }
+    built_findings = [
+        {"hash": "hash-a", "repo": "repo1", "project_key": "COGI"},
+        {"hash": "hash-b", "repo": "repo1", "project_key": "COGI"},
+    ]
+
+    try:
+        handler = DummyHandler()
+        with patch.object(srv, "_scan_record_for_id", return_value=record), \
+             patch.object(srv, "build_scan_findings", return_value=built_findings), \
+             patch.object(srv, "_triage_by_hash", return_value={}), \
+             patch.object(srv, "_require_role", return_value=False), \
+             patch.object(srv, "_generate_selected_findings_artifact", return_value="selected.csv") as export_mock:
+            srv._Handler._page_findings_generate_html(handler, {"scan_id": "20250316_070707", "export_type": "csv"})
+
+        export_mock.assert_called_once()
+        selected = export_mock.call_args.kwargs["findings"] if "findings" in export_mock.call_args.kwargs else export_mock.call_args.args[0]
+        assert len(selected) == 2
+        assert handler.redirect_to == "/reports/selected.csv"
+    finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
 def test_handle_page_get_redirects_legacy_findings_path_to_query_form():
     import app_server as srv
     from urllib.parse import urlparse
