@@ -2431,6 +2431,8 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'id="generate-findings-csv-btn"' in html
     assert 'id="generate-findings-json-btn"' in html
     assert 'id="apply-findings-action-btn"' in html
+    assert 'id="findings-export-hint"' in html
+    assert "Select findings to change their status or to export them as HTML / CSV / JSON." in html
     assert 'id="findings-select-all"' in html
     assert 'id="findings-bulk-note"' not in html
     assert 'src="/assets/findings_page.js"' in html

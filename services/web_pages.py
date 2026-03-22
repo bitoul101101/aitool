@@ -921,7 +921,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         <option value="reset">Reset</option>
       </select>
       <button type="submit" class="warn hidden" id="apply-findings-action-btn">Apply to Selected</button>
-      <span class="muted findings-export-hint" id="findings-export-hint">Select findings to export them.</span>
+      <span class="muted findings-export-hint" id="findings-export-hint">Select findings to change their status or to export them as HTML / CSV / JSON.</span>
       <button type="submit" class="btn alt hidden" id="generate-findings-html-btn" name="export_type" value="html" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">Generate HTML Report</button>
       <button type="submit" class="btn alt hidden" id="generate-findings-csv-btn" name="export_type" value="csv" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">CSV</button>
       <button type="submit" class="btn alt hidden" id="generate-findings-json-btn" name="export_type" value="json" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">JSON</button>

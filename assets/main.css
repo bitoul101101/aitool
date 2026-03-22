@@ -223,6 +223,7 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .findings-bulk-toolbar{grid-template-columns:150px auto auto auto auto;align-items:center}
 #findings-bulk-action{width:150px;min-width:150px}
 #apply-findings-action-btn{justify-self:start}
+.findings-export-hint{justify-self:start;white-space:nowrap}
 #findings-table{font-size:13px}
 #findings-table th,#findings-table td{font-size:13px;line-height:1.25}
 #findings-table .finding-check{width:18px;height:18px}
