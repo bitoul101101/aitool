@@ -11,6 +11,11 @@
   const severity = document.getElementById("findings-filter-severity");
   const rule = document.getElementById("findings-filter-rule");
   const applyBtn = document.getElementById("apply-findings-action-btn");
+  const htmlBtn = document.getElementById("generate-findings-html-btn");
+  const csvBtn = document.getElementById("generate-findings-csv-btn");
+  const jsonBtn = document.getElementById("generate-findings-json-btn");
+  const sarifBtn = document.getElementById("generate-findings-sarif-btn");
+  const threatDragonBtn = document.getElementById("generate-findings-threat-dragon-btn");
   const prevBtn = document.getElementById("findings-prev-btn");
   const nextBtn = document.getElementById("findings-next-btn");
   const pageInfo = document.getElementById("findings-page-info");
@@ -122,7 +127,13 @@
   }
 
   function updateBulkAction() {
-    applyBtn?.classList.toggle("hidden", !rows().some((row) => row.querySelector(".finding-check")?.checked));
+    const hasSelection = rows().some((row) => row.querySelector(".finding-check")?.checked);
+    applyBtn?.classList.toggle("hidden", !hasSelection);
+    htmlBtn?.classList.toggle("hidden", !hasSelection);
+    csvBtn?.classList.toggle("hidden", !hasSelection);
+    jsonBtn?.classList.toggle("hidden", !hasSelection);
+    sarifBtn?.classList.toggle("hidden", !hasSelection);
+    threatDragonBtn?.classList.toggle("hidden", !hasSelection);
   }
 
   function displayedRows() {

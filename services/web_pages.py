@@ -146,7 +146,7 @@ def _scan_results_toolbar_actions(
     html_detail_mode = str(html_detail_mode or "").strip().lower()
     toolbar_actions = []
     if html_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">HTML Report</a>')
         if can_generate_html and not generation_active and html_detail_mode == "fast":
             toolbar_actions.append(
                 f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
@@ -874,7 +874,8 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
   <section class="card findings-shell">
     <form method="post" action="/findings/bulk" id="findings-form" class="findings-form">
     {_csrf_field(csrf_token)}
-    {f'<section class="card" style="margin-bottom:8px"><div class="results-actions">{scan_actions_html}</div></section>' if scan_actions_html else ''}
+    {f'<input type="hidden" name="scan_id" value="{_esc(scan_label)}">' if scan_label else ''}
+    {f'<section class="card findings-scan-actions-card"><div class="results-actions findings-scan-actions">{scan_actions_html}</div></section>' if scan_actions_html else ''}
     {f'<div class="warn-box" style="margin-bottom:8px">Showing findings for scan {_esc(scan_label)}.</div>' if scan_label else ''}
     <section class="trend-summary-grid" style="margin-bottom:12px">
       <div class="trend-summary-card"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
@@ -900,6 +901,11 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         <option value="reset">Reset</option>
       </select>
       <input type="text" name="note" id="findings-bulk-note" placeholder="Note for Accept Risk / Suppress">
+      <button type="submit" class="btn alt hidden" id="generate-findings-html-btn" name="export_type" value="html" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">Generate HTML Report</button>
+      <button type="submit" class="btn alt hidden" id="generate-findings-csv-btn" name="export_type" value="csv" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">CSV</button>
+      <button type="submit" class="btn alt hidden" id="generate-findings-json-btn" name="export_type" value="json" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">JSON</button>
+      <button type="submit" class="btn alt hidden" id="generate-findings-sarif-btn" name="export_type" value="sarif" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">SARIF</button>
+      <button type="submit" class="btn alt hidden" id="generate-findings-threat-dragon-btn" name="export_type" value="threat_dragon" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">Threat Dragon</button>
       <button type="submit" class="warn hidden" id="apply-findings-action-btn">Apply to Selected</button>
     </div>
       <div class="table-shell findings-table-shell">

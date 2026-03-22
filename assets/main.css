@@ -207,14 +207,16 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .history-table-shell{flex:1 1 auto;min-height:0;max-height:none;overflow:hidden}
 .findings-shell{height:calc(100vh - 118px);display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .findings-form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
-.findings-form .trend-summary-grid,.findings-form .history-toolbar{flex:0 0 auto}
+.findings-form .trend-summary-grid,.findings-form .history-toolbar,.findings-scan-actions-card{flex:0 0 auto}
 .findings-table-shell{flex:1 1 auto;min-height:0;max-height:none}
 .findings-shell,.inventory-page-grid,.trends-shell{font-size:13px}
+.findings-scan-actions-card{margin-bottom:8px;padding:10px 12px;position:relative;z-index:4}
+.findings-scan-actions{justify-content:flex-start}
 .findings-form .trend-summary-grid{gap:6px;margin-bottom:8px!important}
 .findings-form .trend-summary-card{padding:6px 8px;min-height:60px;border-radius:10px}
 .findings-form .trend-summary-card strong{font-size:16px}
 .findings-form .baseline-label{font-size:10px}
-.findings-form .history-toolbar{gap:6px;padding-bottom:6px}
+.findings-form .history-toolbar{gap:6px;padding-bottom:6px;position:static}
 .findings-form .filters-row{margin-bottom:8px}
 .findings-form .history-toolbar input,.findings-form .history-toolbar select{padding:6px 8px}
 .findings-form .history-toolbar button{padding:7px 10px}

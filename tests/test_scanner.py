@@ -2416,6 +2416,12 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'class="table-shell findings-table-shell"' in html
     assert 'id="findings-filter-rule"' in html
     assert 'action="/findings/bulk"' in html
+    assert 'formaction="/findings/generate-html"' in html
+    assert 'id="generate-findings-html-btn"' in html
+    assert 'id="generate-findings-csv-btn"' in html
+    assert 'id="generate-findings-json-btn"' in html
+    assert 'id="generate-findings-sarif-btn"' in html
+    assert 'id="generate-findings-threat-dragon-btn"' in html
     assert 'id="apply-findings-action-btn"' in html
     assert 'id="findings-select-all"' in html
     assert 'src="/assets/findings_page.js"' in html
@@ -2434,6 +2440,81 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
     assert 'class="snippet-hit"' in html
     assert 'data-llm-reason="The code sends a hardcoded credential to an AI provider."' in html
+
+
+def test_generate_selected_findings_html_report_registers_runtime_report(monkeypatch, tmp_path):
+    import app_server as srv
+
+    monkeypatch.setattr(srv, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(srv, "POLICY_FILE", str(tmp_path / "policy.json"))
+    monkeypatch.setattr(srv, "load_llm_config", lambda: {"base_url": "http://localhost:11434", "model": "qwen", "report_detail_timeout_s": 120})
+
+    class _StubScanService:
+        def _load_policy(self, _path):
+            return {}
+
+    monkeypatch.setattr(srv, "_scan_service", _StubScanService())
+
+    written = {}
+
+    class _StubReporter:
+        def __init__(self, output_dir, scan_id, include_snippets=True, meta=None):
+            written["output_dir"] = output_dir
+            written["scan_id"] = scan_id
+            written["meta"] = meta or {}
+
+        def write(self, findings, policy=None, ollama_url="", ollama_model="", detail_mode="detailed"):
+            written["findings"] = findings
+            written["policy"] = policy
+            written["ollama_url"] = ollama_url
+            written["ollama_model"] = ollama_model
+            written["detail_mode"] = detail_mode
+            path = Path(tmp_path) / "selected_findings_demo.html"
+            path.write_text("<html></html>", encoding="utf-8")
+            return str(path)
+
+    monkeypatch.setattr(srv, "HTMLReporter", _StubReporter)
+
+    report_name = srv._generate_selected_findings_html_report(
+        [{"hash": "h1", "repo": "repo1", "project_key": "COGI", "llm_reason": "stored"}],
+        scan_id="scan-7",
+    )
+
+    assert report_name == "selected_findings_demo.html"
+    assert written["detail_mode"] == "detailed"
+    assert written["ollama_model"] == "qwen"
+    assert written["findings"][0]["hash"] == "h1"
+    assert srv._runtime_report_allowed(report_name) is True
+
+
+def test_generate_selected_findings_artifact_supports_json(monkeypatch, tmp_path):
+    import app_server as srv
+
+    monkeypatch.setattr(srv, "OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(srv, "load_llm_config", lambda: {"base_url": "http://localhost:11434", "model": "qwen", "report_detail_timeout_s": 120})
+
+    class _StubReporter:
+        def __init__(self, output_dir, scan_id):
+            self.output_dir = output_dir
+            self.scan_id = scan_id
+
+        def write_json(self, findings, meta=None, replay_instructions=""):
+            path = Path(tmp_path) / "selected_findings_demo.json"
+            path.write_text("{}", encoding="utf-8")
+            assert findings[0]["hash"] == "h1"
+            assert meta["tool_version"] == srv.APP_VERSION
+            return str(path)
+
+    monkeypatch.setattr(srv, "JSONReporter", _StubReporter)
+
+    report_name = srv._generate_selected_findings_artifact(
+        [{"hash": "h1", "repo": "repo1", "project_key": "COGI", "llm_reason": "stored"}],
+        export_type="json",
+        scan_id="scan-8",
+    )
+
+    assert report_name == "selected_findings_demo.json"
+    assert srv._runtime_report_allowed(report_name) is True
 
 
 def test_findings_history_notice_reports_summary_only_scans():
@@ -2757,6 +2838,43 @@ def test_results_page_shows_html_generation_progress_card():
     assert "Generating LLM analysis 3/12..." in html
     assert 'data-report-generation-active="1"' in html
     assert 'src="/assets/results_page.js"' in html
+
+
+def test_generate_html_report_for_scan_uses_stored_scan_record(monkeypatch):
+    import app_server as srv
+
+    record = {
+        "scan_id": "20260322_100000",
+        "reports": {"__all__": {}},
+        "findings": [{"file": "stored.py", "llm_reason": "stored detail"}],
+    }
+    called = {}
+
+    monkeypatch.setattr(srv, "_scan_record_for_id", lambda scan_id: record if scan_id == "20260322_100000" else None)
+    monkeypatch.setattr(
+        srv,
+        "_current_session_snapshot",
+        lambda: {"scan_id": "20260322_100000", "findings": [{"file": "live.py", "llm_reason": "live detail"}]},
+    )
+
+    class _StubService:
+        def generate_html_report(self, scan_id, findings=None, **kwargs):
+            called["scan_id"] = scan_id
+            called["findings"] = findings
+            return {"reports": {"__all__": {"html": "scan.html"}}}
+
+    monkeypatch.setattr(srv, "_scan_service", _StubService())
+
+    class _DummyCurrent:
+        report_paths = {}
+
+    monkeypatch.setattr(srv, "_current_session", lambda: _DummyCurrent())
+
+    updated = srv._generate_html_report_for_scan("20260322_100000")
+
+    assert updated["reports"]["__all__"]["html"] == "scan.html"
+    assert called["scan_id"] == "20260322_100000"
+    assert called["findings"] is None
 
 
 def test_html_report_fast_mode_skips_llm_detail_fetch(tmp_path):

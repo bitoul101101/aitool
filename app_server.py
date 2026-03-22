@@ -85,6 +85,11 @@ from services.report_access import (
     history_records_for_context,
 )
 from services.findings import build_findings_rollups, build_scan_findings, findings_history_notice
+from reports.html_report import HTMLReporter
+from reports.csv_report import CSVReporter
+from reports.json_report import JSONReporter
+from reports.sarif_report import SARIFReporter
+from reports.threat_dragon_report import ThreatDragonReporter
 from services.scan_jobs import ScanJobPaths, ScanJobService, ScanSession
 from services.settings_service import SettingsService
 from services.single_user_state import SingleUserState, load_single_user_config
@@ -135,6 +140,8 @@ _RESOURCE_LOCK = threading.RLock()
 _CPU_TIMES_PREV: tuple[int, int, int] | None = None
 _PROCESS_IO_PREV: tuple[float, int, int] | None = None
 _WORKSPACE_USAGE_CACHE = {"scan_id": "", "ts": 0.0, "mb": 0.0}
+_RUNTIME_REPORT_NAMES: set[str] = set()
+_RUNTIME_REPORT_LOCK = threading.RLock()
 
 
 def _default_temp_dir(os_name: Optional[str] = None,
@@ -599,6 +606,94 @@ def _findings_for_user() -> list[dict]:
     return build_findings_rollups(_history_records_for_user(), _triage_by_hash())
 
 
+def _register_runtime_report_name(filename: str) -> None:
+    safe = Path(filename).name
+    if not safe:
+        return
+    with _RUNTIME_REPORT_LOCK:
+        _RUNTIME_REPORT_NAMES.add(safe)
+
+
+def _runtime_report_allowed(filename: str) -> bool:
+    safe = Path(filename).name
+    with _RUNTIME_REPORT_LOCK:
+        return safe in _RUNTIME_REPORT_NAMES
+
+
+def _generate_selected_findings_html_report(findings: list[dict], *, scan_id: str = "") -> str:
+    if not findings:
+        raise RuntimeError("Select at least one finding.")
+    llm_cfg = load_llm_config()
+    model_name = str(llm_cfg.get("model", "") or "").strip()
+    repo_slugs = sorted({str(item.get("repo", "") or "").strip() for item in findings if str(item.get("repo", "") or "").strip()})
+    project_keys = sorted({str(item.get("project_key", "") or "").strip() for item in findings if str(item.get("project_key", "") or "").strip()})
+    report_id = f"selected_findings_{scan_id or 'filtered'}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    reporter = HTMLReporter(
+        output_dir=OUTPUT_DIR,
+        scan_id=report_id,
+        include_snippets=True,
+        meta={
+            "project_key": project_keys[0] if len(project_keys) == 1 else "MULTI",
+            "repo_slugs": repo_slugs,
+            "started_at_utc": _utc_now_iso(),
+            "llm_model_info": {"name": model_name} if model_name else {},
+            "report_detail_timeout_s": int(llm_cfg.get("report_detail_timeout_s", 180) or 180),
+        },
+    )
+    html_path = reporter.write(
+        findings,
+        policy=_scan_service._load_policy(POLICY_FILE),
+        ollama_url=str(llm_cfg.get("base_url", "") or "").strip(),
+        ollama_model=model_name,
+        detail_mode="detailed",
+    )
+    _register_runtime_report_name(Path(html_path).name)
+    return Path(html_path).name
+
+
+def _generate_selected_findings_artifact(findings: list[dict], *, export_type: str, scan_id: str = "") -> str:
+    if not findings:
+        raise RuntimeError("Select at least one finding.")
+    export_type = str(export_type or "").strip().lower()
+    if export_type == "html":
+        return _generate_selected_findings_html_report(findings, scan_id=scan_id)
+
+    llm_cfg = load_llm_config()
+    model_name = str(llm_cfg.get("model", "") or "").strip()
+    repo_slugs = sorted({str(item.get("repo", "") or "").strip() for item in findings if str(item.get("repo", "") or "").strip()})
+    project_keys = sorted({str(item.get("project_key", "") or "").strip() for item in findings if str(item.get("project_key", "") or "").strip()})
+    generated_at = _utc_now_iso()
+    report_id = f"selected_findings_{scan_id or 'filtered'}_{export_type}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    report_meta = {
+        "scan_id": report_id,
+        "project_key": project_keys[0] if len(project_keys) == 1 else "MULTI",
+        "repo_slugs": repo_slugs,
+        "started_at_utc": generated_at,
+        "completed_at_utc": generated_at,
+        "tool_version": APP_VERSION,
+        "llm_model_info": {"name": model_name} if model_name else {},
+    }
+
+    if export_type == "csv":
+        reporter = CSVReporter(output_dir=OUTPUT_DIR, scan_id=report_id)
+        output_path = reporter.write_csv(findings)
+    elif export_type == "json":
+        reporter = JSONReporter(output_dir=OUTPUT_DIR, scan_id=report_id)
+        output_path = reporter.write_json(findings, meta=report_meta)
+    elif export_type == "sarif":
+        reporter = SARIFReporter(output_dir=OUTPUT_DIR, scan_id=report_id)
+        output_path = reporter.write_sarif(findings, meta=report_meta)
+    elif export_type == "threat_dragon":
+        reporter = ThreatDragonReporter(output_dir=OUTPUT_DIR, scan_id=report_id)
+        output_path = reporter.write_json(findings, meta=report_meta)
+    else:
+        raise RuntimeError("Unsupported export type.")
+
+    output_name = Path(output_path).name
+    _register_runtime_report_name(output_name)
+    return output_name
+
+
 def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     latest_by_repo: dict[str, dict] = {}
     for record in _history_records_for_user():
@@ -723,10 +818,7 @@ def _generate_html_report_for_scan(scan_id: str) -> dict:
         return record
 
     snapshot = _current_session_snapshot()
-    findings = None
-    if snapshot["scan_id"] == safe_scan_id:
-        findings = list(snapshot["findings"])
-    updated = _scan_service.generate_html_report(safe_scan_id, findings=findings)
+    updated = _scan_service.generate_html_report(safe_scan_id)
     if snapshot["scan_id"] == safe_scan_id:
         with _state_lock:
             current = _current_session()
@@ -781,14 +873,12 @@ def _start_html_report_generation(scan_id: str, detail_mode: str = "detailed") -
                 total=0,
                 detail_mode=detail_mode,
             )
-            snapshot = _current_session_snapshot()
-            findings = list(snapshot["findings"]) if snapshot["scan_id"] == safe_scan_id else None
             updated = _scan_service.generate_html_report(
                 safe_scan_id,
-                findings=findings,
                 progress_fn=_progress,
                 detail_mode=detail_mode,
             )
+            snapshot = _current_session_snapshot()
             if snapshot["scan_id"] == safe_scan_id:
                 with _state_lock:
                     current = _current_session()
@@ -1631,6 +1721,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return self._page_history_delete(body)
             elif p == "/findings/bulk":
                 return self._page_findings_bulk(body)
+            elif p == "/findings/generate-html":
+                return self._page_findings_generate_html(body)
             elif p == "/settings/save":
                 return self._page_settings_save(body)
             elif p == "/findings/triage":
@@ -2278,6 +2370,36 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         _persist_session_state()
         self._redirect(_with_query("/findings", notice=f"Updated {len(hashes)} finding(s)"))
 
+    def _page_findings_generate_html(self, body: dict):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
+        requested_scan_id = Path(str(body.get("scan_id", "") or "")).name
+        target = _with_query("/findings", scan_id=requested_scan_id) if requested_scan_id else "/findings"
+        if not hashes:
+            self._redirect(_with_query(target, error="Select at least one finding."))
+            return
+        if requested_scan_id:
+            record = _scan_record_for_id(requested_scan_id)
+            if not record:
+                self._redirect(_with_query("/findings", error=f"Scan {requested_scan_id} was not found."))
+                return
+            source_findings = build_scan_findings(record, _triage_by_hash())
+        else:
+            source_findings = _findings_for_user()
+        findings_by_hash = {str(item.get("hash", "") or ""): item for item in source_findings if str(item.get("hash", "") or "")}
+        selected = [findings_by_hash[hash_] for hash_ in hashes if hash_ in findings_by_hash]
+        if not selected:
+            self._redirect(_with_query(target, error="Selected findings are no longer available."))
+            return
+        export_type = str(body.get("export_type", "html") or "html").strip().lower()
+        try:
+            report_name = _generate_selected_findings_artifact(selected, export_type=export_type, scan_id=requested_scan_id)
+        except Exception as exc:
+            self._redirect(_with_query(target, error=str(exc)))
+            return
+        self._redirect(f"/reports/{quote(report_name)}")
+
     def _page_settings_save(self, body: dict):
         if _require_role(self, ROLE_ADMIN):
             return
@@ -2521,7 +2643,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _serve_report(self, filename: str):
         """Serve a file from OUTPUT_DIR by name."""
         safe = Path(filename).name   # strip any path traversal
-        if _find_history_record_by_report_name(safe) is None:
+        if _find_history_record_by_report_name(safe) is None and not _runtime_report_allowed(safe):
             return self._err(403, "Report access denied")
         path = Path(OUTPUT_DIR).resolve() / safe
         if not path.exists():
