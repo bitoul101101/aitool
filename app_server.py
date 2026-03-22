@@ -490,6 +490,10 @@ def _issue_browser_session() -> tuple[str, str]:
     return _browser_session_store.issue()
 
 
+def _rotate_browser_session() -> tuple[str, str]:
+    return _browser_session_store.rotate()
+
+
 def _browser_cookie_value(handler) -> str:
     return _browser_session_store.extract_session_id(handler)
 
@@ -2182,7 +2186,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_login_page(error=str(e))
-        session_id, _csrf = _issue_browser_session()
+        session_id, _csrf = _rotate_browser_session()
         _queue_session_cookie(self, session_id)
         self._redirect(_with_query("/scan", new="1", notice="Connected to Bitbucket"))
 
@@ -2512,7 +2516,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 operator_state=_operator_state,
                 audit_event=_audit_event,
             )
-            session_id, csrf_token = _issue_browser_session()
+            session_id, csrf_token = _rotate_browser_session()
             _queue_session_cookie(self, session_id)
             payload = dict(response)
             payload["csrf_token"] = csrf_token

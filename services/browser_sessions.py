@@ -38,6 +38,17 @@ class BrowserSessionStore:
             }
         return session_id, csrf_token
 
+    def rotate(self) -> tuple[str, str]:
+        session_id = secrets.token_urlsafe(24)
+        csrf_token = secrets.token_urlsafe(24)
+        with self._lock:
+            self._sessions.clear()
+            self._sessions[session_id] = {
+                "csrf_token": csrf_token,
+                "issued_at": time.time(),
+            }
+        return session_id, csrf_token
+
     def extract_session_id(self, handler) -> str:
         headers = getattr(handler, "headers", {}) or {}
         raw = headers.get("Cookie", "") if hasattr(headers, "get") else ""

@@ -4006,6 +4006,56 @@ def test_api_repos_rejects_project_outside_scope():
         srv._operator_state = orig_state
 
 
+def test_api_connect_rotates_browser_sessions_and_invalidates_old_cookie():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.headers = {}
+            self.payload = None
+            self._response_cookies = []
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    original_sessions = dict(srv._browser_sessions)
+    orig_state = srv._operator_state
+    srv._browser_sessions.clear()
+    srv._browser_sessions["old-session"] = {"csrf_token": "old-csrf", "issued_at": time.time()}
+    try:
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Security Engineer",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Security Engineer",
+                    roles=(ROLE_VIEWER,),
+                    allowed_projects=("*",),
+                ),
+            )
+        )
+        handler = DummyHandler()
+        with patch.object(srv, "connect_operator", return_value={"ok": True, "projects": [{"key": "COGI"}], "owner": "Security Engineer"}):
+            srv._Handler._api_connect(handler, {"token": "demo"})
+
+        assert handler.payload[0] == 200
+        assert handler.payload[1]["ok"] is True
+        assert "csrf_token" in handler.payload[1]
+        assert len(srv._browser_sessions) == 1
+        new_session_id = next(iter(srv._browser_sessions))
+        assert new_session_id != "old-session"
+        assert "old-session" not in srv._browser_sessions
+        assert handler._response_cookies and f"ai_scanner_session={new_session_id};" in handler._response_cookies[0]
+    finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
 def test_viewer_cannot_read_triage_or_suppressions_api():
     import app_server as srv
 
