@@ -2413,7 +2413,34 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
                 "status_label": "Open",
                 "triage_note": "",
                 "last_seen_scan_id": "scan-2",
-            }
+            },
+            {
+                "hash": "hash-risk",
+                "project_key": "COGI",
+                "repo": "repo1",
+                "file": "app.py",
+                "line": "20",
+                "severity": 2,
+                "severity_label": "High",
+                "rule": "hardcoded_credential",
+                "capability": "Credential exposure",
+                "rule_label": "Hardcoded credential",
+                "ai_category": "Security",
+                "description": "Credential cannot be rotated yet",
+                "match": "password='legacy'",
+                "llm_reason": "",
+                "remediation": "",
+                "llm_secure_example": "",
+                "llm_verdict": "",
+                "llm_reviewed": False,
+                "snippet": "password='legacy'",
+                "last_seen_at": "2026-03-19T11:00:00Z",
+                "scan_count": 1,
+                "status": "accepted_risk",
+                "status_label": "Accepted Risk",
+                "triage_note": "Approved temporary exception",
+                "last_seen_scan_id": "scan-2",
+            },
         ],
         csrf_token="csrf-demo",
         scan_label="scan-2",
@@ -2453,6 +2480,8 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'class="finding-row"' in html
     assert 'data-match="OpenAI(api_key=' in html
     assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
+    assert 'class="pill status-stopped has-tooltip"' in html
+    assert '<strong>Justification</strong>Approved temporary exception' in html
     assert 'class="snippet-hit"' in html
     assert 'data-llm-reason="The code sends a hardcoded credential to an AI provider."' in html
 

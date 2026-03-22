@@ -816,7 +816,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     def _opts(values: list[str], label: str) -> str:
         return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
 
-    def _pill(status: str) -> str:
+    def _pill(status: str, note: str = "") -> str:
         key = str(status or "").lower().replace(" ", "_")
         css = {
             "open": "status-running",
@@ -827,6 +827,13 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
             "suppressed": "status-stopped",
             "fixed": "",
         }.get(key, "")
+        note_text = str(note or "").strip()
+        if note_text:
+            return (
+                f'<span class="pill {css} has-tooltip">{_esc(status)}'
+                f'<span class="status-tooltip" role="tooltip"><strong>Justification</strong>{_esc(note_text)}</span>'
+                '</span>'
+            )
         return f'<span class="pill {css}">{_esc(status)}</span>'
 
     def _severity_chip(detail: dict) -> str:
@@ -872,7 +879,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         rows.append(
             f'<tr class="finding-row" data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-category="{_esc(category)}" data-context="{_esc(item.get("context", "production"))}" data-ts="{ts}" data-llm-reason="{llm_reason}" data-remediation="{remediation}" data-llm-secure-example="{llm_secure_example}" data-snippet="{snippet}" data-match="{match_text}" data-llm-verdict="{llm_verdict}" data-llm-reviewed="{llm_reviewed}">'
             f'<td><input type="checkbox" class="finding-check" name="hashes" value="{_esc(item.get("hash", ""))}"></td>'
-            f'<td>{_pill(item.get("status_label", "Open"))}</td>'
+            f'<td>{_pill(item.get("status_label", "Open"), str(item.get("triage_note", "") or ""))}</td>'
             f'<td>{_severity_chip(item)}</td>'
             f'<td>{_esc(item.get("project_key", ""))}</td>'
             f'<td>{_esc(item.get("repo", ""))}</td>'

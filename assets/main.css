@@ -37,6 +37,11 @@ th,td{padding:8px 10px;border-bottom:1px solid #ead4ba;text-align:left;vertical-
 th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;white-space:normal;line-height:1.15}
 .hidden{display:none!important}
 .pill{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#efe1cf;color:#5d3b15;font-size:12px;font-weight:700}
+.pill.has-tooltip{position:relative;cursor:help}
+.status-tooltip{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%) translateY(4px);min-width:180px;max-width:280px;padding:10px 12px;border-radius:10px;background:#2b1a0d;color:#fff7ef;box-shadow:0 14px 28px rgba(18,10,4,.28);font-size:12px;line-height:1.4;font-weight:500;white-space:normal;text-align:left;opacity:0;pointer-events:none;transition:opacity .14s ease,transform .14s ease;z-index:20}
+.status-tooltip strong{display:block;margin-bottom:4px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#f3c68b}
+.status-tooltip::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);border-width:6px;border-style:solid;border-color:#2b1a0d transparent transparent transparent}
+.pill.has-tooltip:hover .status-tooltip,.pill.has-tooltip:focus-visible .status-tooltip{opacity:1;transform:translateX(-50%) translateY(0)}
 .status-running{background:#fff3d8;color:#8a5b00}
 .status-done{background:#e3f3e3;color:#225522}
 .status-stopped{background:#f6dddd;color:#7b1d1d}
