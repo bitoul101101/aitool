@@ -296,6 +296,11 @@ def _with_query(path: str, **params: str) -> str:
     return f"{path}?{urlencode(clean)}"
 
 
+def _clean_scan_id_param(value: object) -> str:
+    text = str(value or "").strip()
+    return "" if text.lower() in {"", "none", "null", "undefined"} else Path(text).name
+
+
 def _git_head_commit(repo_dir: Path) -> str:
     import subprocess as _sp
 
@@ -900,6 +905,22 @@ def _triage_by_hash() -> Dict[str, dict]:
     return triage_by_hash(SUPPRESSIONS_FILE)
 
 
+def _findings_return_target(handler) -> tuple[str, dict[str, str]]:
+    referer = str(getattr(handler, "headers", {}).get("Referer", "") or "")
+    if referer:
+        try:
+            parsed = urlparse(referer)
+            if parsed.path == "/findings":
+                scan_id = _clean_scan_id_param(parse_qs(parsed.query).get("scan_id", [""])[0])
+                return "/findings", {"scan_id": scan_id} if scan_id else {}
+        except Exception:
+            pass
+    current_scan_id = _clean_scan_id_param(_current_session_snapshot().get("scan_id", ""))
+    if current_scan_id:
+        return f"/scan/{current_scan_id}", {"tab": "activity"}
+    return "/scan", {"new": "1"}
+
+
 def _repos_for_project(project_key: str) -> list[dict]:
     if not project_key or not _operator_state.client:
         return []
@@ -1497,6 +1518,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return True
             self._render_findings_page()
             return True
+        if p.startswith("/findings/"):
+            if not _is_connected():
+                self._redirect("/login")
+                return True
+            if self._require_browser_session():
+                return True
+            scan_id = _clean_scan_id_param(p[10:])
+            self._redirect(_with_query("/findings", scan_id=scan_id) if scan_id else "/findings")
+            return True
         if p == "/inventory":
             if not _is_connected():
                 self._redirect("/login")
@@ -1994,7 +2024,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         qs = parse_qs(urlparse(self.path).query)
         history = _history_records_for_user()
-        requested_scan_id = Path(str(qs.get("scan_id", [""])[0] or "")).name
+        requested_scan_id = _clean_scan_id_param(qs.get("scan_id", [""])[0])
         triage = _triage_by_hash()
         scan_label = ""
         if requested_scan_id:
@@ -2258,7 +2288,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def _page_findings_bulk(self, body: dict):
         if _require_role(self, ROLE_TRIAGE):
             return
-        requested_scan_id = Path(str(body.get("scan_id", "") or "")).name
+        requested_scan_id = _clean_scan_id_param(body.get("scan_id", ""))
         target = _with_query("/findings", scan_id=requested_scan_id) if requested_scan_id else "/findings"
         hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
         action = str(body.get("action", "") or "").strip()
@@ -2342,7 +2372,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_VIEWER):
             return
         hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
-        requested_scan_id = Path(str(body.get("scan_id", "") or "")).name
+        requested_scan_id = _clean_scan_id_param(body.get("scan_id", ""))
         target = _with_query("/findings", scan_id=requested_scan_id) if requested_scan_id else "/findings"
         if not hashes:
             self._redirect(_with_query(target, error="Select at least one finding."))
@@ -2416,9 +2446,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_scan_page(error=str(e))
-        current_scan_id = _current_session_snapshot().get("scan_id", "")
-        target = f"/scan/{current_scan_id}" if current_scan_id else "/scan"
-        extra = {"tab": "activity"} if current_scan_id else {"new": "1"}
+        target, extra = _findings_return_target(self)
         self._redirect(_with_query(target, notice="Finding triage updated", **extra))
 
     def _page_finding_reset(self, body: dict):
@@ -2435,9 +2463,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self._render_scan_page(error=str(e))
-        current_scan_id = _current_session_snapshot().get("scan_id", "")
-        target = f"/scan/{current_scan_id}" if current_scan_id else "/scan"
-        extra = {"tab": "activity"} if current_scan_id else {"new": "1"}
+        target, extra = _findings_return_target(self)
         self._redirect(_with_query(target, notice="Finding triage reset", **extra))
 
     # ── API handlers ──────────────────────────────────────────────────────────

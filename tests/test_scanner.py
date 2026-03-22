@@ -4027,6 +4027,101 @@ def test_api_finding_triage_marks_sent_for_review_and_reset_clears_it():
         srv._invalidate_history_cache()
 
 
+def test_page_finding_triage_redirects_back_to_findings_and_ignores_none_scan_id():
+    import app_server as srv
+
+    class DummyHandler:
+        def __init__(self):
+            self.redirect_to = None
+            self.headers = {"Referer": "http://127.0.0.1:5757/findings?scan_id=None"}
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+        def _render_scan_page(self, error=""):
+            raise AssertionError(f"unexpected render_scan_page: {error}")
+
+    d = Path(tempfile.mkdtemp())
+    orig_sup = srv.SUPPRESSIONS_FILE
+    orig_session = srv._session
+    orig_state = srv._operator_state
+    srv.SUPPRESSIONS_FILE = str(d / "ai_scanner_suppressions.json")
+    srv._operator_state = SingleUserState(
+        SingleUserConfig(
+            name="Security Engineer",
+            expected_bitbucket_owner="",
+            ctx=UserContext(
+                username="Security Engineer",
+                roles=(ROLE_VIEWER, ROLE_SCANNER, ROLE_ADMIN, ROLE_TRIAGE),
+                allowed_projects=("*",),
+            ),
+        )
+    )
+
+    try:
+        session = srv.ScanSession()
+        finding = {
+            "_hash": "hash-r1",
+            "repo": "repo1",
+            "file": "service.py",
+            "line": 21,
+            "severity": 3,
+            "capability": "LLM Orchestration",
+            "description": "Detected orchestration usage",
+        }
+        session.scan_id = "20250316_060606"
+        session.project_key = "TEST"
+        session.repo_slugs = ["repo1"]
+        session.state = "done"
+        session.findings = [finding]
+        session.per_repo = {"repo1": [finding]}
+        srv._session = session
+
+        handler = DummyHandler()
+        srv._Handler._page_finding_triage(handler, {"hash": "hash-r1", "status": TRIAGE_SENT_FOR_REVIEW, "note": ""})
+
+        assert handler.redirect_to == "/findings?notice=Finding+triage+updated"
+    finally:
+        srv.SUPPRESSIONS_FILE = orig_sup
+        srv._session = orig_session
+        srv._operator_state = orig_state
+
+
+def test_handle_page_get_redirects_legacy_findings_path_to_query_form():
+    import app_server as srv
+    from urllib.parse import urlparse
+
+    class DummyHandler:
+        def __init__(self):
+            self.redirect_to = None
+
+        def _require_browser_session(self):
+            return False
+
+        def _redirect(self, location):
+            self.redirect_to = location
+
+    orig_is_connected = srv._is_connected
+    try:
+        srv._is_connected = lambda: True
+
+        handler = DummyHandler()
+        parsed = urlparse("/findings/None")
+        handled = srv._Handler._handle_page_get(handler, parsed)
+
+        assert handled is True
+        assert handler.redirect_to == "/findings"
+
+        handler = DummyHandler()
+        parsed = urlparse("/findings/20250316_060606")
+        handled = srv._Handler._handle_page_get(handler, parsed)
+
+        assert handled is True
+        assert handler.redirect_to == "/findings?scan_id=20250316_060606"
+    finally:
+        srv._is_connected = orig_is_connected
+
+
 def test_cleanup_stale_temp_clones_removes_leftovers():
     import app_server as srv
 
