@@ -65,6 +65,12 @@
     return Array.from(document.querySelectorAll(".repo-checkbox"));
   }
 
+  function clearRepoSelection() {
+    repoCheckboxes().forEach(function (cb) {
+      cb.checked = false;
+    });
+  }
+
   function updateRepoCount() {
     const selectedCount = repoCheckboxes().filter(function (cb) { return cb.checked; }).length;
     const hasLocalPath = Boolean(localRepoPathInput && localRepoPathInput.value.trim());
@@ -128,6 +134,12 @@
     }
     const usingLocal = Boolean(localRepoPathInput.value.trim());
     const hasProject = Boolean(projectKeyInput && projectKeyInput.value.trim());
+    if (usingLocal) {
+      clearRepoSelection();
+      if (repoSearch) {
+        repoSearch.value = "";
+      }
+    }
     repoCheckboxes().forEach(function (cb) {
       cb.disabled = usingLocal;
     });

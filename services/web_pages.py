@@ -452,10 +452,10 @@ def render_scan_page(
     running = state == "running"
     scan_complete = state in {"done", "stopped", "error"}
     start_blocked = running and force_selection
-    selected = set(selected_repos)
     scope_value = str(selected_scan_scope or "full").strip().lower() or "full"
     compare_ref_value = str(selected_compare_ref or "").strip()
     local_repo_path_value = str(selected_local_repo_path or "").strip()
+    selected = set() if local_repo_path_value else set(selected_repos)
     repo_count = len(repos)
     repo_cols = "cols-2" if repo_count <= 18 else "cols-3"
     project_links = "".join(

@@ -2135,6 +2135,26 @@ def test_scan_page_can_force_new_scan_selection_after_completion():
     assert 'value="repo1" checked' in html
 
 
+def test_scan_page_local_mode_clears_repo_checkboxes_in_rendered_html():
+    import app_server as srv
+
+    html = srv.render_scan_page(
+        projects=[{"key": "COGI"}],
+        selected_project="COGI",
+        repos=[{"slug": "repo1"}, {"slug": "repo2"}],
+        selected_repos=["repo1"],
+        status={"state": "idle"},
+        llm_cfg=srv.load_llm_config(),
+        llm_models=["m1"],
+        log_text="",
+        phase_timeline=[],
+        selected_local_repo_path=r"C:\repo",
+    ).decode("utf-8")
+
+    assert 'value="repo1" checked' not in html
+    assert 'value="repo2" checked' not in html
+
+
 def test_phase_timeline_hides_total_until_scan_finishes():
     import app_server as srv
 
@@ -3218,6 +3238,30 @@ def test_asset_route_serves_scan_page_js_with_settings_sync_refresh():
     assert handler.payload[1] == "application/javascript; charset=utf-8"
     assert b'event.key !== "phantomlm.settings.updated"' in handler.payload[2]
     assert b"refreshModels();" in handler.payload[2]
+
+
+def test_asset_route_serves_scan_page_js_that_clears_repo_selection_in_local_mode():
+    import app_server as srv
+
+    class DummyHandler:
+        path = "/assets/scan_page.js"
+
+        def __init__(self):
+            self.payload = None
+
+        def _send(self, status, content_type, body):
+            self.payload = (status, content_type, body)
+
+        def _404(self):
+            self.payload = ("404", None, None)
+
+    handler = DummyHandler()
+    srv._Handler.do_GET(handler)
+
+    assert handler.payload[0] == 200
+    assert handler.payload[1] == "application/javascript; charset=utf-8"
+    assert b"function clearRepoSelection()" in handler.payload[2]
+    assert b"clearRepoSelection();" in handler.payload[2]
 
 
 def test_scan_workspace_results_page_handles_missing_report():
