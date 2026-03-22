@@ -18,6 +18,7 @@
   const noReposMessage = document.getElementById("no-repos-message");
   const projectKeyInput = document.querySelector('#new-scan-form input[name="project_key"]');
   const logEl = document.getElementById("scan-log");
+  const logTextEl = document.querySelector("#scan-log .terminal-log-text");
   const textEl = document.getElementById("scan-state-text");
   const timelineEl = document.getElementById("phase-timeline");
   const baselineSummary = document.getElementById("baseline-summary");
@@ -40,7 +41,7 @@
   let submitInFlight = false;
   let redirectedToResults = false;
   let previousScanState = null;
-  let replaceInitialLog = Boolean(logEl && logEl.textContent.trim());
+  let replaceInitialLog = Boolean(logTextEl && logTextEl.textContent.trim());
   let stream = null;
   let statusPollInFlight = false;
   let statusPollAbortController = null;
@@ -555,7 +556,7 @@
   }
 
   function startLogStream() {
-    if (!logEl || stream) {
+    if (!logEl || !logTextEl || stream) {
       return;
     }
     stream = new EventSource("/api/scan/stream");
@@ -569,10 +570,10 @@
       } catch (_err) {
       }
       if (replaceInitialLog) {
-        logEl.textContent = line;
+        logTextEl.textContent = line;
         replaceInitialLog = false;
       } else {
-        logEl.textContent += (logEl.textContent.trim() ? "\n" : "") + line;
+        logTextEl.textContent += (logTextEl.textContent.trim() ? "\n" : "") + line;
       }
       logEl.scrollTop = logEl.scrollHeight;
     };

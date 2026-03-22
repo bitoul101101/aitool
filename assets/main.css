@@ -92,7 +92,7 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .wiki-toc-links a:hover{background:#efdfcd}
 .scan-sidebar-head{display:grid;gap:8px}
 .scan-actions{display:flex;gap:5px;flex-wrap:wrap}
-.scan-actions .warn,.scan-actions .btn{padding:4px 8px;font-size:11px}
+.scan-actions .warn,.scan-actions .btn{padding:5px 10px;font-size:12px}
 .state-icon{width:16px;height:16px;border-radius:50%;background:#2a7cff;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
 .state-icon.pending{background:#bfa78c}
 .state-icon.running{animation:blink 1s ease-in-out infinite}
@@ -102,10 +102,14 @@ th{background:#f0deca;font-size:11px;text-transform:uppercase;color:#67461f;whit
 .timeline-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;background:#f6ebdc;font-size:13px;align-items:center}
 .timeline-row.total-row,.timeline .timeline-row:last-child{margin-top:8px;padding-top:12px;border-top:2px solid #cfae8a;border-radius:0 0 10px 10px}
 .timeline-name{text-transform:capitalize}
-.terminal-shell{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px;height:calc(100vh - 220px);min-height:320px}
-.terminal{background:#18120d;color:#79f7a1;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:100%;max-height:none;min-height:0;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:13px;line-height:1.45;white-space:pre-wrap}
-.terminal-brand{margin:0;background:radial-gradient(circle at 50% 20%,rgba(125,76,255,.28),transparent 38%),#120b19;color:#b88cff;border:1px solid #3a2750;border-radius:12px;padding:14px 12px;height:100%;min-height:0;overflow:hidden;font-family:Cascadia Code,Consolas,monospace;font-size:12px;line-height:1.25;display:flex;align-items:flex-start;justify-content:center;white-space:pre}
-.activity-panel{height:100%;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.activity-main{display:grid;grid-template-columns:minmax(0,3.2fr) minmax(220px,.65fr);gap:10px;min-height:0}
+.activity-side-stack{display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;min-height:0}
+.terminal{background:#18120d;color:#79f7a1;border:1px solid #3f2a19;border-radius:12px;padding:12px;height:calc(100vh - 220px);max-height:none;min-height:320px;overflow:auto;font-family:Cascadia Code,Consolas,monospace;font-size:13px;line-height:1.45;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px;align-items:start}
+.terminal-log-text{min-width:0;white-space:pre-wrap}
+.terminal-brand-inline{margin:0;color:inherit;opacity:.88;font-family:inherit;font-size:12px;line-height:1.25;white-space:pre;justify-self:start;align-self:start}
+.activity-panel{height:100%;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px}
+.activity-timeline-card{padding:7px 9px}
+.activity-main #hardware-card{margin-top:0;min-height:0;overflow:auto}
 .running-shell>.stack{height:100%;min-height:0;overflow:auto;align-content:start;padding-right:2px}
 .timeline{display:grid;gap:8px}
 .timeline-row strong{justify-self:end}
@@ -342,4 +346,4 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @media (max-width:900px){header{grid-template-columns:1fr}.brand-lockup img{height:34px;max-width:210px}.header-nav,.header-actions{justify-content:flex-start}.selection-grid,.wiki-shell,.threat-support-grid{grid-template-columns:1fr}.repo-grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}.history-toolbar,.inventory-toolbar{grid-template-columns:1fr 1fr}.inventory-summary-cards,.trend-summary-grid,.threat-overview-grid{grid-template-columns:1fr 1fr}.table-shell{max-height:none}.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.hardware-grid{grid-template-columns:1fr}.trend-grid{grid-template-columns:1fr}.trend-dashboard-tools{flex-direction:column;align-items:flex-start}.trend-panel{grid-column:1 / -1!important;grid-row:auto!important}.wiki-toc{position:static}}
-@media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell,.threat-overview-grid{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}.findings-shell{height:auto}.findings-table-shell{max-height:calc(100vh - 260px)}.terminal-shell{grid-template-columns:1fr}.terminal-brand{display:none}}
+@media (max-width:680px){.repo-toolbar,.history-toolbar,.inventory-toolbar,.results-toolbar,.workspace-header{grid-template-columns:1fr}.history-toolbar,.inventory-toolbar{display:grid}.repo-grid.cols-2,.repo-grid.cols-3,.running-shell,.baseline-grid,.inventory-summary-cards,.trend-summary-grid,.wiki-shell,.threat-overview-grid,.activity-main{grid-template-columns:1fr}.inventory-grid,.inventory-grid-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.results-actions{justify-content:flex-start}.trend-bar-row{grid-template-columns:1fr}.trend-bar-value{text-align:left}.findings-shell{height:auto}.findings-table-shell{max-height:calc(100vh - 260px)}.terminal{grid-template-columns:1fr}.terminal-brand-inline{display:none}.activity-side-stack{grid-template-rows:auto auto}.activity-main #hardware-card{height:auto;overflow:visible}}

@@ -1705,9 +1705,11 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert 'id="perf-llm-outcomes"' not in html
     assert '<div class="workspace-header">' in html
     assert 'id="new-scan-btn"' not in html
-    assert 'class="terminal-shell"' in html
-    assert 'class="terminal-brand"' in html
-    assert "____  _" in html
+    assert 'class="activity-main"' in html
+    assert 'class="activity-side-stack"' in html
+    assert 'class="terminal-log-text"' in html
+    assert 'class="terminal-brand-inline"' in html
+    assert "____  _                 _                  _     __  __" in html
     assert "Results Actions" not in html
     assert 'id="reports-card"' not in html
     assert 'id="hardware-process"' not in html

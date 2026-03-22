@@ -678,23 +678,27 @@ def render_scan_page(
       <h2>Activity Log</h2>
       <div class="scan-actions">{stop_button if running else ""}</div>
     </div>
-    <div class="terminal-shell">
-      <div class="terminal" id="scan-log">{_esc(log_text or "No activity yet.")}</div>
-      <pre class="terminal-brand" aria-hidden="true">{_esc(r"""
-  ____  _                 _                 __  __
- |  _ \| |__   __ _ _ __ | |_ ___  _ __ ___|  \/  |
- | |_) | '_ \ / _` | '_ \| __/ _ \| '_ ` _ \ |\/| |
- |  __/| | | | (_| | | | | || (_) | | | | | | |  | |
- |_|   |_| |_|\__,_|_| |_|\__\___/|_| |_| |_|_|  |_|
+    <div class="activity-main">
+      <div class="terminal" id="scan-log">
+        <div class="terminal-log-text">{_esc(log_text or "No activity yet.")}</div>
+        <pre class="terminal-brand-inline" aria-hidden="true">{_esc(r"""
+  ____  _                 _                  _     __  __
+ |  _ \| |__   __ _ _ __ | |_ ___  _ __ ___ | |   |  \/  |
+ | |_) | '_ \ / _` | '_ \| __/ _ \| '_ ` _ \| |   | |\/| |
+ |  __/| | | | (_| | | | | || (_) | | | | | | |___| |  | |
+ |_|   |_| |_|\__,_|_| |_|\__\___/|_| |_| |_|_____|_|  |_|
 """).strip()}</pre>
+      </div>
+      <div class="activity-side-stack">
+        <section class="card timeline-card activity-timeline-card">
+          <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
+          <div class="timeline" id="phase-timeline">{timeline_html}</div>
+        </section>
+        {hardware_html}
+      </div>
     </div>
   </section>
   <aside class="stack">
-    <section class="card timeline-card">
-      <h2 style="margin:0 0 8px;font-size:16px">Phase Timeline</h2>
-      <div class="timeline" id="phase-timeline">{timeline_html}</div>
-    </section>
-    {hardware_html}
     {errors_html}
     {baseline_html}
     {inventory_html}
