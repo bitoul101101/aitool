@@ -5865,6 +5865,42 @@ def test_run_scan_with_no_repos_completes_cleanly():
     assert all(ord(ch) < 128 for entry in session.log_lines for ch in entry["msg"])
 
 
+def test_run_scan_local_mode_does_not_require_bitbucket_git_env():
+    import app_server as srv
+
+    d = Path(tempfile.mkdtemp())
+    repo_dir = d / "repo1"
+    repo_dir.mkdir()
+    (repo_dir / "app.py").write_text("print('hello')\n", encoding="utf-8")
+
+    session = srv.ScanSession()
+    session.scan_id = "20250316_015959"
+    session.project_key = "LOCAL"
+    session.scan_source = "local"
+    session.local_repo_path = str(repo_dir)
+    session.repo_slugs = ["repo1"]
+    session.total = 1
+    session.state = "running"
+    session.operator = "Smoke User"
+
+    orig_client = srv._operator_state.client
+    try:
+        srv._operator_state.client = object()
+        with patch.object(srv, "_ollama_ping", return_value=False), \
+             patch.object(srv._scan_service, "_ensure_ollama_running", return_value=(False, "unavailable")), \
+             patch.object(srv, "_save_history_record", lambda session, findings: None), \
+             patch.object(srv._scan_service, "_git_branch_name", return_value="main"), \
+             patch.object(srv._scan_service, "_git_head_commit", return_value="abc123"), \
+             patch("services.scan_jobs.AIUsageDetector.scan", return_value=[]):
+            srv._run_scan(session)
+    finally:
+        srv._operator_state.client = orig_client
+
+    assert session.state in {"done", "skipped"}
+    assert session.findings == []
+    assert any("source:local" in entry["msg"] for entry in session.log_lines)
+
+
 def test_run_scan_logs_structured_metadata_fetch_errors():
     import app_server as srv
     from requests import RequestException

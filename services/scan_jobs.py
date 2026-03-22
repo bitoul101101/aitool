@@ -1183,7 +1183,9 @@ class ScanJobService:
         session.set_phase_time("init", time.time() - t_start)
 
         repo_meta: Dict[str, dict] = {}
-        git_env = client.build_git_auth_env() if client is not None else {}
+        git_env = {}
+        if session.scan_source != "local" and client is not None:
+            git_env = client.build_git_auth_env()
         local_root = Path(session.local_repo_path).expanduser() if session.local_repo_path else None
         for slug in session.repo_slugs:
             if stop.is_set():
