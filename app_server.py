@@ -922,7 +922,7 @@ def _findings_return_target(handler) -> tuple[str, dict[str, str]]:
 
 
 def _repos_for_project(project_key: str) -> list[dict]:
-    if not project_key or not _operator_state.client:
+    if not project_key or str(project_key).strip().upper() == "LOCAL" or not _operator_state.client:
         return []
     repos = _operator_state.repos_cache.get(project_key)
     if repos is None:
@@ -1451,7 +1451,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         qs = parse_qs(parsed.query)
         key = qs.get("project", [""])[0]
-        if not key or not _operator_state.client:
+        if not key or str(key).strip().upper() == "LOCAL" or not _operator_state.client:
             return self._json({"repos": []})
         if _require_project_access(self, key):
             return

@@ -107,19 +107,16 @@ def _highlight_snippet(snippet: str, match: str, limit: int = 240) -> str:
     return f'{escaped[:idx]}<mark class="snippet-hit">{escaped_match}</mark>{escaped[idx + len(escaped_match):]}'
 
 
-def _scan_workspace_tabs(scan_id: str, active_tab: str = "activity", *, results_enabled: bool = True) -> str:
+def _scan_workspace_tabs(scan_id: str, active_tab: str = "activity", *, results_enabled: bool = True, include_results: bool = True) -> str:
     safe_scan_id = _esc(scan_id)
-    results_link = (
-        f'<a class="{"active" if active_tab == "results" else ""}" href="/scan/{safe_scan_id}?tab=results">Results</a>'
-        if results_enabled
-        else '<a class="disabled" aria-disabled="true">Results</a>'
-    )
-    return (
-        '<nav class="subnav" aria-label="Scan workspace">'
-        + f'<a class="{"active" if active_tab == "activity" else ""}" href="/scan/{safe_scan_id}?tab=activity">Activity</a>'
-        + results_link
-        + "</nav>"
-    )
+    links = [f'<a class="{"active" if active_tab == "activity" else ""}" href="/scan/{safe_scan_id}?tab=activity">Activity</a>']
+    if include_results:
+        links.append(
+            f'<a class="{"active" if active_tab == "results" else ""}" href="/scan/{safe_scan_id}?tab=results">Results</a>'
+            if results_enabled
+            else '<a class="disabled" aria-disabled="true">Results</a>'
+        )
+    return '<nav class="subnav" aria-label="Scan workspace">' + "".join(links) + "</nav>"
 
 
 def _current_scan_nav_item(current_scan: dict | None, active: str) -> str:
@@ -677,7 +674,7 @@ def render_scan_page(
   </section>
 </section>
 <form method="post" action="/scan/stop" id="stop-form">{_csrf_field(csrf_token)}</form>"""
-    workspace_tabs = _scan_workspace_tabs(scan_id, workspace_tab, results_enabled=scan_complete) if scan_id else ""
+    workspace_tabs = _scan_workspace_tabs(scan_id, workspace_tab, results_enabled=scan_complete, include_results=False) if scan_id else ""
     running_view = f"""
 <section class="running-shell">
   <section class="card activity-panel">

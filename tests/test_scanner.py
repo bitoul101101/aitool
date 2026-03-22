@@ -1692,8 +1692,8 @@ def test_scan_page_renders_triage_and_suppression_actions_for_active_scan_view()
     assert "LLM Batch Timings" not in html
     assert "LLM Stats" not in html
     assert html.index("Phase Timeline") < html.index("Performance")
-    assert 'href="/scan/20260317_154037?tab=results"' in html
     assert 'href="/scan/20260317_154037?tab=activity"' in html
+    assert '>Results</a>' not in html
     assert 'id="hardware-gpu"' in html
     assert 'id="hardware-disk-io"' in html
     assert 'id="hardware-cpu-graph"' in html
@@ -3908,6 +3908,76 @@ def test_api_repos_rejects_project_outside_scope():
         srv._Handler.do_GET(handler)
         assert handler.payload[0] == 403
         assert "project access denied" in handler.payload[1]["error"]
+    finally:
+        srv._browser_sessions.clear()
+        srv._browser_sessions.update(original_sessions)
+        srv._operator_state = orig_state
+
+
+def test_repos_for_project_skips_local_project_without_calling_bitbucket():
+    import app_server as srv
+
+    class DummyClient:
+        def list_repos(self, project_key):
+            raise AssertionError(f"should not query Bitbucket for {project_key}")
+
+    orig_state = srv._operator_state
+    try:
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Analyst",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Analyst",
+                    roles=(ROLE_VIEWER, ROLE_SCANNER),
+                    allowed_projects=("*",),
+                ),
+            )
+        )
+        srv._operator_state.client = DummyClient()
+        assert srv._repos_for_project("LOCAL") == []
+    finally:
+        srv._operator_state = orig_state
+
+
+def test_api_repos_returns_empty_for_local_project():
+    import app_server as srv
+    from urllib.parse import urlparse
+
+    class DummyClient:
+        def list_repos(self, project_key):
+            raise AssertionError(f"should not query Bitbucket for {project_key}")
+
+    class DummyHandler:
+        def __init__(self):
+            self.headers = {"Cookie": "ai_scanner_session=valid-session"}
+            self.payload = None
+
+        def _json(self, data, status=200):
+            self.payload = (status, data)
+
+        def _err(self, status, msg):
+            self.payload = (status, {"error": msg})
+            return None
+
+    orig_state = srv._operator_state
+    original_sessions = _install_browser_session(srv)
+    try:
+        srv._operator_state = SingleUserState(
+            SingleUserConfig(
+                name="Analyst",
+                expected_bitbucket_owner="",
+                ctx=UserContext(
+                    username="Analyst",
+                    roles=(ROLE_VIEWER, ROLE_SCANNER),
+                    allowed_projects=("*",),
+                ),
+            )
+        )
+        srv._operator_state.client = DummyClient()
+        handler = DummyHandler()
+        srv._Handler._api_repos_get(handler, urlparse("/api/repos?project=LOCAL"))
+        assert handler.payload == (200, {"repos": []})
     finally:
         srv._browser_sessions.clear()
         srv._browser_sessions.update(original_sessions)
