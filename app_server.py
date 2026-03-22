@@ -98,6 +98,7 @@ from services.scan_runtime_views import (
 )
 from services.trends import compute_history_trends
 from services.web_pages import (
+    _scan_results_toolbar_actions,
     render_findings_page,
     render_help_page,
     render_history_page,
@@ -1936,9 +1937,24 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             findings = build_scan_findings(record, triage)
             scan_label = requested_scan_id
             findings_notice = ""
+            report = dict((record.get("reports") or {}).get("__all__", {}) or {})
+            report_actions_html = _scan_results_toolbar_actions(
+                scan_id=requested_scan_id,
+                html_name=report.get("html_name", ""),
+                html_detail_mode=report.get("html_detail_mode", ""),
+                csv_name=report.get("csv_name", ""),
+                json_name=report.get("json_name", ""),
+                sarif_name=report.get("sarif_name", ""),
+                threat_dragon_name=report.get("threat_dragon_name", ""),
+                log_url=f"/api/history/log/{requested_scan_id}",
+                can_generate_html=bool(list(record.get("findings") or [])),
+                html_generation=_report_generation_status(requested_scan_id),
+                csrf_token=_current_csrf_token(self),
+            )
         else:
             findings = build_findings_rollups(history, triage)
             findings_notice = findings_history_notice(history)
+            report_actions_html = ""
         merged_notice = " ".join(part for part in [notice or (qs.get("notice", [""])[0] or ""), findings_notice] if part).strip()
         html = render_findings_page(
             findings=findings,
@@ -1948,6 +1964,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             show_scan_results=_has_scan_results(),
             current_scan=_current_scan_nav_context(),
             scan_label=scan_label,
+            scan_actions_html=report_actions_html,
         )
         self._send(200, "text/html; charset=utf-8", html)
 

@@ -124,6 +124,73 @@ def _current_scan_nav_item(current_scan: dict | None, active: str) -> str:
     return f'<a class="nav current-scan-nav{" active" if active == "current_scan" else ""}" href="/scan/{_esc(scan_id)}?tab=activity">Current Scan</a>'
 
 
+def _scan_results_toolbar_actions(
+    *,
+    scan_id: str,
+    html_name: str,
+    html_detail_mode: str = "",
+    csv_name: str = "",
+    json_name: str = "",
+    sarif_name: str = "",
+    threat_dragon_name: str = "",
+    log_url: str = "",
+    can_generate_html: bool = False,
+    html_generation: dict | None = None,
+    csrf_token: str = "",
+) -> str:
+    html_generation = dict(html_generation or {})
+    generation_state = str(html_generation.get("state", "") or "").lower()
+    generation_active = generation_state in {"queued", "running"}
+    generation_mode = str(html_generation.get("detail_mode", "") or "").strip().lower()
+    generation_mode_label = "Fast" if generation_mode == "fast" else "Detailed"
+    html_detail_mode = str(html_detail_mode or "").strip().lower()
+    toolbar_actions = []
+    if html_name:
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
+        if can_generate_html and not generation_active and html_detail_mode == "fast":
+            toolbar_actions.append(
+                f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
+                f'{_csrf_field(csrf_token)}'
+                '<input type="hidden" name="html_detail_mode" value="detailed" />'
+                '<button type="submit" class="btn alt">Generate Detailed HTML</button>'
+                '</form>'
+            )
+    elif can_generate_html and not generation_active:
+        toolbar_actions.append(
+            f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
+            f'{_csrf_field(csrf_token)}'
+            '<input type="hidden" name="html_detail_mode" value="fast" />'
+            '<button type="submit" class="btn alt">Generate Fast HTML</button>'
+            '</form>'
+        )
+        toolbar_actions.append(
+            f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
+            f'{_csrf_field(csrf_token)}'
+            '<input type="hidden" name="html_detail_mode" value="detailed" />'
+            '<button type="submit" class="btn alt">Generate Detailed HTML</button>'
+            '</form>'
+        )
+    elif generation_active:
+        toolbar_actions.append(f'<button type="button" class="btn alt disabled" disabled>Generating {generation_mode_label} HTML...</button>')
+    if csv_name:
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
+    if json_name:
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(json_name)}" download>Download JSON</a>')
+    if sarif_name:
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(sarif_name)}" download>Download SARIF</a>')
+    if threat_dragon_name:
+        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(threat_dragon_name)}" download>Download Threat Dragon</a>')
+    if log_url:
+        toolbar_actions.append(f'<a class="btn ghost" href="{_esc(log_url)}" download>Download Logs</a>')
+    toolbar_actions.append(
+        f'<form method="post" action="/scan/{_esc(scan_id)}/replay-threat-model" class="triage-form inline-only">'
+        f'{_csrf_field(csrf_token)}'
+        '<button type="submit" class="btn ghost">Replay Threat Model</button>'
+        '</form>'
+    )
+    return "".join(toolbar_actions)
+
+
 def _layout(*, title: str, body: str, active: str = "", show_nav: bool = True, show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
     nav = ""
     body_class = "login-page" if not show_nav else ""
@@ -721,7 +788,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
     return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None, scan_label: str = "") -> bytes:
+def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None, scan_label: str = "", scan_actions_html: str = "") -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")})
     repos = sorted({str(item.get("repo", "")) for item in findings if item.get("repo")})
     rules = sorted({
@@ -807,6 +874,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
   <section class="card findings-shell">
     <form method="post" action="/findings/bulk" id="findings-form" class="findings-form">
     {_csrf_field(csrf_token)}
+    {f'<section class="card" style="margin-bottom:8px"><div class="results-actions">{scan_actions_html}</div></section>' if scan_actions_html else ''}
     {f'<div class="warn-box" style="margin-bottom:8px">Showing findings for scan {_esc(scan_label)}.</div>' if scan_label else ''}
     <section class="trend-summary-grid" style="margin-bottom:12px">
       <div class="trend-summary-card"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
@@ -894,50 +962,6 @@ def render_results_page(
     generation_mode = str(html_generation.get("detail_mode", "") or "").strip().lower()
     generation_mode_label = "Fast" if generation_mode == "fast" else "Detailed"
     html_detail_mode = str(html_detail_mode or "").strip().lower()
-    toolbar_actions = []
-    if html_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(html_name)}" target="_blank">Open Raw HTML</a>')
-        if can_generate_html and not generation_active and html_detail_mode == "fast":
-            toolbar_actions.append(
-                f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
-                f'{_csrf_field(csrf_token)}'
-                '<input type="hidden" name="html_detail_mode" value="detailed" />'
-                '<button type="submit" class="btn alt">Generate Detailed HTML</button>'
-                '</form>'
-            )
-    elif can_generate_html and not generation_active:
-        toolbar_actions.append(
-            f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
-            f'{_csrf_field(csrf_token)}'
-            '<input type="hidden" name="html_detail_mode" value="fast" />'
-            '<button type="submit" class="btn alt">Generate Fast HTML</button>'
-            '</form>'
-        )
-        toolbar_actions.append(
-            f'<form method="post" action="/scan/{_esc(scan_id)}/generate-html" class="triage-form inline-only">'
-            f'{_csrf_field(csrf_token)}'
-            '<input type="hidden" name="html_detail_mode" value="detailed" />'
-            '<button type="submit" class="btn alt">Generate Detailed HTML</button>'
-            '</form>'
-        )
-    elif generation_active:
-        toolbar_actions.append(f'<button type="button" class="btn alt disabled" disabled>Generating {generation_mode_label} HTML...</button>')
-    if csv_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(csv_name)}" download>Download CSV File</a>')
-    if json_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(json_name)}" download>Download JSON</a>')
-    if sarif_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(sarif_name)}" download>Download SARIF</a>')
-    if threat_dragon_name:
-        toolbar_actions.append(f'<a class="btn alt" href="/reports/{_esc(threat_dragon_name)}" download>Download Threat Dragon</a>')
-    if log_url:
-        toolbar_actions.append(f'<a class="btn ghost" href="{_esc(log_url)}" download>Download Logs</a>')
-    toolbar_actions.append(
-        f'<form method="post" action="/scan/{_esc(scan_id)}/replay-threat-model" class="triage-form inline-only">'
-        f'{_csrf_field(csrf_token)}'
-        '<button type="submit" class="btn ghost">Replay Threat Model</button>'
-        '</form>'
-    )
     progress_card = ""
     if generation_state:
         progress_text = str(html_generation.get("message", "") or "")
@@ -979,9 +1003,6 @@ def render_results_page(
   <section class="card">
     <div class="results-toolbar">
       {workspace_tabs}
-      <div class="results-actions">
-        {''.join(toolbar_actions)}
-      </div>
     </div>
   </section>
   {progress_card}

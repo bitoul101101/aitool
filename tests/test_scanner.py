@@ -2404,6 +2404,8 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
             }
         ],
         csrf_token="csrf-demo",
+        scan_label="scan-2",
+        scan_actions_html='<a class="btn alt" href="/reports/scan.csv" download>Download CSV File</a><button type="button" class="btn ghost">Replay Threat Model</button>',
     ).decode("utf-8")
 
     assert "Findings" in html
@@ -2424,6 +2426,9 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert "Category" in html
     assert "Debug mode in production" in html
     assert "Security" in html
+    assert "Showing findings for scan scan-2." in html
+    assert "Download CSV File" in html
+    assert "Replay Threat Model" in html
     assert 'class="finding-row"' in html
     assert 'data-match="OpenAI(api_key=' in html
     assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
@@ -2646,13 +2651,13 @@ def test_results_page_is_server_rendered():
     ).decode("utf-8")
 
     assert '<iframe class="results-frame" src="/reports/scan.html"' in html
-    assert 'Open Raw HTML' in html
-    assert 'Download CSV File' in html
-    assert 'Download JSON' in html
-    assert 'Download SARIF' in html
-    assert 'Download Threat Dragon' in html
-    assert 'Download Logs' in html
-    assert 'Replay Threat Model' in html
+    assert 'Open Raw HTML' not in html
+    assert 'Download CSV File' not in html
+    assert 'Download JSON' not in html
+    assert 'Download SARIF' not in html
+    assert 'Download Threat Dragon' not in html
+    assert 'Download Logs' not in html
+    assert 'Replay Threat Model' not in html
     assert 'href="/scan/20260318_140208?tab=activity"' in html
     assert 'href="/scan/20260318_140208?tab=results"' in html
     assert '<h2>Results</h2>' not in html
@@ -2679,9 +2684,9 @@ def test_results_page_keeps_detailed_generation_available_after_fast_html():
         csrf_token="csrf-demo",
     ).decode("utf-8")
 
-    assert 'Open Raw HTML' in html
-    assert 'name="html_detail_mode" value="detailed"' in html
-    assert "Generate Detailed HTML" in html
+    assert 'Open Raw HTML' not in html
+    assert 'name="html_detail_mode" value="detailed"' not in html
+    assert "Generate Detailed HTML" not in html
     assert "Generate Fast HTML" not in html
 
 
@@ -2721,14 +2726,14 @@ def test_results_page_offers_on_demand_html_generation_when_findings_exist():
     ).decode("utf-8")
 
     assert "HTML report has not been generated yet." in html
-    assert 'action="/scan/20260318_140208/generate-html"' in html
-    assert 'name="html_detail_mode" value="fast"' in html
-    assert 'name="html_detail_mode" value="detailed"' in html
-    assert "Generate Fast HTML" in html
-    assert "Generate Detailed HTML" in html
-    assert "Download CSV File" in html
-    assert "Download Threat Dragon" in html
-    assert "Replay Threat Model" in html
+    assert 'action="/scan/20260318_140208/generate-html"' not in html
+    assert 'name="html_detail_mode" value="fast"' not in html
+    assert 'name="html_detail_mode" value="detailed"' not in html
+    assert "Generate Fast HTML" not in html
+    assert "Generate Detailed HTML" not in html
+    assert "Download CSV File" not in html
+    assert "Download Threat Dragon" not in html
+    assert "Replay Threat Model" not in html
     assert '<iframe class="results-frame"' not in html
 
 
@@ -2752,7 +2757,6 @@ def test_results_page_shows_html_generation_progress_card():
     assert "Generating LLM analysis 3/12..." in html
     assert 'data-report-generation-active="1"' in html
     assert 'src="/assets/results_page.js"' in html
-    assert "Generating Detailed HTML..." in html
 
 
 def test_html_report_fast_mode_skips_llm_detail_fetch(tmp_path):
