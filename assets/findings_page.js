@@ -200,8 +200,8 @@
     renderPage();
   }
 
-  document.querySelectorAll("#findings-table thead th[data-sort]").forEach((th, index) => {
-    th.addEventListener("click", () => sortRows(index + 1, th.dataset.sort));
+  document.querySelectorAll("#findings-table thead th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => sortRows(Number(th.dataset.colIndex || 0), th.dataset.sort));
   });
   [search, project, repo, status, severity, rule].forEach((el) => el?.addEventListener("input", applyFilters));
   [project, repo, status, severity, rule].forEach((el) => el?.addEventListener("change", applyFilters));
@@ -247,5 +247,5 @@
       renderPage();
     }
   });
-  sortRows(8, "datetime");
+  sortRows(10, "datetime");
 })();

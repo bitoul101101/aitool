@@ -2343,6 +2343,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
                 "rule": "debug_mode",
                 "capability": "Debug mode in production",
                 "rule_label": "Debug mode in production",
+                "ai_category": "Security",
                 "description": "Hardcoded key next to AI client use",
                 "llm_reason": "The code sends a hardcoded credential to an AI provider.",
                 "remediation": "Move the credential to an environment variable and rotate it.",
@@ -2371,11 +2372,13 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'id="apply-findings-action-btn"' in html
     assert 'id="findings-select-all"' in html
     assert 'src="/assets/findings_page.js"' in html
-    assert "File:Line" in html
+    assert "File : Line / Code" in html
     assert "<th>Note</th>" not in html
     assert 'sev-chip sev-critical' in html
+    assert "Potential Risk" in html
+    assert "Category" in html
     assert "Debug mode in production" in html
-    assert '?tab=results' in html
+    assert "Security" in html
     assert 'class="finding-row"' in html
     assert 'data-llm-reason="The code sends a hardcoded credential to an AI provider."' in html
 

@@ -745,13 +745,21 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         }.get(sev, "sev-low")
         return f'<span class="sev-chip {sev_css}">{_esc(label)}</span>'
 
+    def _context_badge(context: str) -> str:
+        key = str(context or "production")
+        label, css = {
+            "production": ("Prod", "ctx-prod"),
+            "test": ("Test", "ctx-test"),
+            "docs": ("Docs", "ctx-docs"),
+            "deleted_file": ("History", "ctx-history"),
+        }.get(key, ("?", "ctx-prod"))
+        return f'<span class="ctx-chip {css}">{_esc(label)}</span>'
+
     rows = []
     for item in findings:
         date_text, time_text, ts = _fmt_dt(str(item.get("last_seen_at", "") or item.get("first_seen_at", "")))
         rule_label = str(item.get("rule_label", "") or format_rule_label(str(item.get("rule", "") or ""), str(item.get("capability", "") or "")))
-        details_link = ""
-        if item.get("last_seen_scan_id"):
-            details_link = f'<a class="icon-link" href="/scan/{_esc(item.get("last_seen_scan_id", ""))}?tab=results" title="Open latest scan results"><img src="{DETAILS_ICON}" alt="Details"></a>'
+        category = str(item.get("ai_category", "") or item.get("category", "") or "")
         file_line = _esc(item.get("file", ""))
         line_value = str(item.get("line", "") or "").strip()
         if line_value:
@@ -761,19 +769,22 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         snippet = _esc(item.get("snippet", ""))
         llm_verdict = _esc(item.get("llm_verdict", ""))
         llm_reviewed = "1" if item.get("llm_reviewed") else "0"
+        snippet_preview = ""
+        if item.get("snippet"):
+            snippet_preview = f'<div class="finding-inline-snip">{_esc(str(item.get("snippet", ""))[:240])}</div>'
         rows.append(
-            f'<tr class="finding-row" data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-ts="{ts}" data-llm-reason="{llm_reason}" data-remediation="{remediation}" data-snippet="{snippet}" data-llm-verdict="{llm_verdict}" data-llm-reviewed="{llm_reviewed}">'
+            f'<tr class="finding-row" data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-category="{_esc(category)}" data-context="{_esc(item.get("context", "production"))}" data-ts="{ts}" data-llm-reason="{llm_reason}" data-remediation="{remediation}" data-snippet="{snippet}" data-llm-verdict="{llm_verdict}" data-llm-reviewed="{llm_reviewed}">'
             f'<td><input type="checkbox" class="finding-check" name="hashes" value="{_esc(item.get("hash", ""))}"></td>'
             f'<td>{_pill(item.get("status_label", "Open"))}</td>'
             f'<td>{_severity_chip(item)}</td>'
-            f'<td>{_esc(rule_label)}</td>'
             f'<td>{_esc(item.get("project_key", ""))}</td>'
             f'<td>{_esc(item.get("repo", ""))}</td>'
-            f'<td>{file_line}</td>'
-            f'<td>{_esc(item.get("description", ""))}</td>'
+            f'<td>{_esc(category)}</td>'
+            f'<td>{_esc(rule_label)}</td>'
+            f'<td>{_esc(item.get("capability", ""))}</td>'
+            f'<td class="findings-context-cell">{_context_badge(str(item.get("context", "production") or "production"))}</td>'
+            f'<td class="finding-file-cell"><div>{file_line}</div>{snippet_preview}</td>'
             f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
-            f'<td>{_esc(item.get("scan_count", 0))}</td>'
-            f'<td>{details_link}</td>'
             '</tr>'
         )
 
@@ -813,16 +824,16 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         <thead>
           <tr>
             <th><input type="checkbox" id="findings-select-all" aria-label="Select all displayed findings"></th>
-            <th data-sort="text">Status</th>
-            <th data-sort="text">Severity</th>
-            <th data-sort="text">Rule</th>
-            <th data-sort="text">Project</th>
-            <th data-sort="text">Repo</th>
-            <th data-sort="text">File:Line</th>
-            <th data-sort="text">Why Flagged</th>
-            <th data-sort="datetime">Last Seen</th>
-            <th data-sort="number">Scans</th>
-            <th>Details</th>
+            <th data-sort="text" data-col-index="1">Status</th>
+            <th data-sort="text" data-col-index="2">Severity</th>
+            <th data-sort="text" data-col-index="3">Project</th>
+            <th data-sort="text" data-col-index="4">Repository</th>
+            <th data-sort="text" data-col-index="5">Category</th>
+            <th data-sort="text" data-col-index="6">Potential Risk</th>
+            <th data-sort="text" data-col-index="7">Capability</th>
+            <th data-sort="text" data-col-index="8">Context</th>
+            <th data-sort="text" data-col-index="9">File : Line / Code</th>
+            <th data-sort="datetime" data-col-index="10">Last Seen</th>
           </tr>
         </thead>
         <tbody>{''.join(rows) or '<tr><td colspan="11">No findings available.</td></tr>'}</tbody>

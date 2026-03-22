@@ -214,8 +214,10 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 #findings-table th,#findings-table td{font-size:13px;line-height:1.25}
 #findings-table .finding-check{width:18px;height:18px}
 #findings-table .sev-chip{font-size:11px;padding:3px 8px}
+#findings-table th:nth-child(2),#findings-table td:nth-child(2),
+#findings-table th:nth-child(3),#findings-table td:nth-child(3),
 #findings-table th:nth-child(9),#findings-table td:nth-child(9),
-#findings-table th:nth-child(10),#findings-table td:nth-child(10){text-align:center}
+#findings-table th:nth-child(11),#findings-table td:nth-child(11){text-align:center}
 #findings-table tr.finding-row{cursor:pointer}
 #findings-table tr.finding-row:hover td{background:#f4eadb}
 #findings-table tr.row-expanded td{background:#fbf2e8}
@@ -229,6 +231,13 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .finding-detail-note{color:#7a5d3e;font-size:12px}
 .finding-detail-panel .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .finding-detail-panel .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid #d8b995;color:#5f3f1c;font-size:11px;font-weight:700}
+.ctx-chip{display:inline-flex;align-items:center;justify-content:center;min-width:54px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:1px solid transparent}
+.ctx-prod{color:#705333;border-color:#705333;background:transparent}
+.ctx-test{color:#9e9e9e;border-color:#9e9e9e;background:rgba(158,158,158,.12)}
+.ctx-docs{color:#0277bd;border-color:#0277bd;background:rgba(2,119,189,.12)}
+.ctx-history{color:#7b5ea7;border-color:#7b5ea7;background:rgba(123,94,167,.12)}
+.finding-file-cell{min-width:240px}
+.finding-inline-snip{display:block;margin-top:6px;padding:8px 10px;border-radius:6px;background:#18120d;color:#f5debe;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
 #history-table{font-size:13px}
 #history-table th,#history-table td{font-size:13px;line-height:1.25}
 #history-table th:nth-child(5),#history-table td:nth-child(5),

@@ -82,6 +82,7 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                     str(finding.get("provider_or_lib", "") or finding.get("category", "") or "unknown"),
                     str(finding.get("capability", "") or ""),
                 ),
+                "ai_category": str(finding.get("ai_category", "") or ""),
                 "description": str(finding.get("description", "") or ""),
                 "snippet": str(finding.get("snippet", "") or ""),
                 "llm_reason": str(finding.get("llm_reason", "") or ""),
@@ -119,6 +120,7 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                     str(finding.get("provider_or_lib", row.get("rule", "")) or row.get("rule", "")),
                     str(finding.get("capability", row.get("capability", "")) or row.get("capability", "")),
                 )
+                row["ai_category"] = str(finding.get("ai_category", row.get("ai_category", "")) or row.get("ai_category", ""))
                 row["description"] = str(finding.get("description", row["description"]) or row["description"])
                 row["snippet"] = str(finding.get("snippet", row.get("snippet", "")) or row.get("snippet", ""))
                 row["llm_reason"] = str(finding.get("llm_reason", row.get("llm_reason", "")) or row.get("llm_reason", ""))
