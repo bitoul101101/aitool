@@ -592,10 +592,10 @@ class HTMLReporter:
 <div class="wrap">
   {self._header(findings)}
   {self._section_delta(findings, delta)}
-  {self._section_inventory(findings)}
   {self._section_summary(stats, findings, policy)}
   {self._section_findings(findings, delta)}
   {self._section_remediation(findings)}
+  {self._section_registry(policy)}
   {self._footer()}
 </div>
 {self._js()}
@@ -1278,81 +1278,77 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
         )
 
         # Approved AI Tools Registry card
-        display_names = policy.get("approved_provider_display_names", {})
+        providers_card = self._section_registry(policy)
 
-        def registry_name(slug: str) -> str:
-            return html_mod.escape(
-                display_names.get(slug) or PROVIDER_DISPLAY.get(slug)
-                or slug.replace("_", " ").title()
-            )
-
-        approved_keys = policy.get("approved_providers", [])
-        policy_note   = policy.get("notes", "")
-
-        # Map provider slug → favicon domain (Google S2 favicon API)
-        PROVIDER_FAVICON = {
-            "microsoft_365_copilot_chat":  "microsoft.com",
-            "microsoft_copilot_studio":    "microsoft.com",
-            "github_copilot_enterprise":   "github.com",
-            "openai_enterprise":           "openai.com",
-            "openai":                      "openai.com",
-            "chatgpt_enterprise":          "openai.com",
-            "google_gemini_enterprise":    "google.com",
-            "google_ai_studio_enterprise": "aistudio.google.com",
-            "google_gemini_vertexai":      "cloud.google.com",
-            "grammarly_enterprise":        "grammarly.com",
-            "synthesia_enterprise":        "synthesia.io",
-            "cursor_ai_enterprise":        "cursor.com",
-            "gamma_ai_business":           "gamma.app",
-            "adobe_firefly_enterprise":    "adobe.com",
-            "notion_enterprise":           "notion.so",
-            "anthropic":                   "anthropic.com",
-            "anthropic_claude_code":       "anthropic.com",
-        }
-
-        seen_set, seen_approved = set(), []
-        for k in approved_keys:
-            n = registry_name(k)
-            if n not in seen_set:
-                seen_set.add(n)
-                domain = PROVIDER_FAVICON.get(k, "")
-                favicon_html = (
-                    f'<img src="https://www.google.com/s2/favicons?domain={domain}&sz=16" '
-                    f'width="14" height="14" '
-                    f'style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" '
-                    f'onerror="this.style.display=\'none\'">'
-                    if domain else
-                    '<span style="display:inline-block;width:14px;height:14px;'
-                    'margin-right:5px;flex-shrink:0"></span>'
-                )
-                seen_approved.append((n, favicon_html))
-
-        if seen_approved:
-            approved_items = "".join(
-                f'<div style="display:flex;align-items:center;padding:2px 0;'
-                f'font-size:11px;color:var(--txt)">{ico}{name}</div>'
-                for name, ico in seen_approved
-            )
-        else:
-            approved_items = "<em style='color:var(--dim);font-size:11px'>None defined</em>"
-
-        ciso_note = (
-            f'<p style="font-size:13px;color:#1a1a1a;margin:12px 0 0;'
-            f'padding-top:10px;border-top:1px solid var(--bdr);line-height:1.6">'
-            f'⚠️ &nbsp;{html_mod.escape(policy_note)}</p>'
-            if policy_note else ""
+        # Findings by Severity and Context
+        # Build (severity, context) → count matrix
+        from collections import Counter as _Counter
+        sev_ctx_counts = _Counter(
+            (f.get("severity", 4), f.get("context", "production"))
+            for f in findings
         )
+        ctx_order  = ["production", "test", "docs", "deleted_file"]
+        ctx_labels = {
+            "production":  "Prod",
+            "test":        "Test",
+            "docs":        "Docs",
+            "deleted_file":"Hist",
+        }
+        ctx_colors = {
+            "production":  "var(--txt)",
+            "test":        "#9e9e9e",
+            "docs":        "#4db6e8",
+            "deleted_file":"#b39ddb",
+        }
+        # only show contexts that have at least one finding
+        active_ctxs = [c for c in ctx_order
+                       if any(sev_ctx_counts.get((s, c), 0) for s in (1,2,3,4))]
 
-        providers_card = f"""<div class="card" style="margin-top:0;padding:12px 16px">
-  <div style="font-weight:700;color:var(--grn);margin-bottom:9px;font-size:12px;">
-    ✅ Approved AI Tools Registry
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 20px;">
-    {approved_items}
-  </div>
-  {ciso_note}
-</div>"""
+        sev_order = [(1,"Critical","var(--red)"), (2,"High","var(--ora)"),
+                     (3,"Medium","var(--yel)"),   (4,"Low","var(--lgrn)")]
 
+        # Column headers always white
+        ctx_th = "".join(
+            f"<th style='color:#fff;font-size:11px;text-align:center'>"
+            f"{ctx_labels[c]}</th>"
+            for c in active_ctxs
+        )
+        sev_rows = ""
+        sev_total = 0
+        for sev_num, sev_name, color in sev_order:
+            row_total = sum(sev_ctx_counts.get((sev_num, c), 0) for c in active_ctxs)
+            if not row_total:
+                continue
+            sev_total += row_total
+            badge = f"<span class='b b{sev_num}'>{sev_name}</span>"
+            ctx_cells = "".join(
+                f"<td class='num-cell' style='color:{ctx_colors[c]}'>"
+                f"{sev_ctx_counts.get((sev_num, c), 0) or '—'}</td>"
+                for c in active_ctxs
+            )
+            sev_rows += f"<tr><td>{badge}</td>{ctx_cells}<td class='num-cell'>{row_total}</td></tr>"
+        # Totals row
+        ctx_totals = "".join(
+            f"<td class='num-cell'>{sum(sev_ctx_counts.get((s,c),0) for s in (1,2,3,4))}</td>"
+            for c in active_ctxs
+        )
+        sev_rows += (f"<tr style='border-top:2px solid var(--bdr);font-weight:700'>"
+                     f"<td>Total</td>{ctx_totals}"
+                     f"<td class='num-cell'>{sev_total}</td></tr>")
+
+        # Prod-only pie chart data (resolve CSS vars to hex for Canvas)
+        _sev_hex = {"var(--red)":"#C00000","var(--ora)":"#e05c00",
+                    "var(--yel)":"#c87800","var(--lgrn)":"#5a8a3a"}
+        prod_counts = {
+            sev_num: sev_ctx_counts.get((sev_num, "production"), 0)
+            for sev_num, _, _ in sev_order
+        }
+        prod_total = sum(prod_counts.values())
+        pie_js_data = ", ".join(
+            f"{{label:'{sev_name}',value:{prod_counts[sev_num]},color:'{_sev_hex.get(color, color)}'}}"
+            for sev_num, sev_name, color in sev_order
+            if prod_counts[sev_num] > 0
+        )
         pie_card = f"""<div class="card" style="display:flex;flex-direction:column;padding:16px">
   <h3 style="margin-bottom:12px;font-size:13px;letter-spacing:.2px">Findings by Severity in Prod</h3>
   <div style="display:flex;align-items:center;gap:18px;flex:1">
@@ -1562,7 +1558,80 @@ tr.detail-row:hover td{background:#fbf2e8 !important;}
         return f"""<section id="summary">
 <h2>🔐 Findings Summary</h2>
 {grid_html}
-{providers_card}
+</section>"""
+
+    def _section_registry(self, policy):
+        policy = policy or {}
+        display_names = policy.get("approved_provider_display_names", {})
+
+        def registry_name(slug: str) -> str:
+            return html_mod.escape(
+                display_names.get(slug) or PROVIDER_DISPLAY.get(slug)
+                or slug.replace("_", " ").title()
+            )
+
+        approved_keys = policy.get("approved_providers", [])
+        policy_note = policy.get("notes", "")
+        provider_favicon = {
+            "microsoft_365_copilot_chat": "microsoft.com",
+            "microsoft_copilot_studio": "microsoft.com",
+            "github_copilot_enterprise": "github.com",
+            "openai_enterprise": "openai.com",
+            "openai": "openai.com",
+            "chatgpt_enterprise": "openai.com",
+            "google_gemini_enterprise": "google.com",
+            "google_ai_studio_enterprise": "aistudio.google.com",
+            "google_gemini_vertexai": "cloud.google.com",
+            "grammarly_enterprise": "grammarly.com",
+            "synthesia_enterprise": "synthesia.io",
+            "cursor_ai_enterprise": "cursor.com",
+            "gamma_ai_business": "gamma.app",
+            "adobe_firefly_enterprise": "adobe.com",
+            "notion_enterprise": "notion.so",
+            "anthropic": "anthropic.com",
+            "anthropic_claude_code": "anthropic.com",
+        }
+        seen_set, seen_approved = set(), []
+        for key in approved_keys:
+            name = registry_name(key)
+            if name in seen_set:
+                continue
+            seen_set.add(name)
+            domain = provider_favicon.get(key, "")
+            favicon_html = (
+                f'<img src="https://www.google.com/s2/favicons?domain={domain}&sz=16" '
+                f'width="14" height="14" '
+                f'style="vertical-align:middle;margin-right:5px;border-radius:2px;flex-shrink:0" '
+                f'onerror="this.style.display=\'none\'">'
+                if domain else
+                '<span style="display:inline-block;width:14px;height:14px;'
+                'margin-right:5px;flex-shrink:0"></span>'
+            )
+            seen_approved.append((name, favicon_html))
+        if seen_approved:
+            approved_items = "".join(
+                f'<div style="display:flex;align-items:center;padding:2px 0;'
+                f'font-size:11px;color:var(--txt)">{ico}{name}</div>'
+                for name, ico in seen_approved
+            )
+        else:
+            approved_items = "<em style='color:var(--dim);font-size:11px'>None defined</em>"
+        ciso_note = (
+            f'<p style="font-size:13px;color:#1a1a1a;margin:12px 0 0;'
+            f'padding-top:10px;border-top:1px solid var(--bdr);line-height:1.6">'
+            f'⚠️ &nbsp;{html_mod.escape(policy_note)}</p>'
+            if policy_note else ""
+        )
+        return f"""<section id="approved-registry">
+<div class="card" style="margin-top:0;padding:12px 16px">
+  <div style="font-weight:700;color:var(--grn);margin-bottom:9px;font-size:12px;">
+    ✅ Approved AI Tools Registry
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 20px;">
+    {approved_items}
+  </div>
+  {ciso_note}
+</div>
 </section>"""
 
     # ── K: Executive Summary ───────────────────────────────────────

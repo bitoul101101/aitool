@@ -110,6 +110,38 @@ def test_html_report_excludes_threat_model_section():
     assert "Threat Model" not in html
     assert "Threat Scenarios" not in html
     assert "Review Gaps / Open Questions" not in html
+    assert "🧭 AI Inventory" not in html
+
+
+def test_html_report_moves_approved_registry_to_end():
+    reporter = HTMLReporter(
+        output_dir=tempfile.mkdtemp(),
+        scan_id="20260322_180000",
+    )
+    findings = [
+        {
+            "severity": 2,
+            "ai_category": "External AI API",
+            "repo": "repo1",
+            "project_key": "COGI",
+            "file": "app.py",
+            "line": 10,
+            "policy_status": "REVIEW",
+            "provider_or_lib": "openai",
+            "capability": "chat",
+            "description": "Example finding",
+            "context": "production",
+            "remediation": "Fix it.",
+        }
+    ]
+    policy = {
+        "approved_providers": ["openai_enterprise"],
+        "approved_provider_display_names": {"openai_enterprise": "OpenAI Enterprise"},
+    }
+
+    html = reporter._render(findings, policy=policy)
+
+    assert html.index("🔧 Remediation Checklist") < html.index("✅ Approved AI Tools Registry")
 
 
 def test_html_report_missing_llm_detail_message_points_to_detailed_html():
