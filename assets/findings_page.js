@@ -5,12 +5,14 @@
   }
 
   const search = document.getElementById("findings-search");
+  const form = document.getElementById("findings-form");
   const project = document.getElementById("findings-filter-project");
   const repo = document.getElementById("findings-filter-repo");
   const status = document.getElementById("findings-filter-status");
   const severity = document.getElementById("findings-filter-severity");
   const rule = document.getElementById("findings-filter-rule");
   const applyBtn = document.getElementById("apply-findings-action-btn");
+  const exportHint = document.getElementById("findings-export-hint");
   const htmlBtn = document.getElementById("generate-findings-html-btn");
   const csvBtn = document.getElementById("generate-findings-csv-btn");
   const jsonBtn = document.getElementById("generate-findings-json-btn");
@@ -19,6 +21,7 @@
   const pageInfo = document.getElementById("findings-page-info");
   const selectAll = document.getElementById("findings-select-all");
   const PAGE_SIZE = 25;
+  const JUSTIFICATION_ACTIONS = new Set(["accepted_risk", "false_positive"]);
   let currentPage = 1;
   let sortState = { index: null, dir: 1, kind: "text" };
 
@@ -127,6 +130,7 @@
   function updateBulkAction() {
     const hasSelection = rows().some((row) => row.querySelector(".finding-check")?.checked);
     applyBtn?.classList.toggle("hidden", !hasSelection);
+    exportHint?.classList.toggle("hidden", hasSelection);
     htmlBtn?.classList.toggle("hidden", !hasSelection);
     csvBtn?.classList.toggle("hidden", !hasSelection);
     jsonBtn?.classList.toggle("hidden", !hasSelection);
@@ -270,6 +274,37 @@
       currentPage += 1;
       renderPage();
     }
+  });
+  form?.addEventListener("submit", (event) => {
+    const submitter = event.submitter;
+    if (!submitter || submitter.id !== "apply-findings-action-btn") {
+      return;
+    }
+    const actionSelect = document.getElementById("findings-bulk-action");
+    const action = String(actionSelect?.value || "").trim();
+    if (!JUSTIFICATION_ACTIONS.has(action)) {
+      return;
+    }
+    const label = action === "accepted_risk" ? "Accepted Risk" : "FP - Dismiss";
+    const note = window.prompt(`Enter a short justification for ${label}:`, "");
+    if (note === null) {
+      event.preventDefault();
+      return;
+    }
+    const trimmed = note.trim();
+    if (!trimmed) {
+      event.preventDefault();
+      window.alert("A short justification is required.");
+      return;
+    }
+    let noteField = form.querySelector('input[name="note"]');
+    if (!noteField) {
+      noteField = document.createElement("input");
+      noteField.type = "hidden";
+      noteField.name = "note";
+      form.appendChild(noteField);
+    }
+    noteField.value = trimmed;
   });
   sortRows(10, "datetime");
 })();

@@ -2432,6 +2432,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'id="generate-findings-json-btn"' in html
     assert 'id="apply-findings-action-btn"' in html
     assert 'id="findings-select-all"' in html
+    assert 'id="findings-bulk-note"' not in html
     assert 'src="/assets/findings_page.js"' in html
     assert "Sent for Review" in html
     assert "In Remediation" in html

@@ -220,7 +220,7 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .findings-form .filters-row{margin-bottom:8px}
 .findings-form .history-toolbar input,.findings-form .history-toolbar select{padding:6px 8px}
 .findings-form .history-toolbar button{padding:7px 10px}
-.findings-bulk-toolbar{grid-template-columns:150px auto minmax(220px,1fr) auto auto auto;align-items:center}
+.findings-bulk-toolbar{grid-template-columns:150px auto auto auto auto;align-items:center}
 #findings-bulk-action{width:150px;min-width:150px}
 #apply-findings-action-btn{justify-self:start}
 #findings-table{font-size:13px}
