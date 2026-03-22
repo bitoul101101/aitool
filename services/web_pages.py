@@ -88,6 +88,18 @@ def _csrf_field(csrf_token: str = "") -> str:
     return f'<input type="hidden" name="csrf_token" value="{_esc(csrf_token)}">' if csrf_token else ""
 
 
+def _highlight_snippet(snippet: str, match: str, limit: int = 240) -> str:
+    text = str(snippet or "")[:limit]
+    escaped = _esc(text)
+    escaped_match = _esc(match or "")
+    if not escaped_match:
+        return escaped
+    idx = escaped.find(escaped_match)
+    if idx == -1:
+        return escaped
+    return f'{escaped[:idx]}<mark class="snippet-hit">{escaped_match}</mark>{escaped[idx + len(escaped_match):]}'
+
+
 def _scan_workspace_tabs(scan_id: str, active_tab: str = "activity", *, results_enabled: bool = True) -> str:
     safe_scan_id = _esc(scan_id)
     results_link = (
@@ -766,14 +778,16 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
             file_line += f":{_esc(line_value)}"
         llm_reason = _esc(item.get("llm_reason", ""))
         remediation = _esc(item.get("remediation", ""))
+        llm_secure_example = _esc(item.get("llm_secure_example", ""))
         snippet = _esc(item.get("snippet", ""))
+        match_text = _esc(item.get("match", ""))
         llm_verdict = _esc(item.get("llm_verdict", ""))
         llm_reviewed = "1" if item.get("llm_reviewed") else "0"
         snippet_preview = ""
         if item.get("snippet"):
-            snippet_preview = f'<div class="finding-inline-snip">{_esc(str(item.get("snippet", ""))[:240])}</div>'
+            snippet_preview = f'<div class="finding-inline-snip">{_highlight_snippet(str(item.get("snippet", "")), str(item.get("match", "") or ""), 240)}</div>'
         rows.append(
-            f'<tr class="finding-row" data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-category="{_esc(category)}" data-context="{_esc(item.get("context", "production"))}" data-ts="{ts}" data-llm-reason="{llm_reason}" data-remediation="{remediation}" data-snippet="{snippet}" data-llm-verdict="{llm_verdict}" data-llm-reviewed="{llm_reviewed}">'
+            f'<tr class="finding-row" data-project="{_esc(item.get("project_key", ""))}" data-repo="{_esc(item.get("repo", ""))}" data-rule="{_esc(rule_label)}" data-status="{_esc(item.get("status_label", ""))}" data-severity="{_esc(item.get("severity_label", ""))}" data-category="{_esc(category)}" data-context="{_esc(item.get("context", "production"))}" data-ts="{ts}" data-llm-reason="{llm_reason}" data-remediation="{remediation}" data-llm-secure-example="{llm_secure_example}" data-snippet="{snippet}" data-match="{match_text}" data-llm-verdict="{llm_verdict}" data-llm-reviewed="{llm_reviewed}">'
             f'<td><input type="checkbox" class="finding-check" name="hashes" value="{_esc(item.get("hash", ""))}"></td>'
             f'<td>{_pill(item.get("status_label", "Open"))}</td>'
             f'<td>{_severity_chip(item)}</td>'

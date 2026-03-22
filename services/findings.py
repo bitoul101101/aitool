@@ -84,9 +84,11 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                 ),
                 "ai_category": str(finding.get("ai_category", "") or ""),
                 "description": str(finding.get("description", "") or ""),
+                "match": str(finding.get("match", "") or ""),
                 "snippet": str(finding.get("snippet", "") or ""),
                 "llm_reason": str(finding.get("llm_reason", "") or ""),
                 "remediation": str(finding.get("remediation", "") or ""),
+                "llm_secure_example": str(finding.get("llm_secure_example", "") or ""),
                 "llm_verdict": str(finding.get("llm_verdict", "") or ""),
                 "llm_reviewed": bool(finding.get("llm_reviewed", False)),
                 "policy_status": str(finding.get("policy_status", "") or ""),
@@ -122,9 +124,11 @@ def build_findings_rollups(history: list[dict], triage: dict[str, dict]) -> list
                 )
                 row["ai_category"] = str(finding.get("ai_category", row.get("ai_category", "")) or row.get("ai_category", ""))
                 row["description"] = str(finding.get("description", row["description"]) or row["description"])
+                row["match"] = str(finding.get("match", row.get("match", "")) or row.get("match", ""))
                 row["snippet"] = str(finding.get("snippet", row.get("snippet", "")) or row.get("snippet", ""))
                 row["llm_reason"] = str(finding.get("llm_reason", row.get("llm_reason", "")) or row.get("llm_reason", ""))
                 row["remediation"] = str(finding.get("remediation", row.get("remediation", "")) or row.get("remediation", ""))
+                row["llm_secure_example"] = str(finding.get("llm_secure_example", row.get("llm_secure_example", "")) or row.get("llm_secure_example", ""))
                 row["llm_verdict"] = str(finding.get("llm_verdict", row.get("llm_verdict", "")) or row.get("llm_verdict", ""))
                 row["llm_reviewed"] = bool(finding.get("llm_reviewed", row.get("llm_reviewed", False)))
                 row["policy_status"] = str(finding.get("policy_status", row["policy_status"]) or row["policy_status"])

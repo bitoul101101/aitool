@@ -43,13 +43,26 @@
       .replace(/"/g, "&quot;");
   }
 
-  function renderRichContent(content, { codeOnly = false } = {}) {
+  function highlightSnippet(content, match) {
+    const escapedContent = escapeHtml(content);
+    const escapedMatch = escapeHtml(match);
+    if (!escapedMatch) {
+      return escapedContent;
+    }
+    const idx = escapedContent.indexOf(escapedMatch);
+    if (idx === -1) {
+      return escapedContent;
+    }
+    return `${escapedContent.slice(0, idx)}<mark class="snippet-hit">${escapedMatch}</mark>${escapedContent.slice(idx + escapedMatch.length)}`;
+  }
+
+  function renderRichContent(content, { codeOnly = false, highlight = "" } = {}) {
     const text = String(content || "");
     if (!text) {
       return "";
     }
     if (codeOnly) {
-      return `<pre class="finding-detail-code"><code>${escapeHtml(text)}</code></pre>`;
+      return `<pre class="finding-detail-code"><code>${highlightSnippet(text, highlight)}</code></pre>`;
     }
     const fenceRe = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g;
     let lastIndex = 0;
@@ -62,7 +75,7 @@
       }
       const language = (match[1] || "").trim();
       const code = match[2] || "";
-      html += `<pre class="finding-detail-code"><code${language ? ` data-lang="${escapeHtml(language)}"` : ""}>${escapeHtml(code.trim())}</code></pre>`;
+      html += `<pre class="finding-detail-code"><code${language ? ` data-lang="${escapeHtml(language)}"` : ""}>${highlightSnippet(code.trim(), highlight)}</code></pre>`;
       lastIndex = fenceRe.lastIndex;
     }
     const tail = text.slice(lastIndex).trim();
@@ -94,11 +107,15 @@
     const reviewed = row.dataset.llmReviewed === "1";
     const reason = row.dataset.llmReason || "";
     const remediation = row.dataset.remediation || "";
-    const snippet = row.dataset.snippet || "";
+    const secureExample = row.dataset.llmSecureExample || "";
+    const match = row.dataset.match || "";
     const fallback = reviewed
       ? '<p class="finding-detail-note">LLM reviewed this finding, but no explanation was stored in history.</p>'
       : '<p class="finding-detail-note">No LLM explanation is stored for this finding yet.</p>';
-    detailCell.innerHTML = `<div class="finding-detail-panel">${verdict}${detailBlock("Why It's Problematic", reason)}${detailBlock("How to Fix It", remediation)}${detailBlock("Code Snippet", snippet, { codeOnly: true })}${(!reason && !remediation && !snippet) ? fallback : ""}</div>`;
+    const secureExampleBlock = secureExample
+      ? detailBlock("Secure Code Example", secureExample, { codeOnly: true, highlight: match })
+      : '<p class="finding-detail-note">No secure code example is stored for this finding yet.</p>';
+    detailCell.innerHTML = `<div class="finding-detail-panel">${verdict}${detailBlock("Why It's Problematic", reason)}${detailBlock("How to Fix It", remediation)}${secureExampleBlock}${(!reason && !remediation && !secureExample) ? fallback : ""}</div>`;
     detailRow.appendChild(detailCell);
     row.after(detailRow);
     row.classList.add("row-expanded");

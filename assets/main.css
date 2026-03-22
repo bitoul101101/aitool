@@ -210,6 +210,14 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .findings-form .trend-summary-grid,.findings-form .history-toolbar{flex:0 0 auto}
 .findings-table-shell{flex:1 1 auto;min-height:0;max-height:none}
 .findings-shell,.inventory-page-grid,.trends-shell{font-size:13px}
+.findings-form .trend-summary-grid{gap:6px;margin-bottom:8px!important}
+.findings-form .trend-summary-card{padding:6px 8px;min-height:60px;border-radius:10px}
+.findings-form .trend-summary-card strong{font-size:16px}
+.findings-form .baseline-label{font-size:10px}
+.findings-form .history-toolbar{gap:6px;padding-bottom:6px}
+.findings-form .filters-row{margin-bottom:8px}
+.findings-form .history-toolbar input,.findings-form .history-toolbar select{padding:6px 8px}
+.findings-form .history-toolbar button{padding:7px 10px}
 #findings-table{font-size:13px}
 #findings-table th,#findings-table td{font-size:13px;line-height:1.25}
 #findings-table .finding-check{width:18px;height:18px}
@@ -228,6 +236,7 @@ button[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .finding-detail-panel p{margin:0 0 8px}
 .finding-detail-code{display:block;max-width:100%;background:#18120d;color:#f5debe;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;line-height:1.55;padding:10px 14px;border-radius:8px;overflow-x:auto;margin:6px 0 10px;white-space:pre}
 .finding-detail-code code{font:inherit;color:inherit}
+.finding-inline-snip .snippet-hit,.finding-detail-code .snippet-hit{background:#f7c948;color:#251608;padding:0 2px;border-radius:2px}
 .finding-detail-note{color:#7a5d3e;font-size:12px}
 .finding-detail-panel .scorecard{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .finding-detail-panel .scorechip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:#f0deca;border:1px solid #d8b995;color:#5f3f1c;font-size:11px;font-weight:700}

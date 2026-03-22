@@ -2076,10 +2076,19 @@ def test_apply_verdict_records_llm_review_confidence_score():
     from scanner.llm_reviewer import _apply_verdict
 
     finding = {"severity": 2}
-    verdict = _apply_verdict(finding, {"verdict": "downgrade", "reason": "docs", "confidence": 83})
+    verdict = _apply_verdict(
+        finding,
+        {
+            "verdict": "downgrade",
+            "reason": "docs",
+            "confidence": 83,
+            "secure_example": "client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])",
+        },
+    )
 
     assert verdict == "downgrade"
     assert finding["llm_review_confidence_score"] == 83
+    assert finding["llm_secure_example"] == "client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])"
     assert finding["severity"] == 3
 
 
@@ -2345,8 +2354,10 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
                 "rule_label": "Debug mode in production",
                 "ai_category": "Security",
                 "description": "Hardcoded key next to AI client use",
+                "match": "OpenAI(api_key='sk-test')",
                 "llm_reason": "The code sends a hardcoded credential to an AI provider.",
                 "remediation": "Move the credential to an environment variable and rotate it.",
+                "llm_secure_example": "client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])",
                 "llm_verdict": "kept",
                 "llm_reviewed": True,
                 "snippet": "client = OpenAI(api_key='sk-test')",
@@ -2380,6 +2391,9 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert "Debug mode in production" in html
     assert "Security" in html
     assert 'class="finding-row"' in html
+    assert 'data-match="OpenAI(api_key=' in html
+    assert 'data-llm-secure-example="client = OpenAI(api_key=os.environ[' in html
+    assert 'class="snippet-hit"' in html
     assert 'data-llm-reason="The code sends a hardcoded credential to an AI provider."' in html
 
 

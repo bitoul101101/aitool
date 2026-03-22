@@ -227,7 +227,7 @@ _SKIP_PATTERNS = {
 }
 
 # ── Ollama structured format schema (Ollama ≥ 0.5) ───────────────────
-# Requests an array where each element has verdict + reason + confidence.
+# Requests an array where each element has verdict + reason + confidence + secure example.
 _FORMAT_SCHEMA = {
     "type": "array",
     "items": {
@@ -238,9 +238,10 @@ _FORMAT_SCHEMA = {
                 "enum": ["keep", "downgrade", "dismiss"]
             },
             "reason":     {"type": "string"},
-            "confidence": {"type": "integer"}
+            "confidence": {"type": "integer"},
+            "secure_example": {"type": "string"},
         },
-        "required": ["verdict", "reason", "confidence"]
+        "required": ["verdict", "reason", "confidence", "secure_example"]
     }
 }
 
@@ -323,10 +324,11 @@ _SYSTEM = textwrap.dedent("""\
       context, file, file_ext, match, snippet
 
     OUTPUT: a JSON array, same length and order as the input.
-    Each element must have EXACTLY these three keys:
+    Each element must have EXACTLY these four keys:
       "verdict":    "keep" | "downgrade" | "dismiss"
       "reason":     one sentence under 25 words, meaningful to a developer
       "confidence": integer 0-100 reflecting your certainty in this verdict
+      "secure_example": a short corrected code example under 12 lines, or "" if not useful
 
     VERDICT MEANINGS:
       keep      = genuine, actionable security risk in this specific context
@@ -913,6 +915,7 @@ def _apply_verdict(finding: Dict[str, Any], verdict_obj: Any) -> str:
 
     verdict = str(verdict_obj.get("verdict", "keep")).lower().strip()
     reason  = str(verdict_obj.get("reason", "")).strip()
+    secure_example = str(verdict_obj.get("secure_example", "")).strip()
     raw_conf = verdict_obj.get("confidence", 0)
     try:
         llm_conf = max(0, min(100, int(raw_conf)))
@@ -924,6 +927,7 @@ def _apply_verdict(finding: Dict[str, Any], verdict_obj: Any) -> str:
 
     finding["llm_verdict"] = verdict
     finding["llm_reason"] = reason
+    finding["llm_secure_example"] = secure_example
     finding["llm_reviewed"] = True
     finding["llm_review_confidence_score"] = llm_conf
 
@@ -1100,6 +1104,7 @@ class LLMReviewer:
                 else:
                     finding["llm_verdict"] = "keep"
                     finding["llm_reason"] = "no verdict returned"
+                    finding["llm_secure_example"] = ""
                     finding["llm_reviewed"] = True
                     finding["llm_review_confidence_score"] = 0
                     verdict = "keep"
@@ -1157,6 +1162,7 @@ class LLMReviewer:
                     # Call failed — safe default: reinstate the finding
                     finding["llm_verdict"] = "keep"
                     finding["llm_reason"] = "challenge call failed — reinstated"
+                    finding["llm_secure_example"] = ""
                     finding["llm_reviewed"] = True
                     finding["llm_review_confidence_score"] = 0
                     kept.append(finding)
@@ -1174,6 +1180,7 @@ class LLMReviewer:
                 if challenge_verdict == "keep":
                     finding["llm_verdict"] = "keep"
                     finding["llm_reason"] = f"reinstated: {challenge_reason}"
+                    finding["llm_secure_example"] = ""
                     finding["llm_reviewed"] = True
                     finding["llm_review_confidence_score"] = challenge_conf
                     kept.append(finding)
