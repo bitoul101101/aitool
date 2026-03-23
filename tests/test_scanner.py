@@ -3940,6 +3940,12 @@ def test_inventory_page_is_server_rendered():
                     "DB access in src/service/metrics.py",
                     "UI talks to DB in src/ui/page.tsx",
                 ],
+                "inbound_dependency_count": 2,
+                "outbound_dependency_count": 1,
+                "dependency_centrality_score": 3,
+                "inbound_dependency_risk": True,
+                "outbound_dependency_risk": False,
+                "critical_infrastructure_risk": True,
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": True,
@@ -3996,6 +4002,12 @@ def test_inventory_page_is_server_rendered():
                 "has_cross_repo_cycles": True,
                 "anti_pattern_labels": ["Circular builds"],
                 "anti_pattern_examples": ["Repo dependency cycle with repo1"],
+                "inbound_dependency_count": 1,
+                "outbound_dependency_count": 2,
+                "dependency_centrality_score": 3,
+                "inbound_dependency_risk": False,
+                "outbound_dependency_risk": True,
+                "critical_infrastructure_risk": True,
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": False,
@@ -4040,6 +4052,9 @@ def test_inventory_page_is_server_rendered():
             "import_cycle_repos": 1,
             "cross_repo_cycle_repos": 2,
             "anti_pattern_repos": 2,
+            "inbound_dependency_risk_repos": 1,
+            "outbound_dependency_risk_repos": 1,
+            "critical_infrastructure_repos": 2,
             "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
             "owner_missing_governance_rollup": [("Unowned", 1), ("@team-platform", 1)],
             "owner_risky_rollup": [("@team-platform", 1), ("Unowned", 1)],
@@ -4077,6 +4092,9 @@ def test_inventory_page_is_server_rendered():
                 ("Layer violations", 1),
                 ("Overuse of shared libraries", 1),
             ],
+            "inbound_dependency_rollup": [("repo1", 2)],
+            "outbound_dependency_rollup": [("repo2", 2)],
+            "critical_infrastructure_rollup": [("repo1", 3), ("repo2", 3)],
             "policy_violation_rollup": [
                 ("API repos require SECURITY.md", 2),
                 ("Weak-governance repos cannot carry heavy external dependency load", 2),
@@ -4132,6 +4150,9 @@ def test_inventory_page_is_server_rendered():
     assert "Repo Cycles" in html
     assert "Repo Dependency Cycles" in html
     assert "Anti-Patterns" in html
+    assert "High Inbound Risk" in html
+    assert "High Outbound Risk" in html
+    assert "Critical Infrastructure" in html
     assert "Policy Violations" in html
     assert "Owners of Shared Assets" in html
     assert "Orphaned Exposed Repos" in html
@@ -4142,6 +4163,9 @@ def test_inventory_page_is_server_rendered():
     assert "Cycles: 2" in html
     assert "Repo Cycle" in html
     assert "Anti: Hardcoded cross-service calls, Direct DB access from the wrong module, Layer violations" in html
+    assert "In: 2" in html
+    assert "Out: 2" in html
+    assert "Critical Infra" in html
     assert "a.py -&gt; b.py -&gt; a.py" in html
     assert "repo1 ↔ repo2" in html
     assert "Hardcoded cross-service calls" in html
@@ -4226,6 +4250,9 @@ def test_inventory_repo_page_is_server_rendered():
                 "DB access in src/service/metrics.py",
                 "UI talks to DB in src/ui/page.tsx",
             ],
+            "inbound_dependency_count": 2,
+            "outbound_dependency_count": 1,
+            "dependency_centrality_score": 3,
             "missing_governance": ["SECURITY.md"],
             "reports": {"html_name": "demo.html", "json_name": "demo.json"},
         },
@@ -4261,6 +4288,9 @@ def test_inventory_repo_page_is_server_rendered():
     assert "Import Cycles" in html
     assert "Repo Cycles" in html
     assert "Anti-Patterns" in html
+    assert "Dependency Health" in html
+    assert "Inbound: 2 | Outbound: 1 | Centrality: 3" in html
+    assert "Centrality" in html
     assert "repo2" in html
     assert "Hardcoded cross-service calls" in html
     assert "DB access in src/service/metrics.py" in html
@@ -4351,6 +4381,45 @@ def test_inventory_snapshot_prefers_repo_details_owner_over_generic_profile_owne
     assert repo_inventory[0]["owner_source"] == "repo_metadata"
     assert repo_inventory[0]["is_orphaned"] is False
     assert summary["owner_rollup"][0] == ("repo_owner", 1)
+
+
+def test_inventory_snapshot_computes_dependency_health_scores():
+    import app_server as srv
+
+    history = [
+        {
+            "scan_id": "20260323_120000",
+            "project_key": "COGI",
+            "started_at_utc": "2026-03-23T12:00:00Z",
+            "completed_at_utc": "2026-03-23T12:05:00Z",
+            "inventory": {
+                "repo_profiles": [
+                    {"repo": "repo1", "internal_dependency_names": [], "dependency_names": [], "external_dependency_names": []},
+                    {"repo": "repo2", "internal_dependency_names": ["repo1"], "dependency_names": ["repo1"], "external_dependency_names": []},
+                    {"repo": "repo3", "internal_dependency_names": ["repo1", "repo2"], "dependency_names": ["repo1", "repo2"], "external_dependency_names": []},
+                ]
+            },
+            "reports": {"__all__": {}},
+        }
+    ]
+
+    original = srv._history_records_for_user
+    try:
+        srv._history_records_for_user = lambda: history
+        repo_inventory, summary = srv._inventory_snapshot_for_user()
+    finally:
+        srv._history_records_for_user = original
+
+    repo_map = {item["repo"]: item for item in repo_inventory}
+    assert repo_map["repo1"]["inbound_dependency_count"] == 2
+    assert repo_map["repo1"]["outbound_dependency_count"] == 0
+    assert repo_map["repo1"]["inbound_dependency_risk"] is True
+    assert repo_map["repo1"]["critical_infrastructure_risk"] is False
+    assert repo_map["repo3"]["outbound_dependency_count"] == 2
+    assert repo_map["repo3"]["outbound_dependency_risk"] is True
+    assert repo_map["repo2"]["dependency_centrality_score"] == 2
+    assert summary["inbound_dependency_rollup"] == [("repo1", 2)]
+    assert summary["outbound_dependency_rollup"] == [("repo3", 2)]
 
 
 def test_inventory_repo_detail_collects_recent_scans_for_repo():

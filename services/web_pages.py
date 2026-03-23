@@ -1184,6 +1184,12 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         anti_pattern_text = ", ".join(item.get("anti_pattern_labels", [])[:3] or [])
         if anti_pattern_text:
             dependency_meta.append(f"Anti: {anti_pattern_text}")
+        if item.get("inbound_dependency_count"):
+            dependency_meta.append(f"In: {item.get('inbound_dependency_count', 0)}")
+        if item.get("outbound_dependency_count"):
+            dependency_meta.append(f"Out: {item.get('outbound_dependency_count', 0)}")
+        if item.get("critical_infrastructure_risk"):
+            dependency_meta.append("Critical Infra")
         ai_meta = []
         framework_drift_text = ", ".join(item.get("framework_drift_labels", []) or [])
         if framework_drift_text:
@@ -1267,6 +1273,9 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <div class="inventory-card-stat"><span class="baseline-label">Import Cycles</span><strong>{_esc(summary.get("import_cycle_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Repo Cycles</span><strong>{_esc(summary.get("cross_repo_cycle_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Anti-Patterns</span><strong>{_esc(summary.get("anti_pattern_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">High Inbound Risk</span><strong>{_esc(summary.get("inbound_dependency_risk_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">High Outbound Risk</span><strong>{_esc(summary.get("outbound_dependency_risk_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Critical Infra</span><strong>{_esc(summary.get("critical_infrastructure_repos", 0))}</strong></div>
       </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
         <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
@@ -1296,6 +1305,9 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>Import Cycles</strong>{_rollup_list(list(summary.get("import_cycle_rollup", []) or []), "No intra-repo import cycles detected.")}</section>
         <section class="inventory-rollup-card"><strong>Repo Dependency Cycles</strong>{_rollup_list(list(summary.get("repo_cycle_rollup", []) or []), "No cross-repo dependency cycles detected.")}</section>
         <section class="inventory-rollup-card"><strong>Anti-Patterns</strong>{_rollup_list(list(summary.get("anti_pattern_rollup", []) or []), "No anti-patterns detected.")}</section>
+        <section class="inventory-rollup-card"><strong>High Inbound Dependency Risk</strong>{_rollup_list(list(summary.get("inbound_dependency_rollup", []) or []), "No inbound dependency hotspots.")}</section>
+        <section class="inventory-rollup-card"><strong>High Outbound Dependency Risk</strong>{_rollup_list(list(summary.get("outbound_dependency_rollup", []) or []), "No outbound dependency hotspots.")}</section>
+        <section class="inventory-rollup-card"><strong>Critical Infrastructure</strong>{_rollup_list(list(summary.get("critical_infrastructure_rollup", []) or []), "No central dependency hubs detected.")}</section>
         <section class="inventory-rollup-card"><strong>Policy Violations</strong>{_rollup_list(list(summary.get("policy_violation_rollup", []) or []), "No policy violations.")}</section>
         <section class="inventory-rollup-card"><strong>Shared Internal Libraries</strong>{_rollup_list(list(summary.get("shared_internal_dependency_rollup", []) or []), "No shared internal libraries yet.")}</section>
         <section class="inventory-rollup-card"><strong>Owners of Shared Assets</strong>{_rollup_list(list(summary.get("owner_shared_asset_rollup", []) or []), "No owner-linked shared assets yet.")}</section>
@@ -1330,6 +1342,9 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
           <option value="import_cycle"{" selected" if selected_usage == "import_cycle" else ""}>Import Cycles</option>
           <option value="cross_repo_cycle"{" selected" if selected_usage == "cross_repo_cycle" else ""}>Repo Cycles</option>
           <option value="anti_pattern"{" selected" if selected_usage == "anti_pattern" else ""}>Anti-Patterns</option>
+          <option value="inbound_dependency_risk"{" selected" if selected_usage == "inbound_dependency_risk" else ""}>High Inbound Risk</option>
+          <option value="outbound_dependency_risk"{" selected" if selected_usage == "outbound_dependency_risk" else ""}>High Outbound Risk</option>
+          <option value="critical_infrastructure"{" selected" if selected_usage == "critical_infrastructure" else ""}>Critical Infrastructure</option>
           <option value="agent"{" selected" if selected_usage == "agent" else ""}>Agent / Tool Use</option>
         </select>
       <button type="button" class="ghost" id="inventory-export-csv">Export CSV</button>
@@ -1458,6 +1473,9 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
     cross_repo_cycles = ", ".join(repo_profile.get("cross_repo_cycle_peers", []) or []) or "-"
     anti_patterns = ", ".join(repo_profile.get("anti_pattern_labels", []) or []) or "-"
     anti_pattern_examples = " | ".join(repo_profile.get("anti_pattern_examples", []) or []) or "-"
+    inbound_dependency_count = int(repo_profile.get("inbound_dependency_count", 0) or 0)
+    outbound_dependency_count = int(repo_profile.get("outbound_dependency_count", 0) or 0)
+    dependency_centrality_score = int(repo_profile.get("dependency_centrality_score", 0) or 0)
     date_text, time_text, _ts = _fmt_dt(str(repo_profile.get("last_scan_at_utc", "") or ""))
     latest_scan_id = str(repo_profile.get("scan_id", "") or "")
     latest_findings_link = f'/findings?scan_id={quote(latest_scan_id)}' if latest_scan_id else ""
@@ -1532,6 +1550,7 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
           <tr><td>Internal Libraries</td><td>{_esc(internal_dependency_text)}</td></tr>
           <tr><td>Import Cycles</td><td>{_esc(import_cycles)}</td></tr>
           <tr><td>Repo Cycles</td><td>{_esc(cross_repo_cycles)}</td></tr>
+          <tr><td>Dependency Health</td><td>{_esc(f"Inbound: {inbound_dependency_count} | Outbound: {outbound_dependency_count} | Centrality: {dependency_centrality_score}")}</td></tr>
           <tr><td>Anti-Patterns</td><td>{_esc(anti_patterns)}<div class="inventory-sub">{_esc(anti_pattern_examples)}</div></td></tr>
           <tr><td>AI Profile</td><td>{_esc(provider_text)}<div class="inventory-sub">{_esc(model_text)}</div></td></tr>
         </tbody>
@@ -1548,6 +1567,7 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
       <div class="inventory-card-stat"><span class="baseline-label">Shared Internal Libs</span><strong>{_esc(", ".join(repo_profile.get("shared_internal_libs", []) or []) or "-")}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Import Cycles</span><strong>{_esc(str(repo_profile.get("import_cycle_node_count", 0) or 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Anti-Patterns</span><strong>{_esc(str(len(repo_profile.get("anti_pattern_labels", []) or [])))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Centrality</span><strong>{_esc(str(dependency_centrality_score))}</strong></div>
     </div>
   </section>
 

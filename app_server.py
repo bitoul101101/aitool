@@ -853,6 +853,12 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                   "layer_violation_examples": list(profile.get("layer_violation_examples", []) or []),
                   "anti_pattern_labels": list(profile.get("anti_pattern_labels", []) or []),
                   "anti_pattern_examples": list(profile.get("anti_pattern_examples", []) or []),
+                  "inbound_dependency_count": int(profile.get("inbound_dependency_count", 0) or 0),
+                  "outbound_dependency_count": int(profile.get("outbound_dependency_count", 0) or 0),
+                  "dependency_centrality_score": int(profile.get("dependency_centrality_score", 0) or 0),
+                  "inbound_dependency_risk": bool(profile.get("inbound_dependency_risk")),
+                  "outbound_dependency_risk": bool(profile.get("outbound_dependency_risk")),
+                  "critical_infrastructure_risk": bool(profile.get("critical_infrastructure_risk")),
                   "governance": dict(profile.get("governance") or {}),
                   "missing_governance": list(profile.get("missing_governance", []) or []),
                   "has_iac": bool(profile.get("has_iac")),
@@ -922,6 +928,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     import_cycle_rollup: dict[str, int] = {}
     repo_cycle_rollup: dict[str, int] = {}
     anti_pattern_rollup: dict[str, int] = {}
+    inbound_dependency_rollup: dict[str, int] = {}
+    outbound_dependency_rollup: dict[str, int] = {}
+    central_dependency_rollup: dict[str, int] = {}
     policy_violation_rollup: dict[str, int] = {}
     owner_policy_violation_rollup: dict[str, int] = {}
     for item in repo_inventory:
@@ -1062,6 +1071,31 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 if f"Repo dependency cycle with {', '.join(cycle_peers[:3])}" not in list(matched.get("anti_pattern_examples", []) or []):
                     matched["anti_pattern_examples"] = list(matched.get("anti_pattern_examples", []) or []) + [f"Repo dependency cycle with {', '.join(cycle_peers[:3])}"]
 
+    inbound_counts: dict[str, int] = {repo_name: 0 for repo_name in repo_edges}
+    for repo_name, targets in repo_edges.items():
+        for target in targets:
+            inbound_counts[target] = inbound_counts.get(target, 0) + 1
+    for item in repo_inventory:
+        repo_name = str(item.get("repo", "") or "")
+        inbound_dependency_count = inbound_counts.get(repo_name, 0)
+        outbound_dependency_count = len(repo_edges.get(repo_name, set()))
+        dependency_centrality_score = inbound_dependency_count + outbound_dependency_count
+        item["inbound_dependency_count"] = inbound_dependency_count
+        item["outbound_dependency_count"] = outbound_dependency_count
+        item["dependency_centrality_score"] = dependency_centrality_score
+        item["inbound_dependency_risk"] = inbound_dependency_count >= 2
+        item["outbound_dependency_risk"] = outbound_dependency_count >= 2
+        item["critical_infrastructure_risk"] = dependency_centrality_score >= 3
+        if item["inbound_dependency_risk"]:
+            item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["inbound_dependency_risk"]))
+            inbound_dependency_rollup[repo_name] = inbound_dependency_count
+        if item["outbound_dependency_risk"]:
+            item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["outbound_dependency_risk"]))
+            outbound_dependency_rollup[repo_name] = outbound_dependency_count
+        if item["critical_infrastructure_risk"]:
+            item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["critical_infrastructure"]))
+            central_dependency_rollup[repo_name] = dependency_centrality_score
+
     for item in repo_inventory:
         shared_internal_lib_count = sum(
             1
@@ -1125,6 +1159,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "import_cycle_repos": sum(1 for item in repo_inventory if item.get("has_import_cycles")),
         "cross_repo_cycle_repos": sum(1 for item in repo_inventory if item.get("has_cross_repo_cycles")),
         "anti_pattern_repos": sum(1 for item in repo_inventory if item.get("anti_pattern_labels")),
+        "inbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("inbound_dependency_risk")),
+        "outbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("outbound_dependency_risk")),
+        "critical_infrastructure_repos": sum(1 for item in repo_inventory if item.get("critical_infrastructure_risk")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1181,6 +1218,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "import_cycle_rollup": sorted(import_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
         "repo_cycle_rollup": sorted(repo_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
         "anti_pattern_rollup": sorted(anti_pattern_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "inbound_dependency_rollup": sorted(inbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "outbound_dependency_rollup": sorted(outbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "critical_infrastructure_rollup": sorted(central_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "policy_violation_rollup": sorted(policy_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary
@@ -1316,6 +1356,9 @@ def _inventory_export_payload(repo_inventory: list[dict], filters: dict[str, str
                 "dependencies": ", ".join(item.get("dependency_names", []) or []),
                 "internal_dependencies": ", ".join(item.get("internal_dependency_names", []) or []),
                 "anti_patterns": ", ".join(item.get("anti_pattern_labels", []) or []),
+                "inbound_dependencies": int(item.get("inbound_dependency_count", 0) or 0),
+                "outbound_dependencies": int(item.get("outbound_dependency_count", 0) or 0),
+                "dependency_centrality": int(item.get("dependency_centrality_score", 0) or 0),
                 "risk_flags": ", ".join(item.get("usage_tags", []) or []),
                 "html_report": str((item.get("reports") or {}).get("html_name", "") or ""),
             }
