@@ -1450,6 +1450,26 @@ sortInventory(0,'datetime');
 
 
 def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
+    def _arch_node(label: str, kind: str = "default") -> str:
+        palette = {
+            "default": ("#e7eef8", "#17324d"),
+            "repo": ("#d8f0ff", "#0b3b5d"),
+            "internal": ("#e7f7eb", "#1f5130"),
+            "external": ("#fff2dc", "#7a4c12"),
+            "risk": ("#ffe3e0", "#7a1d14"),
+        }
+        bg, fg = palette.get(kind, palette["default"])
+        return (
+            f'<span style="display:inline-flex;align-items:center;justify-content:center;'
+            f'padding:8px 12px;border-radius:999px;background:{bg};color:{fg};'
+            f'border:1px solid rgba(0,0,0,.08);font-weight:700;min-width:110px;text-align:center">'
+            f'{_esc(label)}</span>'
+        )
+
+    def _arch_arrow(label: str = "") -> str:
+        meta = f'<div class="inventory-sub" style="text-align:center">{_esc(label)}</div>' if label else ""
+        return f'<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-size:18px;color:#557">→</span>{meta}</div>'
+
     repo = str(repo_profile.get("repo", "") or "")
     project_key = str(repo_profile.get("project_key", "") or "")
     owner = str(repo_profile.get("owner", "") or "Unowned")
@@ -1476,11 +1496,75 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
     inbound_dependency_count = int(repo_profile.get("inbound_dependency_count", 0) or 0)
     outbound_dependency_count = int(repo_profile.get("outbound_dependency_count", 0) or 0)
     dependency_centrality_score = int(repo_profile.get("dependency_centrality_score", 0) or 0)
+    outbound_repo_dependencies = list(repo_profile.get("outbound_repo_dependencies", []) or [])
+    inbound_repo_dependents = list(repo_profile.get("inbound_repo_dependents", []) or [])
     date_text, time_text, _ts = _fmt_dt(str(repo_profile.get("last_scan_at_utc", "") or ""))
     latest_scan_id = str(repo_profile.get("scan_id", "") or "")
     latest_findings_link = f'/findings?scan_id={quote(latest_scan_id)}' if latest_scan_id else ""
     latest_html_link = f'/reports/{_esc(reports.get("html_name", ""))}' if reports.get("html_name") else ""
     latest_json_link = f'/reports/{_esc(reports.get("json_name", ""))}' if reports.get("json_name") else ""
+    service_targets = [
+        *[f"Internal API: {host}" for host in (repo_profile.get("internal_api_hosts", []) or [])[:2]],
+        *[f"External API: {host}" for host in (repo_profile.get("external_api_hosts", []) or [])[:2]],
+        *[f"Event: {topic}" for topic in (repo_profile.get("produced_topics", []) or [])[:1]],
+        *[f"Consumes: {topic}" for topic in (repo_profile.get("consumed_topics", []) or [])[:1]],
+    ]
+    architecture_map = (
+        '<div class="inventory-summary-cards" style="align-items:center">'
+        f'<div>{_arch_node(repo, "repo")}</div>'
+        f'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center">'
+        + "".join(
+            f'<div style="display:flex;align-items:center;gap:10px">{_arch_arrow("runtime flow")}{_arch_node(target, "external" if target.startswith("External") else "internal")}</div>'
+            for target in service_targets[:4]
+        )
+        + '</div></div>'
+        if service_targets else '<div class="muted">No service-map edges detected yet.</div>'
+    )
+    dependency_diagram = (
+        '<div class="inventory-summary-cards" style="align-items:center">'
+        + (
+            f'<div style="display:flex;align-items:center;gap:10px">{_arch_node(", ".join(inbound_repo_dependents[:3]) or f"{inbound_dependency_count} inbound repos", "internal")}{_arch_arrow("depends on")}{_arch_node(repo, "repo")}</div>'
+            if inbound_dependency_count else ""
+        )
+        + (
+            f'<div style="display:flex;align-items:center;gap:10px">{_arch_node(repo, "repo")}{_arch_arrow("calls / imports")}{_arch_node(", ".join(outbound_repo_dependencies[:3]) or f"{outbound_dependency_count} outbound repos", "internal")}</div>'
+            if outbound_dependency_count else ""
+        )
+        + (
+            f'<div style="display:flex;align-items:center;gap:10px">{_arch_node("Centrality", "risk")}{_arch_arrow("score")}{_arch_node(str(dependency_centrality_score), "risk")}</div>'
+        )
+        + '</div>'
+    )
+    flow_steps = [
+        "UI" if any(token in technology_text for token in ("React", "Angular")) else "",
+        "API" if repo_profile.get("api_types") else "",
+        "Services" if outbound_repo_dependencies or repo_profile.get("internal_api_hosts") else "",
+        "Data Layer" if internal_dependency_text != "-" or any(label in anti_patterns for label in ("Layer violations", "Direct DB access from the wrong module")) else "",
+        "External Systems" if service_targets else "",
+    ]
+    flow_steps = [step for step in flow_steps if step]
+    flow_diagram = (
+        '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
+        + "".join(
+            (
+                (_arch_arrow("flow") if index else "")
+                + _arch_node(step, "repo" if index == 0 else ("risk" if "Data" in step else "default"))
+            )
+            for index, step in enumerate(flow_steps)
+        )
+        + '</div>'
+        if flow_steps else '<div class="muted">No flow chart available yet.</div>'
+    )
+    onboarding_items = [
+        f"Primary stack: {runtime_text}",
+        f"Frameworks: {technology_text}",
+        f"Dependency files: {', '.join(repo_profile.get('dependency_files', []) or []) or '-'}",
+        f"Governance gaps: {governance_text}",
+        f"Internal dependents: {', '.join(inbound_repo_dependents[:5]) or str(inbound_dependency_count)}",
+        f"Outbound repo deps: {', '.join(outbound_repo_dependencies[:5]) or str(outbound_dependency_count)}",
+        f"Known risks: {anti_patterns}",
+        f"Start with findings from scan {latest_scan_id or '-'}",
+    ]
 
     scan_rows = []
     for item in recent_scans:
@@ -1534,6 +1618,22 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
   </section>
 
   <section class="card">
+    <h3 style="margin:0 0 10px">Architecture Map</h3>
+    <div class="muted" style="margin:0 0 10px">Auto-generated from the latest repo scan facts and dependency graph.</div>
+    {architecture_map}
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 10px">Dependency Diagram</h3>
+    {dependency_diagram}
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 10px">Flow Chart</h3>
+    {flow_diagram}
+  </section>
+
+  <section class="card">
     <div class="table-shell">
       <table>
         <thead><tr><th>Area</th><th>Details</th></tr></thead>
@@ -1569,6 +1669,14 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
       <div class="inventory-card-stat"><span class="baseline-label">Anti-Patterns</span><strong>{_esc(str(len(repo_profile.get("anti_pattern_labels", []) or [])))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Centrality</span><strong>{_esc(str(dependency_centrality_score))}</strong></div>
     </div>
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 10px">Onboarding Guide</h3>
+    <div class="muted" style="margin:0 0 10px">Auto-generated starter notes for engineers landing on this repo.</div>
+    <ol style="margin:0;padding-left:18px">
+      {''.join(f'<li>{_esc(item)}</li>' for item in onboarding_items)}
+    </ol>
   </section>
 
   <section class="card">

@@ -853,6 +853,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                   "layer_violation_examples": list(profile.get("layer_violation_examples", []) or []),
                   "anti_pattern_labels": list(profile.get("anti_pattern_labels", []) or []),
                   "anti_pattern_examples": list(profile.get("anti_pattern_examples", []) or []),
+                  "outbound_repo_dependencies": list(profile.get("outbound_repo_dependencies", []) or []),
+                  "inbound_repo_dependents": list(profile.get("inbound_repo_dependents", []) or []),
                   "inbound_dependency_count": int(profile.get("inbound_dependency_count", 0) or 0),
                   "outbound_dependency_count": int(profile.get("outbound_dependency_count", 0) or 0),
                   "dependency_centrality_score": int(profile.get("dependency_centrality_score", 0) or 0),
@@ -1072,14 +1074,18 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                     matched["anti_pattern_examples"] = list(matched.get("anti_pattern_examples", []) or []) + [f"Repo dependency cycle with {', '.join(cycle_peers[:3])}"]
 
     inbound_counts: dict[str, int] = {repo_name: 0 for repo_name in repo_edges}
+    inbound_peers: dict[str, set[str]] = {repo_name: set() for repo_name in repo_edges}
     for repo_name, targets in repo_edges.items():
         for target in targets:
             inbound_counts[target] = inbound_counts.get(target, 0) + 1
+            inbound_peers.setdefault(target, set()).add(repo_name)
     for item in repo_inventory:
         repo_name = str(item.get("repo", "") or "")
         inbound_dependency_count = inbound_counts.get(repo_name, 0)
         outbound_dependency_count = len(repo_edges.get(repo_name, set()))
         dependency_centrality_score = inbound_dependency_count + outbound_dependency_count
+        item["outbound_repo_dependencies"] = sorted(repo_edges.get(repo_name, set()))
+        item["inbound_repo_dependents"] = sorted(inbound_peers.get(repo_name, set()))
         item["inbound_dependency_count"] = inbound_dependency_count
         item["outbound_dependency_count"] = outbound_dependency_count
         item["dependency_centrality_score"] = dependency_centrality_score

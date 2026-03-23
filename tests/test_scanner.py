@@ -4239,6 +4239,8 @@ def test_inventory_repo_page_is_server_rendered():
             "import_cycle_examples": ["a.py -> b.py -> a.py"],
             "import_cycle_node_count": 2,
             "cross_repo_cycle_peers": ["repo2"],
+            "outbound_repo_dependencies": ["repo2"],
+            "inbound_repo_dependents": ["repo3", "repo4"],
             "anti_pattern_labels": [
                 "Hardcoded cross-service calls",
                 "Direct DB access from the wrong module",
@@ -4250,6 +4252,7 @@ def test_inventory_repo_page_is_server_rendered():
                 "DB access in src/service/metrics.py",
                 "UI talks to DB in src/ui/page.tsx",
             ],
+            "dependency_files": ["package.json", "pyproject.toml"],
             "inbound_dependency_count": 2,
             "outbound_dependency_count": 1,
             "dependency_centrality_score": 3,
@@ -4288,6 +4291,16 @@ def test_inventory_repo_page_is_server_rendered():
     assert "Import Cycles" in html
     assert "Repo Cycles" in html
     assert "Anti-Patterns" in html
+    assert "Architecture Map" in html
+    assert "Dependency Diagram" in html
+    assert "Flow Chart" in html
+    assert "Onboarding Guide" in html
+    assert "Auto-generated from the latest repo scan facts and dependency graph." in html
+    assert "repo3, repo4" in html
+    assert "repo2" in html
+    assert "Primary stack: Node.js, Python" in html
+    assert "Dependency files: package.json, pyproject.toml" in html
+    assert "Start with findings from scan 20260318_101500" in html
     assert "Dependency Health" in html
     assert "Inbound: 2 | Outbound: 1 | Centrality: 3" in html
     assert "Centrality" in html
@@ -4420,6 +4433,38 @@ def test_inventory_snapshot_computes_dependency_health_scores():
     assert repo_map["repo2"]["dependency_centrality_score"] == 2
     assert summary["inbound_dependency_rollup"] == [("repo1", 2)]
     assert summary["outbound_dependency_rollup"] == [("repo3", 2)]
+
+
+def test_inventory_snapshot_tracks_dependency_peers_for_architecture_docs():
+    import app_server as srv
+
+    history = [
+        {
+            "scan_id": "20260323_121000",
+            "project_key": "COGI",
+            "started_at_utc": "2026-03-23T12:10:00Z",
+            "completed_at_utc": "2026-03-23T12:15:00Z",
+            "inventory": {
+                "repo_profiles": [
+                    {"repo": "repo1", "internal_dependency_names": [], "dependency_names": [], "external_dependency_names": []},
+                    {"repo": "repo2", "internal_dependency_names": ["repo1"], "dependency_names": ["repo1"], "external_dependency_names": []},
+                    {"repo": "repo3", "internal_dependency_names": ["repo1"], "dependency_names": ["repo1"], "external_dependency_names": []},
+                ]
+            },
+            "reports": {"__all__": {}},
+        }
+    ]
+
+    original = srv._history_records_for_user
+    try:
+        srv._history_records_for_user = lambda: history
+        repo_inventory, _summary = srv._inventory_snapshot_for_user()
+    finally:
+        srv._history_records_for_user = original
+
+    repo_map = {item["repo"]: item for item in repo_inventory}
+    assert repo_map["repo1"]["inbound_repo_dependents"] == ["repo2", "repo3"]
+    assert repo_map["repo2"]["outbound_repo_dependencies"] == ["repo1"]
 
 
 def test_inventory_repo_detail_collects_recent_scans_for_repo():
