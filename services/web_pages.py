@@ -813,7 +813,7 @@ def render_history_page(*, history: list[dict], notice: str = "", error: str = "
     return _layout(title="Past Scans", body=body, active="history", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None, scan_label: str = "", scan_actions_html: str = "", html_generation: dict | None = None) -> bytes:
+def render_findings_page(*, findings: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None, scan_label: str = "", scan_actions_html: str = "", html_generation: dict | None = None, owner_scope: dict | None = None) -> bytes:
     projects = sorted({str(item.get("project_key", "")) for item in findings if item.get("project_key")})
     repos = sorted({str(item.get("repo", "")) for item in findings if item.get("repo")})
     rules = sorted({
@@ -873,6 +873,7 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
         return f'<span class="ctx-chip {css}">{_esc(label)}</span>'
 
     html_generation = dict(html_generation or {})
+    owner_scope = dict(owner_scope or {})
     generation_state = str(html_generation.get("state", "") or "").lower()
     generation_active = generation_state in {"queued", "running"}
     generation_mode = str(html_generation.get("detail_mode", "") or "").strip().lower()
@@ -941,9 +942,18 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     <form method="post" action="/findings/bulk" id="findings-form" class="findings-form">
     {_csrf_field(csrf_token)}
     {f'<input type="hidden" name="scan_id" value="{_esc(scan_label)}">' if scan_label else ''}
+    {f'<input type="hidden" name="owner" value="{_esc(owner_scope.get("owner", ""))}">' if owner_scope.get("owner") else ''}
+    {f'<input type="hidden" name="usage" value="{_esc(owner_scope.get("usage", ""))}">' if owner_scope.get("usage") else ''}
     {progress_card}
     {f'<section class="card findings-scan-actions-card"><div class="results-actions findings-scan-actions">{scan_actions_html}</div></section>' if scan_actions_html else ''}
     {f'<div class="warn-box" style="margin-bottom:8px">Showing findings for scan {_esc(scan_label)}.</div>' if scan_label else ''}
+    {(
+      '<section class="card findings-scan-actions-card"><div class="results-actions findings-scan-actions">'
+      + f'<a class="ghost" href="/inventory?owner={quote(str(owner_scope.get("owner", "")))}&usage={quote(str(owner_scope.get("usage", "")))}">Back to Inventory Slice</a>'
+      + '<button type="submit" class="ghost" name="export_type" value="html" formaction="/findings/generate-html" formmethod="post" formtarget="_blank">Generate Owner HTML Report</button>'
+      + '</div></section>'
+    ) if owner_scope else ''}
+    {f'<div class="warn-box" style="margin-bottom:8px">Showing findings for owner scope {_esc(owner_scope.get("label", ""))}.</div>' if owner_scope else ''}
     <section class="findings-summary-strip">
       <div class="findings-summary-chip"><span class="baseline-label">Total</span><strong>{_esc(len(findings))}</strong></div>
       <div class="findings-summary-chip"><span class="baseline-label">Open</span><strong>{_esc(sum(1 for item in findings if item.get("status") == "open"))}</strong></div>
@@ -1118,12 +1128,12 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             for label, count in items[:8]
         )
 
-    def _owner_handoff_list(items: list[tuple[str, int]], *, usage: str, empty: str) -> str:
+    def _owner_handoff_list(items: list[tuple[str, int]], *, usage: str, empty: str, target_path: str = "/inventory") -> str:
         if not items:
             return f'<div class="muted">{_esc(empty)}</div>'
         rows = []
         for label, count in items[:8]:
-            link = f'/inventory?owner={quote(str(label))}&usage={quote(usage)}'
+            link = f'{target_path}?owner={quote(str(label))}&usage={quote(usage)}'
             rows.append(f'<div class="inventory-rollup-item"><a href="{link}">{_esc(label)}</a><strong>{_esc(count)}</strong></div>')
         return "".join(rows)
 
@@ -1188,6 +1198,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         action_links = [
             f'<a class="ghost" href="{profile_link}">Profile</a>',
             f'<a class="ghost" href="/inventory?owner={quote(owner_text)}&usage=risky">Owner Slice</a>',
+            f'<a class="ghost" href="/findings?owner={quote(owner_text)}&usage=risky">Owner Findings</a>',
         ]
         if findings_link:
             action_links.append(f'<a class="ghost" href="{findings_link}">Findings</a>')
@@ -1250,7 +1261,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
     <div class="inventory-summary-cards" style="margin-top:10px">
         <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
         <section class="inventory-rollup-card"><strong>Owners Needing Review</strong>{_owner_handoff_list(list(summary.get("owner_risky_rollup", []) or []), usage="risky", empty="No risky repos by owner.")}</section>
-        <section class="inventory-rollup-card"><strong>Owners With Open Findings</strong>{_owner_handoff_list(list(summary.get("owner_open_findings_rollup", []) or []), usage="risky", empty="No open findings by owner.")}</section>
+        <section class="inventory-rollup-card"><strong>Owners With Open Findings</strong>{_owner_handoff_list(list(summary.get("owner_open_findings_rollup", []) or []), usage="risky", target_path="/findings", empty="No open findings by owner.")}</section>
         <section class="inventory-rollup-card"><strong>Owners With Policy Violations</strong>{_owner_handoff_list(list(summary.get("owner_policy_violation_rollup", []) or []), usage="policy_violation", empty="No owner-linked policy violations.")}</section>
         <section class="inventory-rollup-card"><strong>Owners With Governance Gaps</strong>{_rollup_list(list(summary.get("owner_missing_governance_rollup", []) or []), "No owner-linked governance gaps.")}</section>
         <section class="inventory-rollup-card"><strong>Runtimes</strong>{_rollup_list(list(summary.get("runtime_rollup", []) or []), "No runtime data yet.")}</section>
@@ -1305,6 +1316,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
           <option value="policy_violation"{" selected" if selected_usage == "policy_violation" else ""}>Policy Violations</option>
           <option value="agent"{" selected" if selected_usage == "agent" else ""}>Agent / Tool Use</option>
         </select>
+      <button type="button" class="ghost" id="inventory-export-csv">Export CSV</button>
+      <button type="button" class="ghost" id="inventory-export-json">Export JSON</button>
       <button type="button" class="ghost" id="inventory-reset">Reset</button>
     </div>
     <div class="table-shell history-table-shell">
@@ -1380,9 +1393,23 @@ function sortInventory(index,kind){{
   rows.forEach(r=>iBody.appendChild(r));
   applyInventoryFilters();
 }}
+function inventoryFilterQuery(format){{
+  const params=new URLSearchParams();
+  if(format) params.set('format',format);
+  if(iSearch.value) params.set('search',iSearch.value);
+  if(iProject.value) params.set('project',iProject.value);
+  if(iOwner.value) params.set('owner',iOwner.value);
+  if(iRuntime.value) params.set('runtime',iRuntime.value);
+  if(iTechnology.value) params.set('technology',iTechnology.value);
+  if(iDependency.value) params.set('dependency',iDependency.value);
+  if(iUsage.value) params.set('usage',iUsage.value);
+  return params.toString();
+}}
 document.querySelectorAll('#inventory-table thead th[data-sort]').forEach((th,index)=>th.addEventListener('click',()=>sortInventory(index,th.dataset.sort)));
 [iSearch,iProject,iOwner,iRuntime,iTechnology,iDependency].forEach(el=>el?.addEventListener('input',applyInventoryFilters));
 [iProject,iOwner,iRuntime,iTechnology,iDependency,iUsage].forEach(el=>el?.addEventListener('change',applyInventoryFilters));
+document.getElementById('inventory-export-csv')?.addEventListener('click',()=>{{ window.open('/inventory/export?'+inventoryFilterQuery('csv'),'_blank'); }});
+document.getElementById('inventory-export-json')?.addEventListener('click',()=>{{ window.open('/inventory/export?'+inventoryFilterQuery('json'),'_blank'); }});
 document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
   iSearch.value=''; iProject.value=''; iOwner.value=''; iRuntime.value=''; iTechnology.value=''; iDependency.value=''; iUsage.value=''; applyInventoryFilters();
 }});
@@ -1455,6 +1482,7 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
         {'<a class="ghost" href="' + latest_json_link + '" target="_blank">JSON</a>' if latest_json_link else ''}
         {'<a class="ghost" href="/inventory?owner=' + quote(owner) + '&usage=risky">Owner Risk Slice</a>' if owner and owner != 'Unowned' else ''}
         {'<a class="ghost" href="/inventory?owner=' + quote(owner) + '&usage=missing_governance">Owner Governance Slice</a>' if owner and owner != 'Unowned' else ''}
+        {'<a class="ghost" href="/findings?owner=' + quote(owner) + '&usage=risky">Owner Findings</a>' if owner and owner != 'Unowned' else ''}
       </div>
     </div>
     <div class="inventory-summary-cards" style="margin-top:12px">

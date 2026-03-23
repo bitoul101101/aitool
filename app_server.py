@@ -28,7 +28,9 @@ GET  /reports/<file>  → serve a report file from OUTPUT_DIR
 from __future__ import annotations
 
 import http.server
+import csv
 import hashlib
+import io
 import json
 import os
 import queue
@@ -1173,6 +1175,109 @@ def _inventory_repo_detail_for_user(project_key: str, repo: str) -> tuple[dict |
     return repo_profile, recent_scans[:12]
 
 
+def _filter_inventory_rows(repo_inventory: list[dict], filters: dict[str, str] | None) -> list[dict]:
+    filters = dict(filters or {})
+    query = str(filters.get("search", "") or "").strip().lower()
+    project = str(filters.get("project", "") or "").strip()
+    owner = str(filters.get("owner", "") or "").strip().lower()
+    runtime = str(filters.get("runtime", "") or "").strip().lower()
+    technology = str(filters.get("technology", "") or "").strip().lower()
+    dependency = str(filters.get("dependency", "") or "").strip().lower()
+    usage = str(filters.get("usage", "") or "").strip()
+
+    filtered: list[dict] = []
+    for item in repo_inventory:
+        haystack = " ".join(
+            str(value or "")
+            for value in (
+                item.get("repo", ""),
+                item.get("project_key", ""),
+                item.get("scan_id", ""),
+                item.get("owner", ""),
+                ", ".join(item.get("runtimes", []) or []),
+                ", ".join(item.get("technologies", []) or []),
+                ", ".join(item.get("dependency_names", []) or []),
+                ", ".join(item.get("api_types", []) or []),
+                ", ".join(item.get("event_systems", []) or []),
+                ", ".join(item.get("policy_violations", []) or []),
+            )
+        ).lower()
+        if query and query not in haystack:
+            continue
+        if project and str(item.get("project_key", "") or "") != project:
+            continue
+        if owner and owner not in str(item.get("owner", "") or "").lower():
+            continue
+        if runtime and runtime not in ", ".join(item.get("runtimes", []) or []).lower():
+            continue
+        if technology and technology not in ", ".join(item.get("technologies", []) or []).lower():
+            continue
+        if dependency and dependency not in ", ".join(item.get("dependency_names", []) or []).lower():
+            continue
+        if usage and usage not in set(item.get("usage_tags", []) or []):
+            continue
+        filtered.append(item)
+    return filtered
+
+
+def _inventory_export_payload(repo_inventory: list[dict], filters: dict[str, str] | None) -> list[dict]:
+    rows: list[dict] = []
+    for item in _filter_inventory_rows(repo_inventory, filters):
+        rows.append(
+            {
+                "project_key": str(item.get("project_key", "") or ""),
+                "repo": str(item.get("repo", "") or ""),
+                "owner": str(item.get("owner", "") or ""),
+                "scan_id": str(item.get("scan_id", "") or ""),
+                "last_scan_at_utc": str(item.get("last_scan_at_utc", "") or ""),
+                "finding_count": int(item.get("finding_count", 0) or 0),
+                "runtimes": ", ".join(item.get("runtimes", []) or []),
+                "technologies": ", ".join(item.get("technologies", []) or []),
+                "runtime_versions": ", ".join(f"{runtime} {version}" for runtime, version in sorted((item.get("runtime_versions") or {}).items())),
+                "missing_governance": ", ".join(item.get("missing_governance", []) or []),
+                "policy_violations": ", ".join(item.get("policy_violations", []) or []),
+                "ci_systems": ", ".join(item.get("ci_systems", []) or []),
+                "iac_cloud": ", ".join((item.get("iac_tools", []) or []) + (item.get("cloud_platforms", []) or [])),
+                "api_events": ", ".join((item.get("api_types", []) or []) + (item.get("event_systems", []) or []) + (item.get("api_boundaries", []) or [])),
+                "dependencies": ", ".join(item.get("dependency_names", []) or []),
+                "internal_dependencies": ", ".join(item.get("internal_dependency_names", []) or []),
+                "risk_flags": ", ".join(item.get("usage_tags", []) or []),
+                "html_report": str((item.get("reports") or {}).get("html_name", "") or ""),
+            }
+        )
+    return rows
+
+
+def _inventory_repo_scope(owner: str = "", usage: str = "") -> list[dict]:
+    repo_inventory, _summary = _inventory_snapshot_for_user()
+    return _filter_inventory_rows(
+        repo_inventory,
+        {
+            "owner": owner,
+            "usage": usage,
+        },
+    )
+
+
+def _findings_for_inventory_scope(*, owner: str = "", usage: str = "") -> tuple[list[dict], str]:
+    scoped_repos = _inventory_repo_scope(owner=owner, usage=usage)
+    if not scoped_repos:
+        return [], ""
+    repo_keys = {
+        (str(item.get("project_key", "") or ""), str(item.get("repo", "") or ""))
+        for item in scoped_repos
+    }
+    findings = [
+        item for item in _findings_for_user()
+        if (str(item.get("project_key", "") or ""), str(item.get("repo", "") or "")) in repo_keys
+    ]
+    owner_label = str(owner or "").strip()
+    usage_label = str(usage or "").strip().replace("_", " ")
+    scope_bits = [bit for bit in [owner_label, usage_label.title() if usage_label else ""] if bit]
+    scope_label = " / ".join(scope_bits) if scope_bits else "Inventory scope"
+    return findings, scope_label
+
+
 def _report_record_for_scan(scan_id: str) -> dict | None:
     snapshot = _current_session_snapshot()
     current_report = (snapshot["report_paths"] or {}).get("__all__", {})
@@ -1978,6 +2083,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return True
             self._render_inventory_repo_page()
             return True
+        if p == "/inventory/export":
+            if not _is_connected():
+                self._redirect("/login")
+                return True
+            if self._require_browser_session():
+                return True
+            self._render_inventory_export(parsed)
+            return True
         if p == "/trends":
             if not _is_connected():
                 self._redirect("/login")
@@ -2468,8 +2581,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         history = _history_records_for_user()
         requested_scan_id = _clean_scan_id_param(qs.get("scan_id", [""])[0])
+        requested_owner = str(qs.get("owner", [""])[0] or "").strip()
+        requested_usage = str(qs.get("usage", [""])[0] or "").strip()
         triage = _triage_by_hash()
         scan_label = ""
+        owner_scope = {}
         if requested_scan_id:
             record = _scan_record_for_id(requested_scan_id)
             if not record:
@@ -2503,7 +2619,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 csrf_token=_current_csrf_token(self),
             )
         else:
-            findings = build_findings_rollups(history, triage)
+            if requested_owner or requested_usage:
+                findings, scope_label = _findings_for_inventory_scope(owner=requested_owner, usage=requested_usage)
+                owner_scope = {"owner": requested_owner, "usage": requested_usage, "label": scope_label}
+            else:
+                findings = build_findings_rollups(history, triage)
             findings_notice = findings_history_notice(history)
             report_actions_html = ""
             html_generation = {}
@@ -2518,6 +2638,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             scan_label=scan_label,
             scan_actions_html=report_actions_html,
             html_generation=html_generation,
+            owner_scope=owner_scope,
         )
         self._send(200, "text/html; charset=utf-8", html)
 
@@ -2569,6 +2690,71 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             current_scan=_current_scan_nav_context(),
         )
         self._send(200, "text/html; charset=utf-8", html)
+
+    def _render_inventory_export(self, parsed):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(parsed.query)
+        export_format = str(qs.get("format", ["csv"])[0] or "csv").strip().lower()
+        if export_format not in {"csv", "json"}:
+            return self._err(400, "Unsupported inventory export format")
+        filters = {
+            "search": qs.get("search", [""])[0] or "",
+            "project": qs.get("project", [""])[0] or "",
+            "owner": qs.get("owner", [""])[0] or "",
+            "runtime": qs.get("runtime", [""])[0] or "",
+            "technology": qs.get("technology", [""])[0] or "",
+            "dependency": qs.get("dependency", [""])[0] or "",
+            "usage": qs.get("usage", [""])[0] or "",
+        }
+        repo_inventory, _summary = _inventory_snapshot_for_user()
+        rows = _inventory_export_payload(repo_inventory, filters)
+        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        if export_format == "json":
+            payload = {
+                "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "filters": filters,
+                "repo_count": len(rows),
+                "repos": rows,
+            }
+            body = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+            filename = f"phantomlm_inventory_{stamp}.json"
+            content_type = "application/json; charset=utf-8"
+        else:
+            buffer = io.StringIO()
+            fieldnames = [
+                "project_key",
+                "repo",
+                "owner",
+                "scan_id",
+                "last_scan_at_utc",
+                "finding_count",
+                "runtimes",
+                "technologies",
+                "runtime_versions",
+                "missing_governance",
+                "policy_violations",
+                "ci_systems",
+                "iac_cloud",
+                "api_events",
+                "dependencies",
+                "internal_dependencies",
+                "risk_flags",
+                "html_report",
+            ]
+            writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+            body = buffer.getvalue().encode("utf-8")
+            filename = f"phantomlm_inventory_{stamp}.csv"
+            content_type = "text/csv; charset=utf-8"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
 
     def _render_trends_page(self, *, notice: str = "", error: str = ""):
         if _require_role(self, ROLE_VIEWER):
@@ -2767,7 +2953,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if _require_role(self, ROLE_TRIAGE):
             return
         requested_scan_id = _clean_scan_id_param(body.get("scan_id", ""))
-        target = _with_query("/findings", scan_id=requested_scan_id) if requested_scan_id else "/findings"
+        requested_owner = str(body.get("owner", "") or "").strip()
+        requested_usage = str(body.get("usage", "") or "").strip()
+        target_params = {}
+        if requested_scan_id:
+            target_params["scan_id"] = requested_scan_id
+        if requested_owner:
+            target_params["owner"] = requested_owner
+        if requested_usage:
+            target_params["usage"] = requested_usage
+        target = _with_query("/findings", **target_params) if target_params else "/findings"
         hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
         action = str(body.get("action", "") or "").strip()
         note = str(body.get("note", "") or "").strip()
@@ -2786,6 +2981,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if requested_scan_id:
             record = _scan_record_for_id(requested_scan_id)
             source_findings = build_scan_findings(record, triage_lookup) if record else []
+        elif requested_owner or requested_usage:
+            source_findings, _scope_label = _findings_for_inventory_scope(owner=requested_owner, usage=requested_usage)
         else:
             source_findings = _findings_for_user()
         findings_by_hash = {item.get("hash", ""): item for item in source_findings if item.get("hash")}
@@ -2851,9 +3048,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return
         hashes = [str(value).strip() for value in list(body.get("hashes", [])) if str(value).strip()]
         requested_scan_id = _clean_scan_id_param(body.get("scan_id", ""))
+        requested_owner = str(body.get("owner", "") or "").strip()
+        requested_usage = str(body.get("usage", "") or "").strip()
         target_path = "/findings"
-        target_params = {"scan_id": requested_scan_id} if requested_scan_id else {}
-        if not hashes and not requested_scan_id:
+        target_params = {}
+        if requested_scan_id:
+            target_params["scan_id"] = requested_scan_id
+        if requested_owner:
+            target_params["owner"] = requested_owner
+        if requested_usage:
+            target_params["usage"] = requested_usage
+        if not hashes and not requested_scan_id and not requested_owner and not requested_usage:
             self._redirect(_with_query(target_path, error="Select at least one finding.", **target_params))
             return
         if requested_scan_id:
@@ -2862,11 +3067,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._redirect(_with_query("/findings", error=f"Scan {requested_scan_id} was not found."))
                 return
             source_findings = build_scan_findings(record, _triage_by_hash())
+        elif requested_owner or requested_usage:
+            source_findings, _scope_label = _findings_for_inventory_scope(owner=requested_owner, usage=requested_usage)
         else:
             source_findings = _findings_for_user()
         findings_by_hash = {str(item.get("hash", "") or ""): item for item in source_findings if str(item.get("hash", "") or "")}
         selected = [findings_by_hash[hash_] for hash_ in hashes if hash_ in findings_by_hash]
-        if requested_scan_id and not hashes:
+        if (requested_scan_id or requested_owner or requested_usage) and not hashes:
             selected = list(source_findings)
         if not selected:
             self._redirect(_with_query(target_path, error="Selected findings are no longer available.", **target_params))

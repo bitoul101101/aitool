@@ -2647,6 +2647,7 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
         scan_label="scan-2",
         scan_actions_html='<form method="post" action="/findings/generate-html" class="triage-form inline-only" target="_blank"><input type="hidden" name="scan_id" value="scan-2" /><button type="submit" class="btn alt" name="export_type" value="csv">Generate CSV</button></form>',
         html_generation={"state": "running", "message": "Generating LLM analysis 1/2...", "current": 1, "total": 2, "detail_mode": "detailed"},
+        owner_scope={"owner": "@team-platform", "usage": "risky", "label": "@team-platform / Risky"},
     ).decode("utf-8")
 
     assert "Findings" in html
@@ -2680,6 +2681,11 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert "Debug mode in production" in html
     assert "Security" in html
     assert "Showing findings for scan scan-2." in html
+    assert "Showing findings for owner scope @team-platform / Risky." in html
+    assert 'name="owner" value="@team-platform"' in html
+    assert 'name="usage" value="risky"' in html
+    assert 'href="/inventory?owner=%40team-platform&usage=risky"' in html
+    assert "Generate Owner HTML Report" in html
     assert "Generate CSV" in html
     assert "Detailed HTML Report Generation" in html
     assert 'data-report-generation-active="1"' in html
@@ -2692,6 +2698,32 @@ def test_render_findings_page_shows_filters_and_bulk_actions():
     assert 'data-tooltip-text="Approved temporary exception"' in html
     assert 'class="snippet-hit"' in html
     assert 'data-llm-reason="The code sends a hardcoded credential to an AI provider."' in html
+
+
+def test_findings_for_inventory_scope_filters_by_owner_and_usage(monkeypatch):
+    import app_server as srv
+
+    monkeypatch.setattr(
+        srv,
+        "_inventory_repo_scope",
+        lambda owner="", usage="": [
+            {"project_key": "COGI", "repo": "repo1"},
+        ] if owner == "@team-platform" and usage == "risky" else [],
+    )
+    monkeypatch.setattr(
+        srv,
+        "_findings_for_user",
+        lambda: [
+            {"project_key": "COGI", "repo": "repo1", "hash": "a"},
+            {"project_key": "COGI", "repo": "repo2", "hash": "b"},
+        ],
+    )
+
+    findings, label = srv._findings_for_inventory_scope(owner="@team-platform", usage="risky")
+
+    assert len(findings) == 1
+    assert findings[0]["repo"] == "repo1"
+    assert label == "@team-platform / Risky"
 
 
 def test_generate_selected_findings_html_report_registers_runtime_report(monkeypatch, tmp_path):
@@ -4083,14 +4115,18 @@ def test_inventory_page_is_server_rendered():
     assert 'id="inventory-runtime"' in html
     assert 'id="inventory-technology"' in html
     assert 'id="inventory-dependency"' in html
+    assert 'id="inventory-export-csv"' in html
+    assert 'id="inventory-export-json"' in html
     assert '<option value="@team-platform" selected>@team-platform</option>' in html
     assert '<option value="risky" selected>Risky Repos</option>' in html
     assert 'href="/reports/demo.html"' in html
     assert 'href="/inventory/repo?project=COGI&repo=repo1"' in html
     assert 'href="/inventory?owner=%40team-platform&usage=risky"' in html
+    assert 'href="/findings?owner=%40team-platform&usage=risky"' in html
     assert 'href="/inventory?owner=Unowned&usage=policy_violation"' in html
     assert '>Profile</a>' in html
     assert '>Owner Slice</a>' in html
+    assert '>Owner Findings</a>' in html
     assert '>Findings</a>' in html
 
 
@@ -4151,6 +4187,7 @@ def test_inventory_repo_page_is_server_rendered():
     assert 'href="/reports/demo.json"' in html
     assert 'href="/inventory?owner=%40team-platform&usage=risky"' in html
     assert 'href="/inventory?owner=%40team-platform&usage=missing_governance"' in html
+    assert 'href="/findings?owner=%40team-platform&usage=risky"' in html
     assert "Branch Governance" in html
     assert "Review Gate" in html
     assert "Produced: orders.created | Consumed: orders.created" in html
@@ -4244,6 +4281,66 @@ def test_inventory_repo_detail_collects_recent_scans_for_repo():
     assert len(recent_scans) == 1
     assert recent_scans[0]["scan_id"] == "20260323_101500"
     assert recent_scans[0]["duration_label"] == "00:32"
+
+
+def test_inventory_export_payload_respects_filters():
+    import app_server as srv
+
+    repo_inventory = [
+        {
+            "project_key": "COGI",
+            "repo": "repo1",
+            "owner": "@team-platform",
+            "scan_id": "20260323_101500",
+            "last_scan_at_utc": "2026-03-23T10:15:00Z",
+            "finding_count": 4,
+            "runtimes": ["Node.js"],
+            "technologies": ["React"],
+            "runtime_versions": {"Node.js": "<18"},
+            "missing_governance": ["SECURITY.md"],
+            "policy_violations": ["API repos require SECURITY.md"],
+            "ci_systems": ["Bitbucket Pipelines"],
+            "iac_tools": ["Terraform"],
+            "cloud_platforms": ["AWS"],
+            "api_types": ["REST"],
+            "event_systems": ["Kafka"],
+            "api_boundaries": ["External API"],
+            "dependency_names": ["axios", "openai"],
+            "internal_dependency_names": ["@cognyte/ui"],
+            "usage_tags": ["risky", "policy_violation"],
+            "reports": {"html_name": "demo.html"},
+        },
+        {
+            "project_key": "COGI",
+            "repo": "repo2",
+            "owner": "Unowned",
+            "scan_id": "20260323_101700",
+            "last_scan_at_utc": "2026-03-23T10:17:00Z",
+            "finding_count": 0,
+            "runtimes": ["Python"],
+            "technologies": ["Django"],
+            "runtime_versions": {"Python": "3.11"},
+            "missing_governance": [],
+            "policy_violations": [],
+            "ci_systems": [],
+            "iac_tools": [],
+            "cloud_platforms": [],
+            "api_types": [],
+            "event_systems": [],
+            "api_boundaries": [],
+            "dependency_names": ["requests"],
+            "internal_dependency_names": [],
+            "usage_tags": [],
+            "reports": {},
+        },
+    ]
+
+    rows = srv._inventory_export_payload(repo_inventory, {"owner": "@team-platform", "usage": "policy_violation"})
+
+    assert len(rows) == 1
+    assert rows[0]["repo"] == "repo1"
+    assert rows[0]["policy_violations"] == "API repos require SECURITY.md"
+    assert rows[0]["html_report"] == "demo.html"
 
 
 def test_login_page_centers_login_action():
