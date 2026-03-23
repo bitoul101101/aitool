@@ -760,6 +760,11 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 "cloud_platforms": list(profile.get("cloud_platforms", []) or []),
                   "api_types": list(profile.get("api_types", []) or []),
                   "event_systems": list(profile.get("event_systems", []) or []),
+                  "api_boundaries": list(profile.get("api_boundaries", []) or []),
+                  "produced_topics": list(profile.get("produced_topics", []) or []),
+                  "consumed_topics": list(profile.get("consumed_topics", []) or []),
+                  "internal_api_hosts": list(profile.get("internal_api_hosts", []) or []),
+                  "external_api_hosts": list(profile.get("external_api_hosts", []) or []),
                   "ci_systems": list(profile.get("ci_systems", []) or []),
                   "dependency_files": list(profile.get("dependency_files", []) or []),
                   "dependency_names": list(profile.get("dependency_names", []) or []),
@@ -812,6 +817,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     governance_rollup: dict[str, int] = {}
     iac_rollup: dict[str, int] = {}
     api_rollup: dict[str, int] = {}
+    boundary_rollup: dict[str, int] = {}
+    produced_topic_rollup: dict[str, int] = {}
+    consumed_topic_rollup: dict[str, int] = {}
     ci_rollup: dict[str, int] = {}
     version_rollup: dict[str, int] = {}
     owner_rollup: dict[str, int] = {}
@@ -833,6 +841,12 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             api_rollup[api_type] = api_rollup.get(api_type, 0) + 1
         for event_system in item.get("event_systems", []) or []:
             api_rollup[event_system] = api_rollup.get(event_system, 0) + 1
+        for boundary in item.get("api_boundaries", []) or []:
+            boundary_rollup[boundary] = boundary_rollup.get(boundary, 0) + 1
+        for topic in item.get("produced_topics", []) or []:
+            produced_topic_rollup[topic] = produced_topic_rollup.get(topic, 0) + 1
+        for topic in item.get("consumed_topics", []) or []:
+            consumed_topic_rollup[topic] = consumed_topic_rollup.get(topic, 0) + 1
         for ci_system in item.get("ci_systems", []) or []:
             ci_rollup[ci_system] = ci_rollup.get(ci_system, 0) + 1
         for runtime, version in (item.get("runtime_versions") or {}).items():
@@ -867,6 +881,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
           "iac_rollup": sorted(iac_rollup.items(), key=lambda item: (-item[1], item[0])),
           "api_rollup": sorted(api_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "boundary_rollup": sorted(boundary_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "produced_topic_rollup": sorted(produced_topic_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "consumed_topic_rollup": sorted(consumed_topic_rollup.items(), key=lambda item: (-item[1], item[0])),
           "ci_rollup": sorted(ci_rollup.items(), key=lambda item: (-item[1], item[0])),
           "version_rollup": sorted(version_rollup.items(), key=lambda item: (-item[1], item[0])),
         "owner_rollup": sorted(owner_rollup.items(), key=lambda item: (-item[1], item[0])),

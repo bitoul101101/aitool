@@ -52,6 +52,15 @@ _MODEL_RE = re.compile(
     re.IGNORECASE,
 )
 
+_TOPIC_CALL_RE = re.compile(
+    r"""(?ix)
+    \b(?:publish|produce|send|emit|subscribe|consume|listen)\s*
+    \(?\s*["']([A-Za-z0-9._-]{2,120})["']
+    """
+)
+
+_URL_RE = re.compile(r"""https?://([A-Za-z0-9._:-]+)""", re.IGNORECASE)
+
 
 def _normalise_label(value: str) -> str:
     text = str(value or "").strip().replace("_", " ")
@@ -309,6 +318,51 @@ def _classify_dependency_scope(name: str) -> str:
     return "external"
 
 
+def _classify_boundary(host: str) -> str:
+    value = str(host or "").strip().lower()
+    if not value:
+        return ""
+    if (
+        value.endswith(".local")
+        or value.endswith(".internal")
+        or ".cognyte." in value
+        or value.startswith("localhost")
+        or value.startswith("127.0.0.1")
+    ):
+        return "internal"
+    return "external"
+
+
+def _extract_api_hosts(contents: dict[str, str]) -> tuple[list[str], list[str]]:
+    internal: set[str] = set()
+    external: set[str] = set()
+    for text in contents.values():
+        for host in _URL_RE.findall(str(text or "")):
+            host = host.strip().lower()
+            boundary = _classify_boundary(host)
+            if boundary == "internal":
+                internal.add(host)
+            elif boundary == "external":
+                external.add(host)
+    return sorted(internal), sorted(external)
+
+
+def _extract_event_topics(contents: dict[str, str]) -> tuple[list[str], list[str]]:
+    produced: set[str] = set()
+    consumed: set[str] = set()
+    for text in contents.values():
+        for match in _TOPIC_CALL_RE.finditer(str(text or "")):
+            full = match.group(0).lower()
+            topic = str(match.group(1) or "").strip()
+            if not topic:
+                continue
+            if any(token in full for token in ("subscribe", "consume", "listen")):
+                consumed.add(topic)
+            else:
+                produced.add(topic)
+    return sorted(produced), sorted(consumed)
+
+
 def collect_repo_facts(
     repo_root: str | Path,
     repo: str,
@@ -328,6 +382,11 @@ def collect_repo_facts(
     cloud_platforms: list[str] = []
     api_types: list[str] = []
     event_systems: list[str] = []
+    api_boundaries: list[str] = []
+    internal_api_hosts: list[str] = []
+    external_api_hosts: list[str] = []
+    produced_topics: list[str] = []
+    consumed_topics: list[str] = []
     ci_systems: list[str] = []
     dependency_files: list[str] = []
     dependency_names: set[str] = set()
@@ -451,6 +510,12 @@ def collect_repo_facts(
         event_systems.append("AWS Messaging")
     if _content_matches(contents, r"\bpubsub\b"):
         event_systems.append("GCP Pub/Sub")
+    produced_topics, consumed_topics = _extract_event_topics(contents)
+    internal_api_hosts, external_api_hosts = _extract_api_hosts(contents)
+    if internal_api_hosts:
+        api_boundaries.append("Internal API")
+    if external_api_hosts:
+        api_boundaries.append("External API")
 
     has_readme = any(Path(name).name.lower().startswith("readme") for name in lower_names)
     has_license = any(Path(name).name.lower().startswith("license") for name in lower_names)
@@ -518,6 +583,11 @@ def collect_repo_facts(
             "cloud_platforms": sorted(set(cloud_platforms)),
             "api_types": sorted(set(api_types)),
             "event_systems": sorted(set(event_systems)),
+            "api_boundaries": sorted(set(api_boundaries)),
+            "internal_api_hosts": internal_api_hosts,
+            "external_api_hosts": external_api_hosts,
+            "produced_topics": produced_topics,
+            "consumed_topics": consumed_topics,
             "ci_systems": sorted(set(ci_systems)),
             "dependency_files": sorted(set(dependency_files)),
             "dependency_names": sorted(dependency_names),
@@ -549,6 +619,9 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
     missing_governance_repos = 0
     iac_repos = 0
     api_repos = 0
+    boundary_counts: Counter[str] = Counter()
+    produced_topic_counts: Counter[str] = Counter()
+    consumed_topic_counts: Counter[str] = Counter()
     ci_counts: Counter[str] = Counter()
     branch_governed_repos = 0
     review_gated_repos = 0
@@ -620,6 +693,11 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         cloud_platforms = sorted(set(facts.get("cloud_platforms", []) or []))
         api_types = sorted(set(facts.get("api_types", []) or []))
         event_systems = sorted(set(facts.get("event_systems", []) or []))
+        api_boundaries = sorted(set(facts.get("api_boundaries", []) or []))
+        produced_topics = sorted(set(facts.get("produced_topics", []) or []))
+        consumed_topics = sorted(set(facts.get("consumed_topics", []) or []))
+        internal_api_hosts = sorted(set(facts.get("internal_api_hosts", []) or []))
+        external_api_hosts = sorted(set(facts.get("external_api_hosts", []) or []))
         ci_systems = sorted(set(facts.get("ci_systems", []) or []))
         dependency_files = sorted(set(facts.get("dependency_files", []) or []))
         dependency_names = sorted(set(facts.get("dependency_names", []) or []))
@@ -637,6 +715,12 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             iac_repos += 1
         if api_types:
             api_repos += 1
+        for boundary in api_boundaries:
+            boundary_counts[boundary] += 1
+        for topic in produced_topics:
+            produced_topic_counts[topic] += 1
+        for topic in consumed_topics:
+            consumed_topic_counts[topic] += 1
         for ci_system in ci_systems:
             ci_counts[ci_system] += 1
         if facts.get("has_branch_governance"):
@@ -669,6 +753,11 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "cloud_platforms": cloud_platforms,
             "api_types": api_types,
             "event_systems": event_systems,
+            "api_boundaries": api_boundaries,
+            "produced_topics": produced_topics,
+            "consumed_topics": consumed_topics,
+            "internal_api_hosts": internal_api_hosts,
+            "external_api_hosts": external_api_hosts,
             "ci_systems": ci_systems,
             "dependency_files": dependency_files,
             "dependency_names": dependency_names,
@@ -713,6 +802,9 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         "missing_governance_repos": missing_governance_repos,
         "iac_repos": iac_repos,
         "api_repos": api_repos,
+        "boundary_by_count": [{"boundary": key, "count": count} for key, count in boundary_counts.most_common()],
+        "produced_topics_by_count": [{"topic": key, "count": count} for key, count in produced_topic_counts.most_common()],
+        "consumed_topics_by_count": [{"topic": key, "count": count} for key, count in consumed_topic_counts.most_common()],
         "branch_governed_repos": branch_governed_repos,
         "review_gated_repos": review_gated_repos,
         "dependency_count": len(dependency_counts),

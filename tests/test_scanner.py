@@ -1340,6 +1340,31 @@ def test_collect_repo_facts_merges_ci_and_bitbucket_governance(tmp_path):
     assert "Review Gate" not in facts["missing_governance"]
 
 
+def test_collect_repo_facts_extracts_api_boundaries_and_event_topics(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "service.py").write_text(
+        "\n".join(
+            [
+                'requests.get("https://api.example.com/v1/users")',
+                'requests.post("https://svc.cognyte.local/v1/internal")',
+                'producer.send("orders.created", payload)',
+                'consumer.subscribe("orders.created")',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    facts = collect_repo_facts(tmp_path, "demo-repo", [])
+
+    assert "External API" in facts["api_boundaries"]
+    assert "Internal API" in facts["api_boundaries"]
+    assert "api.example.com" in facts["external_api_hosts"]
+    assert "svc.cognyte.local" in facts["internal_api_hosts"]
+    assert "orders.created" in facts["produced_topics"]
+    assert "orders.created" in facts["consumed_topics"]
+
+
 def test_bitbucket_client_get_repo_governance_counts_rules():
     from scanner.bitbucket import BitbucketClient
 
@@ -3852,6 +3877,11 @@ def test_inventory_page_is_server_rendered():
                 "cloud_platforms": ["AWS"],
                 "api_types": ["REST"],
                 "event_systems": ["Kafka"],
+                "api_boundaries": ["Internal API", "External API"],
+                "produced_topics": ["orders.created"],
+                "consumed_topics": ["orders.created"],
+                "internal_api_hosts": ["svc.cognyte.local"],
+                "external_api_hosts": ["api.example.com"],
                 "ci_systems": ["Bitbucket Pipelines"],
                 "has_branch_governance": True,
                 "has_review_gate": True,
@@ -3890,6 +3920,9 @@ def test_inventory_page_is_server_rendered():
             "ci_rollup": [("Bitbucket Pipelines", 1)],
             "iac_rollup": [("Terraform", 1), ("AWS", 1)],
             "api_rollup": [("REST", 1), ("Kafka", 1)],
+            "boundary_rollup": [("External API", 1), ("Internal API", 1)],
+            "produced_topic_rollup": [("orders.created", 1)],
+            "consumed_topic_rollup": [("orders.created", 1)],
             "dependency_rollup": [("react", 1), ("axios", 1)],
             "internal_dependency_rollup": [("@cognyte/ui", 1)],
             "external_dependency_rollup": [("react", 1), ("axios", 1)],
@@ -3918,6 +3951,12 @@ def test_inventory_page_is_server_rendered():
     assert "Bitbucket Pipelines" in html
     assert "Branch Gov" in html
     assert "Review Gate" in html
+    assert "API Boundaries" in html
+    assert "Produced Topics" in html
+    assert "Consumed Topics" in html
+    assert "Internal API, External API" in html
+    assert "Prod: orders.created" in html
+    assert "Cons: orders.created" in html
     assert "Node.js 20" in html
     assert "SECURITY.md" in html
     assert 'id="inventory-search"' in html
