@@ -579,22 +579,32 @@ def _extract_json_array(text: str) -> Optional[List[Dict]]:
 
 def _extract_snippet(file_contents: Dict[str, str],
                      file_path: str,
-                     line_number: int) -> str:
-    """Return CONTEXT_LINES either side of line_number, marked with >>>."""
+                     line_number: int,
+                     *,
+                     fallback_snippet: str = "",
+                     context: str = "production") -> str:
+    """Return the best available snippet for LLM review."""
     content = file_contents.get(file_path, "")
-    if not content:
-        return "(source not available)"
-    lines = content.splitlines()
-    lo = max(0, line_number - CONTEXT_LINES - 1)
-    hi = min(len(lines), line_number + CONTEXT_LINES)
-    out = []
-    for i, line in enumerate(lines[lo:hi], start=lo + 1):
-        marker = ">>>" if i == line_number else "   "
-        out.append(f"{marker} {i:4d} | {line[:100]}")
-    snippet = "\n".join(out)
-    if len(snippet) > MAX_SNIPPET_CHARS:
-        snippet = snippet[:MAX_SNIPPET_CHARS] + "\n...(truncated)"
-    return snippet
+    if content:
+        lines = content.splitlines()
+        lo = max(0, line_number - CONTEXT_LINES - 1)
+        hi = min(len(lines), line_number + CONTEXT_LINES)
+        out = []
+        for i, line in enumerate(lines[lo:hi], start=lo + 1):
+            marker = ">>>" if i == line_number else "   "
+            out.append(f"{marker} {i:4d} | {line[:100]}")
+        snippet = "\n".join(out)
+        if len(snippet) > MAX_SNIPPET_CHARS:
+            snippet = snippet[:MAX_SNIPPET_CHARS] + "\n...(truncated)"
+        return snippet
+    snippet = str(fallback_snippet or "").strip()
+    if snippet:
+        if len(snippet) > MAX_SNIPPET_CHARS:
+            snippet = snippet[:MAX_SNIPPET_CHARS] + "\n...(truncated)"
+        return snippet
+    if str(context or "").lower() == "deleted_file":
+        return "(deleted-file source not available)"
+    return "(cached source not available for review)"
 
 
 # ── Batch prompt builder ──────────────────────────────────────────────
@@ -606,7 +616,13 @@ def _build_user_message(batch: List[Dict[str, Any]],
     for f in batch:
         file_path   = f.get("file", "")
         line_number = f.get("line", 0)
-        snippet     = _extract_snippet(file_contents, file_path, line_number)
+        snippet     = _extract_snippet(
+            file_contents,
+            file_path,
+            line_number,
+            fallback_snippet=str(f.get("snippet", "") or ""),
+            context=str(f.get("context", "production") or "production"),
+        )
         items.append({
             "pattern_name":  f.get("provider_or_lib", ""),
             "capability":    f.get("capability", ""),
@@ -632,7 +648,13 @@ def _build_challenge_message(finding: Dict[str, Any],
     """Build a single-finding challenge message for the defensive second pass."""
     file_path   = finding.get("file", "")
     line_number = finding.get("line", 0)
-    snippet     = _extract_snippet(file_contents, file_path, line_number)
+    snippet     = _extract_snippet(
+        file_contents,
+        file_path,
+        line_number,
+        fallback_snippet=str(finding.get("snippet", "") or ""),
+        context=str(finding.get("context", "production") or "production"),
+    )
     item = {
         "pattern_name":  finding.get("provider_or_lib", ""),
         "capability":    finding.get("capability", ""),

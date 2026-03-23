@@ -2195,6 +2195,16 @@ def _hardware_snapshot(session: ScanSession | None) -> dict:
 def _gpu_snapshot() -> str:
     if os.name != "nt":
         return "Unavailable"
+
+    def _parse_int(value: str) -> int | None:
+        text = str(value or "").strip()
+        if not text.isdigit():
+            return None
+        try:
+            return int(text)
+        except ValueError:
+            return None
+
     try:
         proc = subprocess.Popen(
             [
@@ -2230,12 +2240,25 @@ def _gpu_snapshot() -> str:
     lines = [line.strip() for line in stdout.splitlines() if line.strip()]
     if not lines:
         return "Unavailable"
-    first = lines[0]
-    parts = [part.strip() for part in first.split(",")]
-    if len(parts) < 3:
+    best_parts: tuple[int, int, int, int] | None = None
+    for line in lines:
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) < 3:
+            continue
+        gpu_util = _parse_int(parts[0])
+        mem_used = _parse_int(parts[1])
+        mem_total = _parse_int(parts[2])
+        if mem_used is None or mem_total is None or mem_total <= 0:
+            continue
+        mem_pct = int(round((mem_used / mem_total) * 100))
+        effective_pct = gpu_util if gpu_util not in (None, 0) else mem_pct
+        candidate = (effective_pct, mem_used, mem_total, gpu_util or 0)
+        if best_parts is None or candidate > best_parts:
+            best_parts = candidate
+    if best_parts is None:
         return "Unavailable"
-    gpu_util, mem_used, mem_total = parts[:3]
-    return f"{gpu_util}% | {mem_used} / {mem_total} MB"
+    effective_pct, mem_used, mem_total, _gpu_util = best_parts
+    return f"{effective_pct}% | {mem_used} / {mem_total} MB"
 
 
 _settings_service = SettingsService(

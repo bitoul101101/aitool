@@ -2281,6 +2281,52 @@ def test_apply_verdict_records_llm_review_confidence_score():
     assert finding["severity"] == 3
 
 
+def test_llm_reviewer_prefers_finding_snippet_when_cached_source_missing():
+    from scanner import llm_reviewer as reviewer
+
+    message = reviewer._build_user_message(
+        [
+            {
+                "provider_or_lib": "openai",
+                "capability": "External AI API",
+                "category": "External AI API",
+                "severity": 3,
+                "context": "docs",
+                "file": "requirements.txt",
+                "line": 2,
+                "match": "openai==",
+                "snippet": "openai==1.78.0\nlangchain==0.3.25",
+            }
+        ],
+        {},
+    )
+
+    assert '"snippet":"openai==1.78.0\\nlangchain==0.3.25"' in message
+
+
+def test_llm_reviewer_marks_deleted_file_source_unavailable_explicitly():
+    from scanner import llm_reviewer as reviewer
+
+    message = reviewer._build_user_message(
+        [
+            {
+                "provider_or_lib": "unsafe_code_exec",
+                "capability": "Code Execution Risk",
+                "category": "Security",
+                "severity": 4,
+                "context": "deleted_file",
+                "file": "[DELETED]old.py",
+                "line": 10,
+                "match": "eval(",
+                "snippet": "",
+            }
+        ],
+        {},
+    )
+
+    assert '"snippet":"(deleted-file source not available)"' in message
+
+
 def test_scan_page_can_force_new_scan_selection_after_completion():
     import app_server as srv
 
@@ -7175,6 +7221,44 @@ def test_gpu_snapshot_returns_unavailable_when_communicate_times_out(monkeypatch
     assert srv._gpu_snapshot() == "Unavailable"
 
 
+def test_gpu_snapshot_uses_busiest_gpu_row(monkeypatch):
+    import app_server as srv
+
+    class MultiGpuProc:
+        def __init__(self, *args, **kwargs):
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+        def communicate(self, timeout=None):
+            return ("0, 256, 8192\n72, 4096, 8192\n", "")
+
+    monkeypatch.setattr(srv.os, "name", "nt")
+    monkeypatch.setattr(srv.subprocess, "Popen", lambda *args, **kwargs: MultiGpuProc())
+
+    assert srv._gpu_snapshot() == "72% | 4096 / 8192 MB"
+
+
+def test_gpu_snapshot_falls_back_to_vram_percent_when_util_is_zero(monkeypatch):
+    import app_server as srv
+
+    class ZeroUtilProc:
+        def __init__(self, *args, **kwargs):
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+        def communicate(self, timeout=None):
+            return ("0, 5900, 6144\n", "")
+
+    monkeypatch.setattr(srv.os, "name", "nt")
+    monkeypatch.setattr(srv.subprocess, "Popen", lambda *args, **kwargs: ZeroUtilProc())
+
+    assert srv._gpu_snapshot() == "96% | 5900 / 6144 MB"
+
+
 def test_send_swallows_client_disconnects():
     import app_server as srv
 
@@ -7398,7 +7482,7 @@ def test_run_scan_defers_html_report_generation_until_requested():
              patch("services.scan_jobs.Aggregator.process", return_value=[finding]):
             srv._run_scan(session)
 
-        assert any("HTML report deferred until requested from the Findings page." in entry["msg"] for entry in session.log_lines)
+        assert not any("HTML report deferred until requested from the Findings page." in entry["msg"] for entry in session.log_lines)
         assert not any("Writing CSV report..." in entry["msg"] for entry in session.log_lines)
         assert not any("Writing HTML report" in entry["msg"] for entry in session.log_lines)
     finally:

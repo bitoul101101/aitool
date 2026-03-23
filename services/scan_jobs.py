@@ -1671,9 +1671,7 @@ class ScanJobService:
                 report_meta=report_meta,
                 write_csv=False,
             )
-            if final:
-                log("  HTML report deferred until requested from the Findings page.", "dim")
-            else:
+            if not final:
                 log("  No findings - HTML report skipped.", "dim")
             report_paths["__all__"] = structured_reports
             with session.state_lock:
