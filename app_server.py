@@ -857,12 +857,16 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 "cloud_platforms": list(profile.get("cloud_platforms", []) or []),
                   "api_types": list(profile.get("api_types", []) or []),
                   "event_systems": list(profile.get("event_systems", []) or []),
-                  "api_boundaries": list(profile.get("api_boundaries", []) or []),
-                  "produced_topics": list(profile.get("produced_topics", []) or []),
-                  "consumed_topics": list(profile.get("consumed_topics", []) or []),
-                  "internal_api_hosts": list(profile.get("internal_api_hosts", []) or []),
-                  "external_api_hosts": list(profile.get("external_api_hosts", []) or []),
-                  "ci_systems": list(profile.get("ci_systems", []) or []),
+                "api_boundaries": list(profile.get("api_boundaries", []) or []),
+                "produced_topics": list(profile.get("produced_topics", []) or []),
+                "consumed_topics": list(profile.get("consumed_topics", []) or []),
+                "internal_api_hosts": list(profile.get("internal_api_hosts", []) or []),
+                "external_api_hosts": list(profile.get("external_api_hosts", []) or []),
+                "internal_api_routes": list(profile.get("internal_api_routes", []) or []),
+                "external_api_routes": list(profile.get("external_api_routes", []) or []),
+                "deprecated_api_routes": list(profile.get("deprecated_api_routes", []) or []),
+                "api_sdk_names": list(profile.get("api_sdk_names", []) or []),
+                "ci_systems": list(profile.get("ci_systems", []) or []),
                   "dependency_files": list(profile.get("dependency_files", []) or []),
                 "dependency_names": list(profile.get("dependency_names", []) or []),
                 "internal_dependency_names": list(profile.get("internal_dependency_names", []) or []),
@@ -943,6 +947,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     produced_topic_rollup: dict[str, int] = {}
     consumed_topic_rollup: dict[str, int] = {}
     internal_api_host_rollup: dict[str, int] = {}
+    internal_api_route_rollup: dict[str, int] = {}
+    deprecated_api_route_rollup: dict[str, int] = {}
+    api_sdk_rollup: dict[str, int] = {}
     ci_rollup: dict[str, int] = {}
     version_rollup: dict[str, int] = {}
     owner_rollup: dict[str, int] = {}
@@ -993,6 +1000,12 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             consumed_topic_rollup[topic] = consumed_topic_rollup.get(topic, 0) + 1
         for host in item.get("internal_api_hosts", []) or []:
             internal_api_host_rollup[host] = internal_api_host_rollup.get(host, 0) + 1
+        for route in item.get("internal_api_routes", []) or []:
+            internal_api_route_rollup[route] = internal_api_route_rollup.get(route, 0) + 1
+        for route in item.get("deprecated_api_routes", []) or []:
+            deprecated_api_route_rollup[route] = deprecated_api_route_rollup.get(route, 0) + 1
+        for sdk in item.get("api_sdk_names", []) or []:
+            api_sdk_rollup[sdk] = api_sdk_rollup.get(sdk, 0) + 1
         for ci_system in item.get("ci_systems", []) or []:
             ci_rollup[ci_system] = ci_rollup.get(ci_system, 0) + 1
         for runtime, version in (item.get("runtime_versions") or {}).items():
@@ -1347,6 +1360,18 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             [(host, count) for host, count in internal_api_host_rollup.items() if count > 1],
             key=lambda item: (-item[1], item[0]),
         ),
+        "shared_internal_api_route_rollup": sorted(
+            [(route, count) for route, count in internal_api_route_rollup.items() if count > 1],
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "deprecated_api_route_rollup": sorted(
+            deprecated_api_route_rollup.items(),
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "api_sdk_rollup": sorted(
+            api_sdk_rollup.items(),
+            key=lambda item: (-item[1], item[0]),
+        ),
         "shared_consumed_topic_rollup": sorted(
             [(topic, count) for topic, count in consumed_topic_rollup.items() if count > 1],
             key=lambda item: (-item[1], item[0]),
@@ -1489,6 +1514,10 @@ def _filter_inventory_rows(repo_inventory: list[dict], filters: dict[str, str] |
                 ", ".join(item.get("dependency_names", []) or []),
                 ", ".join(item.get("api_types", []) or []),
                 ", ".join(item.get("event_systems", []) or []),
+                ", ".join(item.get("internal_api_routes", []) or []),
+                ", ".join(item.get("external_api_routes", []) or []),
+                ", ".join(item.get("deprecated_api_routes", []) or []),
+                ", ".join(item.get("api_sdk_names", []) or []),
                 ", ".join(item.get("policy_violations", []) or []),
             )
         ).lower()
@@ -1529,6 +1558,9 @@ def _inventory_export_payload(repo_inventory: list[dict], filters: dict[str, str
                 "ci_systems": ", ".join(item.get("ci_systems", []) or []),
                 "iac_cloud": ", ".join((item.get("iac_tools", []) or []) + (item.get("cloud_platforms", []) or [])),
                 "api_events": ", ".join((item.get("api_types", []) or []) + (item.get("event_systems", []) or []) + (item.get("api_boundaries", []) or [])),
+                "api_routes": ", ".join((item.get("internal_api_routes", []) or []) + (item.get("external_api_routes", []) or [])),
+                "deprecated_api_routes": ", ".join(item.get("deprecated_api_routes", []) or []),
+                "api_sdks": ", ".join(item.get("api_sdk_names", []) or []),
                 "dependencies": ", ".join(item.get("dependency_names", []) or []),
                 "internal_dependencies": ", ".join(item.get("internal_dependency_names", []) or []),
                 "module_markers": ", ".join(item.get("module_markers", []) or []),
@@ -3037,6 +3069,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "ci_systems",
                 "iac_cloud",
                 "api_events",
+                "api_routes",
+                "deprecated_api_routes",
+                "api_sdks",
                 "dependencies",
                 "internal_dependencies",
                 "risk_flags",

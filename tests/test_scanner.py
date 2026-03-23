@@ -3914,6 +3914,10 @@ def test_inventory_page_is_server_rendered():
                 "consumed_topics": ["orders.created"],
                 "internal_api_hosts": ["svc.cognyte.local"],
                 "external_api_hosts": ["api.example.com"],
+                "internal_api_routes": ["svc.cognyte.local/api/orders"],
+                "external_api_routes": ["api.example.com/v1/legacy/orders"],
+                "deprecated_api_routes": ["api.example.com/v1/legacy/orders"],
+                "api_sdk_names": ["axios", "requests"],
                 "ci_systems": ["Bitbucket Pipelines"],
                 "has_branch_governance": True,
                 "has_review_gate": True,
@@ -4001,6 +4005,10 @@ def test_inventory_page_is_server_rendered():
                 "consumed_topics": ["orders.created"],
                 "internal_api_hosts": ["svc.cognyte.local"],
                 "external_api_hosts": [],
+                "internal_api_routes": ["svc.cognyte.local/api/orders"],
+                "external_api_routes": [],
+                "deprecated_api_routes": [],
+                "api_sdk_names": ["requests"],
                 "ci_systems": [],
                 "has_branch_governance": False,
                 "has_review_gate": False,
@@ -4106,6 +4114,9 @@ def test_inventory_page_is_server_rendered():
             "consumed_topic_rollup": [("orders.created", 2)],
             "internal_api_host_rollup": [("svc.cognyte.local", 2)],
             "shared_internal_api_rollup": [("svc.cognyte.local", 2)],
+            "shared_internal_api_route_rollup": [("svc.cognyte.local/api/orders", 2)],
+            "deprecated_api_route_rollup": [("api.example.com/v1/legacy/orders", 1)],
+            "api_sdk_rollup": [("requests", 2), ("axios", 1)],
             "shared_consumed_topic_rollup": [("orders.created", 2)],
             "dependency_rollup": [("@cognyte/ui", 2), ("react", 1), ("axios", 1)],
             "internal_dependency_rollup": [("@cognyte/ui", 2)],
@@ -4174,6 +4185,9 @@ def test_inventory_page_is_server_rendered():
     assert "Review Gate" in html
     assert "API Boundaries" in html
     assert "Shared Internal APIs" in html
+    assert "Shared API Routes" in html
+    assert "Deprecated API Clients" in html
+    assert "API SDK Usage" in html
     assert "Produced Topics" in html
     assert "Consumed Topics" in html
     assert "Shared Topic Consumers" in html
@@ -4201,6 +4215,9 @@ def test_inventory_page_is_server_rendered():
     assert "Internal API, External API" in html
     assert "Prod: orders.created" in html
     assert "Cons: orders.created" in html
+    assert "Routes: svc.cognyte.local/api/orders, api.example.com/v1/legacy/orders" in html
+    assert "Deprecated: api.example.com/v1/legacy/orders" in html
+    assert "SDKs: axios, requests" in html
     assert "svc.cognyte.local" in html
     assert "Cycles: 2" in html
     assert "Repo Cycle" in html
@@ -4274,6 +4291,10 @@ def test_inventory_repo_page_is_server_rendered():
             "consumed_topics": ["orders.created"],
             "internal_api_hosts": ["svc.cognyte.local"],
             "external_api_hosts": ["api.example.com"],
+            "internal_api_routes": ["svc.cognyte.local/api/orders"],
+            "external_api_routes": ["api.example.com/v1/legacy/orders"],
+            "deprecated_api_routes": ["api.example.com/v1/legacy/orders"],
+            "api_sdk_names": ["axios", "requests"],
             "ci_systems": ["Bitbucket Pipelines"],
             "has_branch_governance": True,
             "has_review_gate": True,
@@ -4337,6 +4358,9 @@ def test_inventory_repo_page_is_server_rendered():
     assert "Branch Governance" in html
     assert "Review Gate" in html
     assert "Produced: orders.created | Consumed: orders.created" in html
+    assert "API Routes" in html
+    assert "Deprecated API Usage" in html
+    assert "API SDKs" in html
     assert "Internal Hosts" in html
     assert "svc.cognyte.local" in html
     assert "Current Action Focus" in html
@@ -4366,6 +4390,9 @@ def test_inventory_repo_page_is_server_rendered():
     assert "UI depends on disallowed worker repo repo2" in html
     assert "New repo dependencies: repo2" in html
     assert "repo2" in html
+    assert "svc.cognyte.local/api/orders" in html
+    assert "api.example.com/v1/legacy/orders" in html
+    assert "axios, requests" in html
     assert "Hardcoded cross-service calls" in html
     assert "DB access in src/service/metrics.py" in html
     assert "Shared module markers: billing, orders" in html
@@ -4418,6 +4445,27 @@ def test_collect_repo_facts_detects_antipatterns(tmp_path):
     assert any("svc.cognyte.local" in item for item in facts["anti_pattern_examples"])
     assert facts["wrong_module_db_examples"]
     assert facts["layer_violation_examples"] == ["src/ui/page.tsx"]
+
+
+def test_collect_repo_facts_detects_api_routes_and_sdks(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    client_dir = tmp_path / "src" / "client"
+    client_dir.mkdir(parents=True)
+    (client_dir / "api.ts").write_text(
+        'import axios from "axios"\n'
+        'const r1 = "https://svc.cognyte.local/api/orders"\n'
+        'const r2 = "https://api.example.com/v1/legacy/orders"\n'
+        'fetch("https://svc.cognyte.local/api/orders")\n',
+        encoding="utf-8",
+    )
+
+    facts = collect_repo_facts(tmp_path, repo="repo1", findings=[])
+
+    assert facts["internal_api_routes"] == ["svc.cognyte.local/api/orders"]
+    assert facts["external_api_routes"] == ["api.example.com/v1/legacy/orders"]
+    assert facts["deprecated_api_routes"] == ["api.example.com/v1/legacy/orders"]
+    assert facts["api_sdk_names"] == ["axios", "fetch"]
 
 
 def test_inventory_snapshot_prefers_repo_details_owner_over_generic_profile_owner():

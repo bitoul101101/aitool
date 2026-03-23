@@ -1163,10 +1163,19 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         api_meta = []
         produced_topics = ", ".join((item.get("produced_topics", []) or [])[:2])
         consumed_topics = ", ".join((item.get("consumed_topics", []) or [])[:2])
+        route_hints = ", ".join(((item.get("internal_api_routes", []) or []) + (item.get("external_api_routes", []) or []))[:2])
+        deprecated_route_hints = ", ".join((item.get("deprecated_api_routes", []) or [])[:2])
+        sdk_hints = ", ".join((item.get("api_sdk_names", []) or [])[:3])
         if produced_topics:
             api_meta.append(f"Prod: {produced_topics}")
         if consumed_topics:
             api_meta.append(f"Cons: {consumed_topics}")
+        if route_hints:
+            api_meta.append(f"Routes: {route_hints}")
+        if deprecated_route_hints:
+            api_meta.append(f"Deprecated: {deprecated_route_hints}")
+        if sdk_hints:
+            api_meta.append(f"SDKs: {sdk_hints}")
         ai_text = provider_text or "-"
         owner_text = str(item.get("owner", "") or "Unowned")
         dependency_text = ", ".join(item.get("dependency_names", [])[:6])
@@ -1301,6 +1310,9 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>API / Events</strong>{_rollup_list(list(summary.get("api_rollup", []) or []), "No API surface detected.")}</section>
         <section class="inventory-rollup-card"><strong>API Boundaries</strong>{_rollup_list(list(summary.get("boundary_rollup", []) or []), "No API boundary data yet.")}</section>
         <section class="inventory-rollup-card"><strong>Shared Internal APIs</strong>{_rollup_list(list(summary.get("shared_internal_api_rollup", []) or []), "No shared internal API hosts yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Shared API Routes</strong>{_rollup_list(list(summary.get("shared_internal_api_route_rollup", []) or []), "No shared API routes yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Deprecated API Clients</strong>{_rollup_list(list(summary.get("deprecated_api_route_rollup", []) or []), "No deprecated endpoint usage detected.")}</section>
+        <section class="inventory-rollup-card"><strong>API SDK Usage</strong>{_rollup_list(list(summary.get("api_sdk_rollup", []) or []), "No API SDK usage detected.")}</section>
         <section class="inventory-rollup-card"><strong>Produced Topics</strong>{_rollup_list(list(summary.get("produced_topic_rollup", []) or []), "No produced topics detected.")}</section>
         <section class="inventory-rollup-card"><strong>Consumed Topics</strong>{_rollup_list(list(summary.get("consumed_topic_rollup", []) or []), "No consumed topics detected.")}</section>
         <section class="inventory-rollup-card"><strong>Shared Topic Consumers</strong>{_rollup_list(list(summary.get("shared_consumed_topic_rollup", []) or []), "No shared consumed topics yet.")}</section>
@@ -1505,6 +1517,9 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
     consumed_topics = ", ".join(repo_profile.get("consumed_topics", []) or []) or "-"
     internal_hosts = ", ".join(repo_profile.get("internal_api_hosts", []) or []) or "-"
     external_hosts = ", ".join(repo_profile.get("external_api_hosts", []) or []) or "-"
+    api_routes = ", ".join((repo_profile.get("internal_api_routes", []) or []) + (repo_profile.get("external_api_routes", []) or [])) or "-"
+    deprecated_api_routes = ", ".join(repo_profile.get("deprecated_api_routes", []) or []) or "-"
+    api_sdks = ", ".join(repo_profile.get("api_sdk_names", []) or []) or "-"
     import_cycles = ", ".join(repo_profile.get("import_cycle_examples", []) or []) or "-"
     cross_repo_cycles = ", ".join(repo_profile.get("cross_repo_cycle_peers", []) or []) or "-"
     anti_patterns = ", ".join(repo_profile.get("anti_pattern_labels", []) or []) or "-"
@@ -1671,6 +1686,9 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
           <tr><td>API / Events</td><td>{_esc(api_text)}<div class="inventory-sub">Produced: {_esc(produced_topics)} | Consumed: {_esc(consumed_topics)}</div></td></tr>
           <tr><td>Internal Hosts</td><td>{_esc(internal_hosts)}</td></tr>
           <tr><td>External Hosts</td><td>{_esc(external_hosts)}</td></tr>
+          <tr><td>API Routes</td><td>{_esc(api_routes)}</td></tr>
+          <tr><td>Deprecated API Usage</td><td>{_esc(deprecated_api_routes)}</td></tr>
+          <tr><td>API SDKs</td><td>{_esc(api_sdks)}</td></tr>
           <tr><td>Dependencies</td><td>{_esc(dependency_text)}</td></tr>
           <tr><td>Internal Libraries</td><td>{_esc(internal_dependency_text)}</td></tr>
           <tr><td>Import Cycles</td><td>{_esc(import_cycles)}</td></tr>

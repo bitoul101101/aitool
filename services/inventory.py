@@ -60,6 +60,7 @@ _TOPIC_CALL_RE = re.compile(
 )
 
 _URL_RE = re.compile(r"""https?://([A-Za-z0-9._:-]+)""", re.IGNORECASE)
+_URL_WITH_PATH_RE = re.compile(r"""https?://([A-Za-z0-9._:-]+)(/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*)?""", re.IGNORECASE)
 _PY_IMPORT_RE = re.compile(r"^\s*import\s+([A-Za-z0-9_.,\s]+)", re.MULTILINE)
 _PY_FROM_RE = re.compile(r"^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+", re.MULTILINE)
 _JS_IMPORT_RE = re.compile(r"""import\s+(?:[^'"]+?\s+from\s+)?['"]([^'"]+)['"]""")
@@ -371,6 +372,68 @@ def _extract_api_hosts(contents: dict[str, str]) -> tuple[list[str], list[str]]:
     return sorted(internal), sorted(external)
 
 
+def _normalize_api_route(path: str) -> str:
+    route = "/" + str(path or "").strip().lstrip("/")
+    route = route.split("?", 1)[0].split("#", 1)[0].strip()
+    route = re.sub(r"/{2,}", "/", route)
+    if route != "/" and route.endswith("/"):
+        route = route[:-1]
+    return route
+
+
+def _looks_deprecated_route(route: str) -> bool:
+    value = str(route or "").lower()
+    return any(token in value for token in ("/deprecated", "/legacy", "/v1/", "/beta"))
+
+
+def _extract_api_route_usage(contents: dict[str, str]) -> tuple[list[str], list[str], list[str], list[str]]:
+    internal_routes: set[str] = set()
+    external_routes: set[str] = set()
+    deprecated_routes: set[str] = set()
+    sdk_names: set[str] = set()
+    sdk_markers = {
+        "aiohttp",
+        "apollo-client",
+        "axios",
+        "fetch",
+        "grpc",
+        "httpx",
+        "openapi",
+        "requests",
+        "resttemplate",
+        "retrofit",
+        "urllib3",
+    }
+    for path, text in contents.items():
+        body = str(text or "")
+        lower = body.lower()
+        for marker in sdk_markers:
+            if marker in lower:
+                sdk_names.add(marker)
+        for host, raw_path in _URL_WITH_PATH_RE.findall(body):
+            route = _normalize_api_route(raw_path or "/")
+            if route == "/":
+                continue
+            host_route = f"{str(host or '').strip().lower()}{route}"
+            boundary = _classify_boundary(host)
+            if boundary == "internal":
+                internal_routes.add(host_route)
+            elif boundary == "external":
+                external_routes.add(host_route)
+            if _looks_deprecated_route(route):
+                deprecated_routes.add(host_route)
+        if _is_code_file(path):
+            for module in list(_JS_IMPORT_RE.findall(body)) + list(_JS_REQUIRE_RE.findall(body)) + _PY_FROM_RE.findall(body):
+                token = str(module or "").strip().lower()
+                if token in sdk_markers or any(token.startswith(prefix) for prefix in ("grpc", "apollo", "requests", "axios", "httpx", "aiohttp", "urllib3", "openapi")):
+                    sdk_names.add(token.split(".", 1)[0])
+            for imported in _PY_IMPORT_RE.findall(body):
+                for token in [item.strip().split(" as ", 1)[0].strip().lower() for item in imported.split(",")]:
+                    if token in sdk_markers or any(token.startswith(prefix) for prefix in ("grpc", "apollo", "requests", "httpx", "aiohttp", "urllib3", "openapi")):
+                        sdk_names.add(token.split(".", 1)[0])
+    return sorted(internal_routes), sorted(external_routes), sorted(deprecated_routes), sorted(sdk_names)
+
+
 def _extract_event_topics(contents: dict[str, str]) -> tuple[list[str], list[str]]:
     produced: set[str] = set()
     consumed: set[str] = set()
@@ -629,6 +692,10 @@ def collect_repo_facts(
     api_boundaries: list[str] = []
     internal_api_hosts: list[str] = []
     external_api_hosts: list[str] = []
+    internal_api_routes: list[str] = []
+    external_api_routes: list[str] = []
+    deprecated_api_routes: list[str] = []
+    api_sdk_names: list[str] = []
     produced_topics: list[str] = []
     consumed_topics: list[str] = []
     ci_systems: list[str] = []
@@ -756,6 +823,7 @@ def collect_repo_facts(
         event_systems.append("GCP Pub/Sub")
     produced_topics, consumed_topics = _extract_event_topics(contents)
     internal_api_hosts, external_api_hosts = _extract_api_hosts(contents)
+    internal_api_routes, external_api_routes, deprecated_api_routes, api_sdk_names = _extract_api_route_usage(contents)
     if internal_api_hosts:
         api_boundaries.append("Internal API")
     if external_api_hosts:
@@ -853,6 +921,10 @@ def collect_repo_facts(
             "api_boundaries": sorted(set(api_boundaries)),
             "internal_api_hosts": internal_api_hosts,
             "external_api_hosts": external_api_hosts,
+            "internal_api_routes": internal_api_routes,
+            "external_api_routes": external_api_routes,
+            "deprecated_api_routes": deprecated_api_routes,
+            "api_sdk_names": api_sdk_names,
             "produced_topics": produced_topics,
             "consumed_topics": consumed_topics,
             "ci_systems": sorted(set(ci_systems)),
@@ -974,6 +1046,10 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         consumed_topics = sorted(set(facts.get("consumed_topics", []) or []))
         internal_api_hosts = sorted(set(facts.get("internal_api_hosts", []) or []))
         external_api_hosts = sorted(set(facts.get("external_api_hosts", []) or []))
+        internal_api_routes = sorted(set(facts.get("internal_api_routes", []) or []))
+        external_api_routes = sorted(set(facts.get("external_api_routes", []) or []))
+        deprecated_api_routes = sorted(set(facts.get("deprecated_api_routes", []) or []))
+        api_sdk_names = sorted(set(facts.get("api_sdk_names", []) or []))
         ci_systems = sorted(set(facts.get("ci_systems", []) or []))
         dependency_files = sorted(set(facts.get("dependency_files", []) or []))
         dependency_names = sorted(set(facts.get("dependency_names", []) or []))
@@ -1035,6 +1111,10 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "consumed_topics": consumed_topics,
             "internal_api_hosts": internal_api_hosts,
             "external_api_hosts": external_api_hosts,
+            "internal_api_routes": internal_api_routes,
+            "external_api_routes": external_api_routes,
+            "deprecated_api_routes": deprecated_api_routes,
+            "api_sdk_names": api_sdk_names,
             "ci_systems": ci_systems,
             "dependency_files": dependency_files,
             "dependency_names": dependency_names,
