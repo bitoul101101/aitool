@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from pathlib import Path
 from typing import Any
 
 
@@ -103,11 +104,242 @@ def _is_agent_tool_use(finding: dict) -> bool:
     )
 
 
-def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None = None) -> dict[str, Any]:
+_SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "target",
+    "coverage",
+}
+
+
+def _interesting_repo_files(root: Path) -> tuple[set[str], dict[str, str]]:
+    names: set[str] = set()
+    contents: dict[str, str] = {}
+    for path in root.rglob("*"):
+        if any(part in _SKIP_DIRS for part in path.parts):
+            continue
+        if path.is_dir():
+            continue
+        rel = path.relative_to(root).as_posix()
+        names.add(rel)
+        lower = rel.lower()
+        should_read = (
+            path.suffix.lower() in {".json", ".toml", ".txt", ".py", ".xml", ".gradle", ".kts", ".yaml", ".yml", ".mod", ".csproj", ".props", ".md", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".proto", ".tf"}
+            or path.name.lower() in {"dockerfile", "jenkinsfile", "security.md", "license", "license.md", "readme", "readme.md", "chart.yaml", "bitbucket-pipelines.yml", "azure-pipelines.yml", ".nvmrc", "runtime.txt"}
+            or ".github/workflows/" in lower
+        )
+        if should_read:
+            try:
+                if path.stat().st_size <= 250_000:
+                    contents[rel] = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                pass
+    return names, contents
+
+
+def _content_matches(contents: dict[str, str], pattern: str) -> bool:
+    regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+    return any(regex.search(text) for text in contents.values())
+
+
+def _extract_first(contents: dict[str, str], pattern: str) -> str:
+    regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+    for text in contents.values():
+        match = regex.search(text)
+        if match:
+            return str(match.group(1)).strip()
+    return ""
+
+
+def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    root = Path(repo_root)
+    names, contents = _interesting_repo_files(root)
+    lower_names = {name.lower() for name in names}
+    name_string = "\n".join(sorted(lower_names))
+
+    technologies: list[str] = []
+    runtimes: list[str] = []
+    runtime_versions: dict[str, str] = {}
+    iac_tools: list[str] = []
+    cloud_platforms: list[str] = []
+    api_types: list[str] = []
+    event_systems: list[str] = []
+    dependency_files: list[str] = []
+
+    has_package_json = "package.json" in lower_names
+    has_pyproject = "pyproject.toml" in lower_names
+    has_requirements = any(name.endswith("requirements.txt") for name in lower_names)
+    has_pom = "pom.xml" in lower_names
+    has_gradle = any(name.endswith("build.gradle") or name.endswith("build.gradle.kts") for name in lower_names)
+    has_go = "go.mod" in lower_names or any(name.endswith(".go") for name in lower_names)
+    has_dotnet = any(name.endswith(".csproj") or name.endswith(".sln") for name in lower_names)
+
+    if has_package_json:
+        runtimes.append("Node.js")
+        dependency_files.append("package.json")
+    if has_pyproject or has_requirements or any(name.endswith(".py") for name in lower_names):
+        runtimes.append("Python")
+        if has_pyproject:
+            dependency_files.append("pyproject.toml")
+        if has_requirements:
+            dependency_files.append("requirements.txt")
+    if has_pom or has_gradle or any(name.endswith(".java") or name.endswith(".kt") for name in lower_names):
+        runtimes.append("JVM")
+        if has_pom:
+            dependency_files.append("pom.xml")
+        if has_gradle:
+            dependency_files.append("build.gradle")
+    if has_go:
+        runtimes.append("Go")
+        if "go.mod" in lower_names:
+            dependency_files.append("go.mod")
+    if has_dotnet:
+        runtimes.append(".NET")
+        dependency_files.append(".csproj")
+
+    package_json = contents.get("package.json", "")
+    if re.search(r'"react"\s*:', package_json, re.IGNORECASE) or _content_matches(contents, r"\bfrom ['\"]react['\"]|\breact-dom\b"):
+        technologies.append("React")
+    if "angular.json" in lower_names or re.search(r"@angular/core", package_json, re.IGNORECASE):
+        technologies.append("Angular")
+    if re.search(r"spring-boot", "\n".join(contents.values()), re.IGNORECASE):
+        technologies.append("Spring Boot")
+    if "manage.py" in lower_names or _content_matches(contents, r"\bdjango\b"):
+        technologies.append("Django")
+    if has_go:
+        technologies.append("Go")
+    if has_package_json:
+        technologies.append("Node.js")
+    if has_dotnet:
+        technologies.append(".NET")
+
+    python_version = (
+        _extract_first(contents, r"requires-python\s*=\s*[\"']([^\"']+)[\"']")
+        or _extract_first(contents, r"python(?:-version)?\s*[:=]\s*[\"']?([0-9][^\"'\s]+)")
+        or _extract_first(contents, r"python:([0-9][0-9.\-]+)")
+    )
+    node_version = (
+        _extract_first({"package.json": package_json}, r'"node"\s*:\s*"([^"]+)"')
+        or contents.get(".nvmrc", "").strip()
+        or _extract_first(contents, r"node:([0-9][0-9.\-]+)")
+    )
+    java_version = (
+        _extract_first(contents, r"<java\.version>([^<]+)</java\.version>")
+        or _extract_first(contents, r"<maven\.compiler\.(?:source|target)>([^<]+)</maven\.compiler\.(?:source|target)>")
+        or _extract_first(contents, r"sourceCompatibility\s*=\s*[\"']?([^\"'\n]+)")
+        or _extract_first(contents, r"temurin:([0-9][0-9.\-]+)")
+    )
+    go_version = _extract_first(contents, r"^go\s+([0-9.]+)$")
+    dotnet_version = _extract_first(contents, r"<TargetFramework(?:s)?>([^<]+)</TargetFramework(?:s)?>")
+    for runtime, version in (
+        ("Python", python_version),
+        ("Node.js", node_version),
+        ("JVM", java_version),
+        ("Go", go_version),
+        (".NET", dotnet_version),
+    ):
+        if version:
+            runtime_versions[runtime] = version
+
+    if any(name.endswith(".tf") for name in lower_names):
+        iac_tools.append("Terraform")
+    if "chart.yaml" in lower_names:
+        iac_tools.append("Helm")
+    if _content_matches(contents, r"AWSTemplateFormatVersion|AWS::[A-Za-z]+::[A-Za-z]+"):
+        iac_tools.append("CloudFormation")
+    if _content_matches(contents, r"^\s*kind:\s*(Deployment|StatefulSet|DaemonSet|Service|Ingress|CronJob)\b"):
+        iac_tools.append("Kubernetes")
+
+    if _content_matches(contents, r"\barn:aws:|aws_|s3://|eks\b|lambda\b|cloudformation\b"):
+        cloud_platforms.append("AWS")
+    if _content_matches(contents, r"\bgcp\b|google[_ -]?cloud|gke\b|pubsub\b"):
+        cloud_platforms.append("GCP")
+    if _content_matches(contents, r"\bazure\b|azurerm|aks\b|servicebus\b"):
+        cloud_platforms.append("Azure")
+
+    if _content_matches(contents, r"@GetMapping|@PostMapping|@RequestMapping|app\.(get|post|put|delete)\(|router\.(get|post|put|delete)\(|FastAPI\(|APIRouter\(|@app\.route\("):
+        api_types.append("REST")
+    if _content_matches(contents, r"\bgraphql\b|type\s+Query\s*\{|apollo-server|graphene"):
+        api_types.append("GraphQL")
+    if any(name.endswith(".proto") for name in lower_names) or _content_matches(contents, r"\bgrpc\b"):
+        api_types.append("gRPC")
+    if _content_matches(contents, r"\bkafka\b|\brabbitmq\b|\brabbitmq\b|\bnats\b|\bsqs\b|\bsns\b|\bpubsub\b"):
+        api_types.append("Event-driven")
+    if _content_matches(contents, r"\bkafka\b"):
+        event_systems.append("Kafka")
+    if _content_matches(contents, r"\brabbitmq\b"):
+        event_systems.append("RabbitMQ")
+    if _content_matches(contents, r"\bnats\b"):
+        event_systems.append("NATS")
+    if _content_matches(contents, r"\bsqs\b|\bsns\b"):
+        event_systems.append("AWS Messaging")
+    if _content_matches(contents, r"\bpubsub\b"):
+        event_systems.append("GCP Pub/Sub")
+
+    has_readme = any(Path(name).name.lower().startswith("readme") for name in lower_names)
+    has_license = any(Path(name).name.lower().startswith("license") for name in lower_names)
+    has_security = any(Path(name).name.lower() == "security.md" for name in lower_names)
+    has_ci_pipeline = any(
+        name in {"bitbucket-pipelines.yml", ".gitlab-ci.yml", "jenkinsfile", "azure-pipelines.yml"}
+        or ".github/workflows/" in name
+        for name in lower_names
+    )
+    has_tests = (
+        any("/tests/" in f"/{name}/" or "/__tests__/" in f"/{name}/" for name in lower_names)
+        or any(re.search(r"(^|/)(test_[^/]+|[^/]+\.(spec|test)\.(py|js|ts|tsx|jsx|go|java|cs))$", name) for name in lower_names)
+    )
+    governance = {
+        "readme": has_readme,
+        "license": has_license,
+        "security_md": has_security,
+        "ci_pipeline": has_ci_pipeline,
+        "tests": has_tests,
+    }
+    missing_governance = [label for label, present in (
+        ("README", has_readme),
+        ("LICENSE", has_license),
+        ("SECURITY.md", has_security),
+        ("CI Pipeline", has_ci_pipeline),
+        ("Tests", has_tests),
+    ) if not present]
+
+    findings_list = list(findings or [])
+    ai_profile = build_inventory(findings_list, repo_slugs=[repo])["repo_profiles"][0] if repo else {}
+    ai_profile.update(
+        {
+            "repo": repo,
+            "technologies": sorted(set(technologies)),
+            "runtimes": sorted(set(runtimes)),
+            "runtime_versions": runtime_versions,
+            "iac_tools": sorted(set(iac_tools)),
+            "cloud_platforms": sorted(set(cloud_platforms)),
+            "api_types": sorted(set(api_types)),
+            "event_systems": sorted(set(event_systems)),
+            "dependency_files": sorted(set(dependency_files)),
+            "governance": governance,
+            "missing_governance": missing_governance,
+            "has_iac": bool(iac_tools),
+            "has_api_surface": bool(api_types),
+        }
+    )
+    return ai_profile
+
+
+def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None = None, repo_facts: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     repo_profiles: dict[str, dict[str, Any]] = {}
     provider_counts: Counter[str] = Counter()
     model_counts: Counter[str] = Counter()
     category_counts: Counter[str] = Counter()
+    runtime_counts: Counter[str] = Counter()
+    technology_counts: Counter[str] = Counter()
+    missing_governance_repos = 0
+    iac_repos = 0
+    api_repos = 0
 
     for finding in findings:
         repo = str(finding.get("repo", "") or "")
@@ -148,6 +380,8 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
     all_repos = set(repo_profiles.keys())
     if repo_slugs:
         all_repos.update(str(slug) for slug in repo_slugs if slug)
+    if repo_facts:
+        all_repos.update(str(slug) for slug in repo_facts.keys() if slug)
 
     serialised_profiles = []
     for repo in sorted(all_repos):
@@ -162,6 +396,27 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "model_serving": False,
             "agent_tool_use": False,
         }
+        facts = dict((repo_facts or {}).get(repo) or {})
+        technologies = sorted(set(facts.get("technologies", []) or []))
+        runtimes = sorted(set(facts.get("runtimes", []) or []))
+        runtime_versions = dict(facts.get("runtime_versions") or {})
+        iac_tools = sorted(set(facts.get("iac_tools", []) or []))
+        cloud_platforms = sorted(set(facts.get("cloud_platforms", []) or []))
+        api_types = sorted(set(facts.get("api_types", []) or []))
+        event_systems = sorted(set(facts.get("event_systems", []) or []))
+        dependency_files = sorted(set(facts.get("dependency_files", []) or []))
+        governance = dict(facts.get("governance") or {})
+        missing_governance = list(facts.get("missing_governance") or [])
+        for runtime in runtimes:
+            runtime_counts[runtime] += 1
+        for tech in technologies:
+            technology_counts[tech] += 1
+        if missing_governance:
+            missing_governance_repos += 1
+        if iac_tools:
+            iac_repos += 1
+        if api_types:
+            api_repos += 1
         serialised_profiles.append({
             "repo": repo,
             "finding_count": base["finding_count"],
@@ -173,6 +428,18 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "prompt_handling": bool(base["prompt_handling"]),
             "model_serving": bool(base["model_serving"]),
             "agent_tool_use": bool(base["agent_tool_use"]),
+            "technologies": technologies,
+            "runtimes": runtimes,
+            "runtime_versions": runtime_versions,
+            "iac_tools": iac_tools,
+            "cloud_platforms": cloud_platforms,
+            "api_types": api_types,
+            "event_systems": event_systems,
+            "dependency_files": dependency_files,
+            "governance": governance,
+            "missing_governance": missing_governance,
+            "has_iac": bool(iac_tools),
+            "has_api_surface": bool(api_types),
         })
 
     return {
@@ -196,5 +463,12 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         "prompt_handling_repos": sum(1 for profile in serialised_profiles if profile["prompt_handling"]),
         "model_serving_repos": sum(1 for profile in serialised_profiles if profile["model_serving"]),
         "agent_tool_use_repos": sum(1 for profile in serialised_profiles if profile["agent_tool_use"]),
+        "runtime_count": len(runtime_counts),
+        "technology_count": len(technology_counts),
+        "missing_governance_repos": missing_governance_repos,
+        "iac_repos": iac_repos,
+        "api_repos": api_repos,
+        "runtimes_by_count": [{"runtime": key, "count": count} for key, count in runtime_counts.most_common()],
+        "technologies_by_count": [{"technology": key, "count": count} for key, count in technology_counts.most_common()],
         "repo_profiles": serialised_profiles,
     }

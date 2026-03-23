@@ -753,6 +753,18 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 "prompt_handling": bool(profile.get("prompt_handling")),
                 "model_serving": bool(profile.get("model_serving")),
                 "agent_tool_use": bool(profile.get("agent_tool_use")),
+                "technologies": list(profile.get("technologies", []) or []),
+                "runtimes": list(profile.get("runtimes", []) or []),
+                "runtime_versions": dict(profile.get("runtime_versions") or {}),
+                "iac_tools": list(profile.get("iac_tools", []) or []),
+                "cloud_platforms": list(profile.get("cloud_platforms", []) or []),
+                "api_types": list(profile.get("api_types", []) or []),
+                "event_systems": list(profile.get("event_systems", []) or []),
+                "dependency_files": list(profile.get("dependency_files", []) or []),
+                "governance": dict(profile.get("governance") or {}),
+                "missing_governance": list(profile.get("missing_governance", []) or []),
+                "has_iac": bool(profile.get("has_iac")),
+                "has_api_surface": bool(profile.get("has_api_surface")),
                 "usage_tags": [
                     tag
                     for tag, enabled in (
@@ -760,6 +772,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                         ("prompt", profile.get("prompt_handling")),
                         ("serving", profile.get("model_serving")),
                         ("agent", profile.get("agent_tool_use")),
+                        ("iac", profile.get("has_iac")),
+                        ("api", profile.get("has_api_surface")),
+                        ("missing_governance", bool(profile.get("missing_governance"))),
                     )
                     if enabled
                 ],
@@ -775,12 +790,19 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     )
     provider_labels = {label for item in repo_inventory for label in item.get("provider_labels", [])}
     models = {model for item in repo_inventory for model in item.get("models", [])}
+    runtimes = {runtime for item in repo_inventory for runtime in item.get("runtimes", [])}
+    technologies = {tech for item in repo_inventory for tech in item.get("technologies", [])}
     summary = {
         "repos_using_ai_count": sum(1 for item in repo_inventory if item.get("finding_count", 0) > 0),
         "repos_total": len(repo_inventory),
         "provider_count": len(provider_labels),
         "model_count": len(models),
         "agent_tool_use_repos": sum(1 for item in repo_inventory if item.get("agent_tool_use")),
+        "runtime_count": len(runtimes),
+        "technology_count": len(technologies),
+        "missing_governance_repos": sum(1 for item in repo_inventory if item.get("missing_governance")),
+        "iac_repos": sum(1 for item in repo_inventory if item.get("has_iac")),
+        "api_repos": sum(1 for item in repo_inventory if item.get("has_api_surface")),
     }
     return repo_inventory, summary
 

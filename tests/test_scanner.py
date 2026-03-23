@@ -1217,6 +1217,32 @@ def test_build_inventory_aggregates_ai_usage_profiles():
     assert inventory["agent_tool_use_repos"] >= 1
 
 
+def test_collect_repo_facts_classifies_frameworks_governance_and_api_surface(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "package.json").write_text('{"dependencies":{"react":"18.2.0"},"engines":{"node":">=20"}}', encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.11"\n', encoding="utf-8")
+    (tmp_path / "main.tsx").write_text("import React from 'react';\nconst x = 1;\n", encoding="utf-8")
+    (tmp_path / "api.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n", encoding="utf-8")
+    (tmp_path / "infra.tf").write_text('resource "aws_s3_bucket" "logs" {}', encoding="utf-8")
+    (tmp_path / "bitbucket-pipelines.yml").write_text("pipelines:\n  default:\n    - step:\n        script:\n          - pytest\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+
+    facts = collect_repo_facts(tmp_path, "demo-repo", [])
+
+    assert "React" in facts["technologies"]
+    assert "Node.js" in facts["runtimes"]
+    assert "Python" in facts["runtimes"]
+    assert facts["runtime_versions"]["Node.js"] == ">=20"
+    assert facts["runtime_versions"]["Python"] == ">=3.11"
+    assert "Terraform" in facts["iac_tools"]
+    assert "AWS" in facts["cloud_platforms"]
+    assert "REST" in facts["api_types"]
+    assert facts["governance"]["readme"] is True
+    assert facts["governance"]["ci_pipeline"] is True
+    assert "SECURITY.md" in facts["missing_governance"]
+
+
 # ── History persistence (_save_history_record) ────────────────────
 
 def test_save_history_record_creates_file():
@@ -3696,30 +3722,44 @@ def test_inventory_page_is_server_rendered():
                 "finding_count": 4,
                 "provider_labels": ["Openai", "Langchain"],
                 "models": ["gpt-4o"],
-                "embeddings_vector_db": True,
-                "prompt_handling": True,
-                "model_serving": False,
+                "runtimes": ["Node.js", "Python"],
+                "technologies": ["React", "Django"],
+                "runtime_versions": {"Node.js": "20", "Python": "3.11"},
+                "iac_tools": ["Terraform"],
+                "cloud_platforms": ["AWS"],
+                "api_types": ["REST"],
+                "event_systems": ["Kafka"],
+                "missing_governance": ["SECURITY.md"],
+                "has_iac": True,
+                "has_api_surface": True,
                 "agent_tool_use": True,
-                "usage_tags": ["embeddings", "prompt", "agent"],
+                "usage_tags": ["iac", "api", "agent", "missing_governance"],
                 "reports": {"html_name": "demo.html"},
             }
         ],
         summary={
             "repos_using_ai_count": 1,
             "repos_total": 1,
-            "provider_count": 2,
-            "model_count": 1,
+            "runtime_count": 2,
+            "technology_count": 2,
+            "missing_governance_repos": 1,
+            "iac_repos": 1,
+            "api_repos": 1,
             "agent_tool_use_repos": 1,
         },
     ).decode("utf-8")
 
     assert '<a class="nav active" href="/inventory">AI Inventory</a>' in html
-    assert "Latest known AI usage profile per repository from scan history." in html
+    assert "Latest known repository classification per repo from scan history." in html
     assert "repo1" in html
-    assert "Openai, Langchain" in html
-    assert "gpt-4o" in html
+    assert "React, Django" in html
+    assert "Node.js, Python" in html
+    assert "Terraform, AWS" in html
+    assert "REST, Kafka" in html
     assert 'id="inventory-search"' in html
     assert 'id="inventory-reset"' in html
+    assert 'id="inventory-runtime"' in html
+    assert 'id="inventory-technology"' in html
     assert 'href="/reports/demo.html"' in html
 
 

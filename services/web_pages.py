@@ -1083,6 +1083,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
     projects = sorted({str(item.get("project_key", "")) for item in repo_inventory if item.get("project_key")})
     providers = sorted({label for item in repo_inventory for label in item.get("provider_labels", []) if label})
     models = sorted({model for item in repo_inventory for model in item.get("models", []) if model})
+    runtimes = sorted({runtime for item in repo_inventory for runtime in item.get("runtimes", []) if runtime})
+    technologies = sorted({tech for item in repo_inventory for tech in item.get("technologies", []) if tech})
 
     def _opts(values: list[str], label: str) -> str:
         return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
@@ -1091,6 +1093,13 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
     for item in repo_inventory:
         provider_text = ", ".join(item.get("provider_labels", []))
         model_text = ", ".join(item.get("models", []))
+        runtime_text = ", ".join(item.get("runtimes", []))
+        technology_text = ", ".join(item.get("technologies", []))
+        version_text = ", ".join(f"{runtime} {version}" for runtime, version in sorted((item.get("runtime_versions") or {}).items()))
+        governance_text = ", ".join(item.get("missing_governance", [])) or "OK"
+        platform_text = ", ".join(item.get("iac_tools", []) + item.get("cloud_platforms", [])) or "-"
+        api_text = ", ".join(item.get("api_types", []) + item.get("event_systems", [])) or "-"
+        ai_text = provider_text or "-"
         date_text, time_text, ts = _fmt_dt(item.get("last_scan_at_utc", ""))
         reports = item.get("reports") or {}
         html_link = (
@@ -1100,6 +1109,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         )
         rows.append(
             f'<tr data-project="{_esc(item.get("project_key", ""))}" '
+            f'data-runtime="{_esc(runtime_text.lower())}" '
+            f'data-technology="{_esc(technology_text.lower())}" '
             f'data-provider="{_esc(provider_text.lower())}" '
             f'data-model="{_esc(model_text.lower())}" '
             f'data-flags="{_esc(" ".join(item.get("usage_tags", [])))}" '
@@ -1107,13 +1118,13 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
             f'<td>{_esc(item.get("project_key", ""))}</td>'
             f'<td><strong>{_esc(item.get("repo", ""))}</strong><div class="inventory-sub">{_esc(item.get("scan_id", ""))}</div></td>'
-            f'<td>{_esc(item.get("finding_count", 0))}</td>'
-            f'<td>{_esc(provider_text or "-")}</td>'
-            f'<td>{_esc(model_text or "-")}</td>'
-            f'<td><span class="inventory-bool {"yes" if item.get("embeddings_vector_db") else "no"}">{"Yes" if item.get("embeddings_vector_db") else "No"}</span></td>'
-            f'<td><span class="inventory-bool {"yes" if item.get("prompt_handling") else "no"}">{"Yes" if item.get("prompt_handling") else "No"}</span></td>'
-            f'<td><span class="inventory-bool {"yes" if item.get("model_serving") else "no"}">{"Yes" if item.get("model_serving") else "No"}</span></td>'
-            f'<td><span class="inventory-bool {"yes" if item.get("agent_tool_use") else "no"}">{"Yes" if item.get("agent_tool_use") else "No"}</span></td>'
+            f'<td>{_esc(runtime_text or "-")}</td>'
+            f'<td>{_esc(technology_text or "-")}</td>'
+            f'<td>{_esc(version_text or "-")}</td>'
+            f'<td><span class="inventory-bool {"no" if item.get("missing_governance") else "yes"}">{_esc(governance_text)}</span></td>'
+            f'<td>{_esc(platform_text)}</td>'
+            f'<td>{_esc(api_text)}</td>'
+            f'<td>{_esc(ai_text)}</td>'
             f'<td>{html_link}</td>'
             "</tr>"
         )
@@ -1122,28 +1133,30 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
 {_flash(notice, error)}
 <section class="inventory-page-grid">
   <section class="card">
-    <h2 style="margin:0 0 8px">AI Inventory</h2>
-    <p class="muted" style="margin:0 0 12px">Latest known AI usage profile per repository from scan history.</p>
+    <h2 style="margin:0 0 8px">Repository Inventory</h2>
+    <p class="muted" style="margin:0 0 12px">Latest known repository classification per repo from scan history.</p>
     <div class="inventory-summary-cards">
-      <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Total Repos</span><strong>{_esc(summary.get("repos_total", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">Providers</span><strong>{_esc(summary.get("provider_count", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">Models</span><strong>{_esc(summary.get("model_count", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">Agent / Tool Use</span><strong>{_esc(summary.get("agent_tool_use_repos", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Runtimes</span><strong>{_esc(summary.get("runtime_count", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Technologies</span><strong>{_esc(summary.get("technology_count", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Missing Governance</span><strong>{_esc(summary.get("missing_governance_repos", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">IaC / Cloud</span><strong>{_esc(summary.get("iac_repos", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">API Surface</span><strong>{_esc(summary.get("api_repos", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
     </div>
   </section>
 
   <section class="card">
     <div class="inventory-toolbar filters-row">
-      <input type="search" id="inventory-search" placeholder="Search repo, provider, model, or scan">
+      <input type="search" id="inventory-search" placeholder="Search repo, runtime, technology, API, or scan">
       <select id="inventory-project">{_opts(projects, 'All Projects')}</select>
-      <select id="inventory-provider">{_opts(providers, 'All Providers')}</select>
-      <select id="inventory-model">{_opts(models, 'All Models')}</select>
+      <select id="inventory-runtime">{_opts(runtimes, 'All Runtimes')}</select>
+      <select id="inventory-technology">{_opts(technologies, 'All Technologies')}</select>
       <select id="inventory-usage">
-        <option value="">All Usage Types</option>
-        <option value="embeddings">Embeddings / Vector DB</option>
-        <option value="prompt">Prompt Handling</option>
-        <option value="serving">Model Serving</option>
+        <option value="">All Postures</option>
+        <option value="missing_governance">Missing Governance</option>
+        <option value="iac">IaC / Cloud</option>
+        <option value="api">API Surface</option>
         <option value="agent">Agent / Tool Use</option>
       </select>
       <button type="button" class="ghost" id="inventory-reset">Reset</button>
@@ -1155,17 +1168,17 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             <th data-sort="datetime">Last Scan</th>
             <th data-sort="text">Project</th>
             <th data-sort="text">Repo</th>
-            <th data-sort="number">Findings</th>
-            <th data-sort="text">Providers</th>
-            <th data-sort="text">Models</th>
-            <th data-sort="text">Embeddings /<br>Vector DB</th>
-            <th data-sort="text">Prompt<br>Handling</th>
-            <th data-sort="text">Model<br>Serving</th>
-            <th data-sort="text">Agent /<br>Tool Use</th>
+            <th data-sort="text">Runtimes</th>
+            <th data-sort="text">Technologies</th>
+            <th data-sort="text">Versions</th>
+            <th data-sort="text">Governance</th>
+            <th data-sort="text">IaC / Cloud</th>
+            <th data-sort="text">API / Events</th>
+            <th data-sort="text">AI Profile</th>
             <th>HTML</th>
           </tr>
         </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="11">No AI inventory available yet.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="11">No repository inventory available yet.</td></tr>'}</tbody>
       </table>
     </div>
   </section>
@@ -1174,8 +1187,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
 const iBody=document.querySelector('#inventory-table tbody');
 const iSearch=document.getElementById('inventory-search');
 const iProject=document.getElementById('inventory-project');
-const iProvider=document.getElementById('inventory-provider');
-const iModel=document.getElementById('inventory-model');
+const iRuntime=document.getElementById('inventory-runtime');
+const iTechnology=document.getElementById('inventory-technology');
 const iUsage=document.getElementById('inventory-usage');
 function iRows(){{return Array.from(iBody.querySelectorAll('tr')).filter(r=>r.querySelectorAll('td').length>1);}}
 function inventoryMatchesUsage(row){{
@@ -1188,9 +1201,9 @@ function applyInventoryFilters(){{
     const text=row.textContent.toLowerCase();
     const okQ=!q || text.includes(q);
     const okP=!iProject.value || row.dataset.project===iProject.value;
-    const okProvider=!iProvider.value || (row.dataset.provider||'').includes(iProvider.value.toLowerCase());
-    const okModel=!iModel.value || (row.dataset.model||'').includes(iModel.value.toLowerCase());
-    row.style.display=(okQ && okP && okProvider && okModel && inventoryMatchesUsage(row)) ? '' : 'none';
+    const okRuntime=!iRuntime.value || (row.dataset.runtime||'').includes(iRuntime.value.toLowerCase());
+    const okTechnology=!iTechnology.value || (row.dataset.technology||'').includes(iTechnology.value.toLowerCase());
+    row.style.display=(okQ && okP && okRuntime && okTechnology && inventoryMatchesUsage(row)) ? '' : 'none';
   }});
 }}
 let inventorySort={{index:null,dir:-1,kind:'datetime'}};
@@ -1214,10 +1227,10 @@ function sortInventory(index,kind){{
   applyInventoryFilters();
 }}
 document.querySelectorAll('#inventory-table thead th[data-sort]').forEach((th,index)=>th.addEventListener('click',()=>sortInventory(index,th.dataset.sort)));
-[iSearch,iProject,iProvider,iModel].forEach(el=>el?.addEventListener('input',applyInventoryFilters));
-[iProject,iProvider,iModel,iUsage].forEach(el=>el?.addEventListener('change',applyInventoryFilters));
+[iSearch,iProject,iRuntime,iTechnology].forEach(el=>el?.addEventListener('input',applyInventoryFilters));
+[iProject,iRuntime,iTechnology,iUsage].forEach(el=>el?.addEventListener('change',applyInventoryFilters));
 document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
-  iSearch.value=''; iProject.value=''; iProvider.value=''; iModel.value=''; iUsage.value=''; applyInventoryFilters();
+  iSearch.value=''; iProject.value=''; iRuntime.value=''; iTechnology.value=''; iUsage.value=''; applyInventoryFilters();
 }});
 sortInventory(0,'datetime');
 </script>"""

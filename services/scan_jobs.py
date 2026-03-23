@@ -33,7 +33,7 @@ from scanner.suppressions import (
     apply_suppressions,
     list_triage,
 )
-from services.inventory import build_inventory
+from services.inventory import build_inventory, collect_repo_facts
 from services.error_codes import make_error
 from services.runtime_support import load_llm_config
 from services.scan_runtime_views import llm_stats
@@ -1367,7 +1367,7 @@ class ScanJobService:
 
         def _scan_one(slug: str) -> tuple:
             if stop.is_set():
-                return slug, None, "", 0, "scan stopped"
+                return slug, None, "", 0, "scan stopped", {}
             meta = repo_meta.get(slug, {})
             branch = meta.get("branch")
             owner = meta.get("owner", "User")
@@ -1384,7 +1384,7 @@ class ScanJobService:
                 if session.scan_source == "local":
                     if not local_root or not local_root.exists() or not local_root.is_dir():
                         session.record_error("LOCAL_REPO_NOT_FOUND", "clone", session.local_repo_path, repo=slug)
-                        return slug, None, owner, 0, f"local repo path not found: {session.local_repo_path}"
+                        return slug, None, owner, 0, f"local repo path not found: {session.local_repo_path}", {}
                     repo_root = local_root
                     cleanup_required = False
                 else:
@@ -1406,15 +1406,15 @@ class ScanJobService:
                 meta["commit"] = self._git_head_commit(repo_root)
             except RuntimeError as exc:
                 session.record_error("CLONE_FAILED", "clone", str(exc), repo=slug)
-                return slug, None, owner, 0, f"clone failed: {exc}"
+                return slug, None, owner, 0, f"clone failed: {exc}", {}
             except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
                 session.record_error("CLONE_ERROR", "clone", str(exc), repo=slug)
-                return slug, None, owner, 0, f"clone error: {exc}"
+                return slug, None, owner, 0, f"clone error: {exc}", {}
 
             if stop.is_set():
                 if cleanup_required:
                     cleanup_clone(clone_dir)
-                return slug, None, owner, 0, "scan stopped"
+                return slug, None, owner, 0, "scan stopped", {}
 
             try:
                 last_pct = [-1]
@@ -1432,7 +1432,7 @@ class ScanJobService:
                         total_s=round(time.perf_counter() - repo_started, 2),
                     )
                     log(f"  [{slug}] No files matched the selected scan scope", "dim")
-                    return slug, [], owner, 0, None
+                    return slug, [], owner, 0, None, collect_repo_facts(repo_root, slug, [])
                 if excluded_paths:
                     log(f"  [{slug}] Local scan excludes: {', '.join(excluded_paths)}", "dim")
 
@@ -1505,10 +1505,10 @@ class ScanJobService:
                     llm_review_s=round(llm_duration, 2),
                     total_s=round(time.perf_counter() - repo_started, 2),
                 )
-                return slug, analyzed, owner, pre_llm_count, None
+                return slug, analyzed, owner, pre_llm_count, None, collect_repo_facts(repo_root, slug, analyzed)
             except (OSError, ValueError, TypeError, KeyError, JSONDecodeError) as exc:
                 session.record_error("REPO_SCAN_FAILED", "scan", str(exc), repo=slug)
-                return slug, None, owner, 0, f"scan error: {exc}"
+                return slug, None, owner, 0, f"scan error: {exc}", {}
             finally:
                 if slug not in session.repo_metrics:
                     session.record_repo_metric(
@@ -1524,6 +1524,7 @@ class ScanJobService:
         total_pre_llm = 0
         total_post_llm = 0
         completed = 0
+        repo_facts: dict[str, dict[str, Any]] = {}
 
         with session.state_lock:
             session._active_pool = None
@@ -1537,7 +1538,7 @@ class ScanJobService:
                 for fut in done:
                     if fut.cancelled():
                         continue
-                    slug, analyzed, bb_owner, pre_llm, skip_reason = fut.result()
+                    slug, analyzed, bb_owner, pre_llm, skip_reason, profile = fut.result()
                     completed += 1
                     with session.state_lock:
                         session.progress = completed
@@ -1550,6 +1551,8 @@ class ScanJobService:
                         session.per_repo = dict(per_repo)
                         self.record_job_snapshot(session, session.findings)
                         continue
+                    if profile:
+                        repo_facts[slug] = dict(profile)
 
                     sev_critical = sum(1 for f in analyzed if f.get("severity") == 1)
                     sev_high = sum(1 for f in analyzed if f.get("severity") == 2)
@@ -1616,7 +1619,7 @@ class ScanJobService:
             repo_slugs=scanned_slugs,
             scoped_files_by_repo=dict(session.scoped_files_by_repo),
         )
-        inventory_meta = build_inventory(final, repo_slugs=scanned_slugs)
+        inventory_meta = build_inventory(final, repo_slugs=scanned_slugs, repo_facts=repo_facts)
         with session.state_lock:
             session.delta = delta_meta
             session.inventory = inventory_meta
