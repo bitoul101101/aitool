@@ -820,6 +820,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     boundary_rollup: dict[str, int] = {}
     produced_topic_rollup: dict[str, int] = {}
     consumed_topic_rollup: dict[str, int] = {}
+    internal_api_host_rollup: dict[str, int] = {}
     ci_rollup: dict[str, int] = {}
     version_rollup: dict[str, int] = {}
     owner_rollup: dict[str, int] = {}
@@ -847,6 +848,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             produced_topic_rollup[topic] = produced_topic_rollup.get(topic, 0) + 1
         for topic in item.get("consumed_topics", []) or []:
             consumed_topic_rollup[topic] = consumed_topic_rollup.get(topic, 0) + 1
+        for host in item.get("internal_api_hosts", []) or []:
+            internal_api_host_rollup[host] = internal_api_host_rollup.get(host, 0) + 1
         for ci_system in item.get("ci_systems", []) or []:
             ci_rollup[ci_system] = ci_rollup.get(ci_system, 0) + 1
         for runtime, version in (item.get("runtime_versions") or {}).items():
@@ -880,11 +883,24 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
           "iac_rollup": sorted(iac_rollup.items(), key=lambda item: (-item[1], item[0])),
-          "api_rollup": sorted(api_rollup.items(), key=lambda item: (-item[1], item[0])),
-          "boundary_rollup": sorted(boundary_rollup.items(), key=lambda item: (-item[1], item[0])),
-          "produced_topic_rollup": sorted(produced_topic_rollup.items(), key=lambda item: (-item[1], item[0])),
-          "consumed_topic_rollup": sorted(consumed_topic_rollup.items(), key=lambda item: (-item[1], item[0])),
-          "ci_rollup": sorted(ci_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "api_rollup": sorted(api_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "boundary_rollup": sorted(boundary_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "produced_topic_rollup": sorted(produced_topic_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "consumed_topic_rollup": sorted(consumed_topic_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "internal_api_host_rollup": sorted(internal_api_host_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "shared_internal_api_rollup": sorted(
+            [(host, count) for host, count in internal_api_host_rollup.items() if count > 1],
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "shared_consumed_topic_rollup": sorted(
+            [(topic, count) for topic, count in consumed_topic_rollup.items() if count > 1],
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "shared_internal_dependency_rollup": sorted(
+            [(dep, count) for dep, count in internal_dependency_rollup.items() if count > 1],
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "ci_rollup": sorted(ci_rollup.items(), key=lambda item: (-item[1], item[0])),
           "version_rollup": sorted(version_rollup.items(), key=lambda item: (-item[1], item[0])),
         "owner_rollup": sorted(owner_rollup.items(), key=lambda item: (-item[1], item[0])),
         "dependency_rollup": sorted(dependency_rollup.items(), key=lambda item: (-item[1], item[0])),

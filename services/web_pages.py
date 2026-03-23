@@ -1158,12 +1158,12 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             f'<td>{_esc(item.get("project_key", ""))}</td>'
             f'<td><strong>{_esc(item.get("repo", ""))}</strong><div class="inventory-sub">{_esc(item.get("scan_id", ""))}</div></td>'
             f'<td>{_esc(owner_text)}</td>'
-              f'<td>{_esc(runtime_text or "-")}</td>'
-              f'<td>{_esc(technology_text or "-")}</td>'
-              f'<td>{_esc(version_text or "-")}</td>'
-              f'<td><span class="inventory-bool {"no" if item.get("missing_governance") else "yes"}">{_esc(governance_text)}</span><div class="inventory-sub">{_esc(", ".join(governance_meta) or "-")}</div></td>'
-              f'<td>{_esc(platform_text)}</td>'
-              f'<td>{_esc(api_text)}<div class="inventory-sub">{_esc(" | ".join(api_meta) or "-")}</div></td>'
+            f'<td>{_esc(runtime_text or "-")}</td>'
+            f'<td>{_esc(technology_text or "-")}</td>'
+            f'<td>{_esc(version_text or "-")}</td>'
+            f'<td><span class="inventory-bool {"no" if item.get("missing_governance") else "yes"}">{_esc(governance_text)}</span><div class="inventory-sub">{_esc(", ".join(governance_meta) or "-")}</div></td>'
+            f'<td>{_esc(platform_text)}</td>'
+            f'<td>{_esc(api_text)}<div class="inventory-sub">{_esc(" | ".join(api_meta) or "-")}</div></td>'
             f'<td>{_esc(dependency_text or "-")}</td>'
             f'<td>{_esc(internal_dependency_text)}</td>'
             f'<td>{_esc(ai_text)}</td>'
@@ -1201,11 +1201,14 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>IaC / Cloud</strong>{_rollup_list(list(summary.get("iac_rollup", []) or []), "No IaC or cloud markers yet.")}</section>
         <section class="inventory-rollup-card"><strong>API / Events</strong>{_rollup_list(list(summary.get("api_rollup", []) or []), "No API surface detected.")}</section>
         <section class="inventory-rollup-card"><strong>API Boundaries</strong>{_rollup_list(list(summary.get("boundary_rollup", []) or []), "No API boundary data yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Shared Internal APIs</strong>{_rollup_list(list(summary.get("shared_internal_api_rollup", []) or []), "No shared internal API hosts yet.")}</section>
         <section class="inventory-rollup-card"><strong>Produced Topics</strong>{_rollup_list(list(summary.get("produced_topic_rollup", []) or []), "No produced topics detected.")}</section>
         <section class="inventory-rollup-card"><strong>Consumed Topics</strong>{_rollup_list(list(summary.get("consumed_topic_rollup", []) or []), "No consumed topics detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Shared Topic Consumers</strong>{_rollup_list(list(summary.get("shared_consumed_topic_rollup", []) or []), "No shared consumed topics yet.")}</section>
         <section class="inventory-rollup-card"><strong>Dependencies</strong>{_rollup_list(list(summary.get("dependency_rollup", []) or []), "No dependency data yet.")}</section>
-      <section class="inventory-rollup-card"><strong>Internal Dependencies</strong>{_rollup_list(list(summary.get("internal_dependency_rollup", []) or []), "No internal dependencies detected.")}</section>
-      <section class="inventory-rollup-card"><strong>External Dependencies</strong>{_rollup_list(list(summary.get("external_dependency_rollup", []) or []), "No external dependencies detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Internal Dependencies</strong>{_rollup_list(list(summary.get("internal_dependency_rollup", []) or []), "No internal dependencies detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Shared Internal Libraries</strong>{_rollup_list(list(summary.get("shared_internal_dependency_rollup", []) or []), "No shared internal libraries yet.")}</section>
+        <section class="inventory-rollup-card"><strong>External Dependencies</strong>{_rollup_list(list(summary.get("external_dependency_rollup", []) or []), "No external dependencies detected.")}</section>
     </div>
   </section>
 

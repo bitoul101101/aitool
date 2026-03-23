@@ -3923,8 +3923,11 @@ def test_inventory_page_is_server_rendered():
             "boundary_rollup": [("External API", 1), ("Internal API", 1)],
             "produced_topic_rollup": [("orders.created", 1)],
             "consumed_topic_rollup": [("orders.created", 1)],
+            "shared_internal_api_rollup": [("svc.cognyte.local", 2)],
+            "shared_consumed_topic_rollup": [("orders.created", 2)],
             "dependency_rollup": [("react", 1), ("axios", 1)],
             "internal_dependency_rollup": [("@cognyte/ui", 1)],
+            "shared_internal_dependency_rollup": [("@cognyte/ui", 2)],
             "external_dependency_rollup": [("react", 1), ("axios", 1)],
         },
     ).decode("utf-8")
@@ -3952,11 +3955,15 @@ def test_inventory_page_is_server_rendered():
     assert "Branch Gov" in html
     assert "Review Gate" in html
     assert "API Boundaries" in html
+    assert "Shared Internal APIs" in html
     assert "Produced Topics" in html
     assert "Consumed Topics" in html
+    assert "Shared Topic Consumers" in html
+    assert "Shared Internal Libraries" in html
     assert "Internal API, External API" in html
     assert "Prod: orders.created" in html
     assert "Cons: orders.created" in html
+    assert "svc.cognyte.local" in html
     assert "Node.js 20" in html
     assert "SECURITY.md" in html
     assert 'id="inventory-search"' in html
