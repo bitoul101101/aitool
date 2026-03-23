@@ -848,6 +848,11 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                   "import_cycle_examples": list(profile.get("import_cycle_examples", []) or []),
                   "import_cycle_node_count": int(profile.get("import_cycle_node_count", 0) or 0),
                   "has_import_cycles": bool(profile.get("has_import_cycles")),
+                  "hardcoded_service_call_examples": list(profile.get("hardcoded_service_call_examples", []) or []),
+                  "wrong_module_db_examples": list(profile.get("wrong_module_db_examples", []) or []),
+                  "layer_violation_examples": list(profile.get("layer_violation_examples", []) or []),
+                  "anti_pattern_labels": list(profile.get("anti_pattern_labels", []) or []),
+                  "anti_pattern_examples": list(profile.get("anti_pattern_examples", []) or []),
                   "governance": dict(profile.get("governance") or {}),
                   "missing_governance": list(profile.get("missing_governance", []) or []),
                   "has_iac": bool(profile.get("has_iac")),
@@ -916,6 +921,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     ai_dependency_risk_rollup: dict[str, int] = {}
     import_cycle_rollup: dict[str, int] = {}
     repo_cycle_rollup: dict[str, int] = {}
+    anti_pattern_rollup: dict[str, int] = {}
     policy_violation_rollup: dict[str, int] = {}
     owner_policy_violation_rollup: dict[str, int] = {}
     for item in repo_inventory:
@@ -1005,6 +1011,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             usage_tags.append("policy_violation")
         if item.get("has_import_cycles"):
             usage_tags.append("import_cycle")
+        if item.get("anti_pattern_labels"):
+            usage_tags.append("anti_pattern")
         item["usage_tags"] = sorted(set(usage_tags))
 
         for label in drift_labels:
@@ -1049,6 +1057,27 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             matched["has_cross_repo_cycles"] = bool(cycle_peers)
             if cycle_peers:
                 matched["usage_tags"] = sorted(set(list(matched.get("usage_tags", []) or []) + ["cross_repo_cycle"]))
+                if "Circular builds" not in list(matched.get("anti_pattern_labels", []) or []):
+                    matched["anti_pattern_labels"] = list(matched.get("anti_pattern_labels", []) or []) + ["Circular builds"]
+                if f"Repo dependency cycle with {', '.join(cycle_peers[:3])}" not in list(matched.get("anti_pattern_examples", []) or []):
+                    matched["anti_pattern_examples"] = list(matched.get("anti_pattern_examples", []) or []) + [f"Repo dependency cycle with {', '.join(cycle_peers[:3])}"]
+
+    for item in repo_inventory:
+        shared_internal_lib_count = sum(
+            1
+            for dep in item.get("internal_dependency_names", []) or []
+            if internal_dependency_rollup.get(dep, 0) > 1
+        )
+        if shared_internal_lib_count >= 2 and "Overuse of shared libraries" not in list(item.get("anti_pattern_labels", []) or []):
+            item["anti_pattern_labels"] = list(item.get("anti_pattern_labels", []) or []) + ["Overuse of shared libraries"]
+            item["anti_pattern_examples"] = list(item.get("anti_pattern_examples", []) or []) + [
+                "Shared internal libs with broad reuse: " + ", ".join(
+                    dep for dep in (item.get("internal_dependency_names", []) or []) if internal_dependency_rollup.get(dep, 0) > 1
+                )[:120]
+            ]
+            item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["anti_pattern"]))
+        for anti_pattern in item.get("anti_pattern_labels", []) or []:
+            anti_pattern_rollup[anti_pattern] = anti_pattern_rollup.get(anti_pattern, 0) + 1
 
     orphaned_exposed_repos = [
         item for item in repo_inventory
@@ -1095,6 +1124,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "policy_violation_repos": sum(1 for item in repo_inventory if item.get("policy_violations")),
         "import_cycle_repos": sum(1 for item in repo_inventory if item.get("has_import_cycles")),
         "cross_repo_cycle_repos": sum(1 for item in repo_inventory if item.get("has_cross_repo_cycles")),
+        "anti_pattern_repos": sum(1 for item in repo_inventory if item.get("anti_pattern_labels")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1150,6 +1180,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "ai_dependency_risk_rollup": sorted(ai_dependency_risk_rollup.items(), key=lambda item: (-item[1], item[0])),
         "import_cycle_rollup": sorted(import_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
         "repo_cycle_rollup": sorted(repo_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "anti_pattern_rollup": sorted(anti_pattern_rollup.items(), key=lambda item: (-item[1], item[0])),
         "policy_violation_rollup": sorted(policy_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary
@@ -1284,6 +1315,7 @@ def _inventory_export_payload(repo_inventory: list[dict], filters: dict[str, str
                 "api_events": ", ".join((item.get("api_types", []) or []) + (item.get("event_systems", []) or []) + (item.get("api_boundaries", []) or [])),
                 "dependencies": ", ".join(item.get("dependency_names", []) or []),
                 "internal_dependencies": ", ".join(item.get("internal_dependency_names", []) or []),
+                "anti_patterns": ", ".join(item.get("anti_pattern_labels", []) or []),
                 "risk_flags": ", ".join(item.get("usage_tags", []) or []),
                 "html_report": str((item.get("reports") or {}).get("html_name", "") or ""),
             }

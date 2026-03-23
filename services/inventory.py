@@ -64,6 +64,26 @@ _PY_IMPORT_RE = re.compile(r"^\s*import\s+([A-Za-z0-9_.,\s]+)", re.MULTILINE)
 _PY_FROM_RE = re.compile(r"^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+", re.MULTILINE)
 _JS_IMPORT_RE = re.compile(r"""import\s+(?:[^'"]+?\s+from\s+)?['"]([^'"]+)['"]""")
 _JS_REQUIRE_RE = re.compile(r"""require\(\s*['"]([^'"]+)['"]\s*\)""")
+_DB_ACCESS_RE = re.compile(
+    r"""(?ix)
+    \b(
+        select\s+.+\s+from|
+        insert\s+into|
+        update\s+\w+\s+set|
+        delete\s+from|
+        session\.query|
+        create_engine\(
+        psycopg2|
+        sqlalchemy|
+        sqlite3\b|
+        pymongo\b|
+        mongodb\b|
+        jdbc:|
+        entitymanager\b|
+        db\.query\(
+    )
+    """
+)
 
 
 def _normalise_label(value: str) -> str:
@@ -465,6 +485,73 @@ def _detect_internal_import_cycles(names: set[str], contents: dict[str, str]) ->
     return cycle_labels, sorted(cycle_nodes)
 
 
+def _is_code_file(path: str) -> bool:
+    return str(path or "").lower().endswith((
+        ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".cs", ".kt", ".rb"
+    ))
+
+
+def _path_parts_lower(path: str) -> list[str]:
+    return [part.lower() for part in str(path or "").replace("\\", "/").split("/") if part]
+
+
+def _looks_like_ui_file(path: str) -> bool:
+    parts = _path_parts_lower(path)
+    return any(
+        token in parts
+        for token in ("ui", "frontend", "front", "web", "client", "pages", "components", "views")
+    )
+
+
+def _looks_like_db_module(path: str) -> bool:
+    parts = _path_parts_lower(path)
+    return any(
+        token in parts
+        for token in ("db", "database", "repository", "repositories", "dao", "model", "models", "migration", "migrations", "store")
+    )
+
+
+def _looks_like_service_module(path: str) -> bool:
+    parts = _path_parts_lower(path)
+    return any(
+        token in parts
+        for token in ("service", "services", "api", "controller", "controllers", "handler", "handlers", "route", "routes")
+    )
+
+
+def _detect_hardcoded_service_calls(contents: dict[str, str]) -> list[str]:
+    examples: list[str] = []
+    for path, text in sorted(contents.items()):
+        if not _is_code_file(path):
+            continue
+        for host in _URL_RE.findall(str(text or "")):
+            host = str(host or "").strip().lower()
+            if not host:
+                continue
+            examples.append(f"{path} -> {host}")
+            if len(examples) >= 8:
+                return examples
+    return examples
+
+
+def _detect_db_layer_violations(contents: dict[str, str]) -> tuple[list[str], list[str]]:
+    wrong_module_examples: list[str] = []
+    layer_violation_examples: list[str] = []
+    for path, text in sorted(contents.items()):
+        if not _is_code_file(path):
+            continue
+        if not _DB_ACCESS_RE.search(str(text or "")):
+            continue
+        is_db_module = _looks_like_db_module(path)
+        if not is_db_module:
+            wrong_module_examples.append(path)
+        if _looks_like_ui_file(path):
+            layer_violation_examples.append(path)
+        if len(wrong_module_examples) >= 8 and len(layer_violation_examples) >= 8:
+            break
+    return wrong_module_examples[:8], layer_violation_examples[:8]
+
+
 def collect_repo_facts(
     repo_root: str | Path,
     repo: str,
@@ -674,7 +761,28 @@ def collect_repo_facts(
             internal_dependency_names.add(dependency)
         else:
             external_dependency_names.add(dependency)
+    hardcoded_service_call_examples = _detect_hardcoded_service_calls(contents)
+    wrong_module_db_examples, layer_violation_examples = _detect_db_layer_violations(contents)
     import_cycle_examples, cycle_nodes = _detect_internal_import_cycles(names, contents)
+    anti_pattern_labels: list[str] = []
+    anti_pattern_examples: list[str] = []
+    if hardcoded_service_call_examples:
+        anti_pattern_labels.append("Hardcoded cross-service calls")
+        anti_pattern_examples.extend(hardcoded_service_call_examples[:3])
+    if wrong_module_db_examples:
+        anti_pattern_labels.append("Direct DB access from the wrong module")
+        anti_pattern_examples.extend(f"DB access in {path}" for path in wrong_module_db_examples[:3])
+    if layer_violation_examples:
+        anti_pattern_labels.append("Layer violations")
+        anti_pattern_examples.extend(f"UI talks to DB in {path}" for path in layer_violation_examples[:3])
+    if import_cycle_examples:
+        anti_pattern_labels.append("Circular builds")
+        anti_pattern_examples.extend(import_cycle_examples[:2])
+    if len(internal_dependency_names) >= 3:
+        anti_pattern_labels.append("Overuse of shared libraries")
+        anti_pattern_examples.append(
+            "Shared internal libs: " + ", ".join(sorted(internal_dependency_names)[:3])
+        )
     ai_profile = build_inventory(findings_list, repo_slugs=[repo])["repo_profiles"][0] if repo else {}
     ai_profile.update(
         {
@@ -699,6 +807,11 @@ def collect_repo_facts(
             "import_cycle_examples": import_cycle_examples[:8],
             "import_cycle_node_count": len(cycle_nodes),
             "has_import_cycles": bool(import_cycle_examples),
+            "hardcoded_service_call_examples": hardcoded_service_call_examples[:8],
+            "wrong_module_db_examples": wrong_module_db_examples[:8],
+            "layer_violation_examples": layer_violation_examples[:8],
+            "anti_pattern_labels": anti_pattern_labels,
+            "anti_pattern_examples": anti_pattern_examples[:8],
             "governance": governance,
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),

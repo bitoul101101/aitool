@@ -3928,6 +3928,18 @@ def test_inventory_page_is_server_rendered():
                 "has_import_cycles": True,
                 "cross_repo_cycle_peers": ["repo2"],
                 "has_cross_repo_cycles": True,
+                "anti_pattern_labels": [
+                    "Hardcoded cross-service calls",
+                    "Direct DB access from the wrong module",
+                    "Layer violations",
+                    "Circular builds",
+                    "Overuse of shared libraries",
+                ],
+                "anti_pattern_examples": [
+                    "src/ui/page.tsx -> svc.cognyte.local",
+                    "DB access in src/service/metrics.py",
+                    "UI talks to DB in src/ui/page.tsx",
+                ],
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": True,
@@ -3944,7 +3956,7 @@ def test_inventory_page_is_server_rendered():
                 "agent_tool_use": True,
                 "risky_repo": True,
                 "orphaned_risky": False,
-                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift", "risky", "import_cycle", "cross_repo_cycle"],
+                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift", "risky", "import_cycle", "cross_repo_cycle", "anti_pattern"],
                 "reports": {"html_name": "demo.html"},
             },
             {
@@ -3982,6 +3994,8 @@ def test_inventory_page_is_server_rendered():
                 "has_import_cycles": False,
                 "cross_repo_cycle_peers": ["repo1"],
                 "has_cross_repo_cycles": True,
+                "anti_pattern_labels": ["Circular builds"],
+                "anti_pattern_examples": ["Repo dependency cycle with repo1"],
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": False,
@@ -3999,7 +4013,7 @@ def test_inventory_page_is_server_rendered():
                 "agent_tool_use": False,
                 "risky_repo": True,
                 "orphaned_risky": True,
-                "usage_tags": ["iac", "api", "missing_governance", "orphaned", "dependency_risk", "shared_internal_libs", "runtime_drift", "risky", "orphaned_risky"],
+                "usage_tags": ["iac", "api", "missing_governance", "orphaned", "dependency_risk", "shared_internal_libs", "runtime_drift", "risky", "orphaned_risky", "cross_repo_cycle", "anti_pattern"],
                 "reports": {},
             },
         ],
@@ -4025,6 +4039,7 @@ def test_inventory_page_is_server_rendered():
             "policy_violation_repos": 2,
             "import_cycle_repos": 1,
             "cross_repo_cycle_repos": 2,
+            "anti_pattern_repos": 2,
             "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
             "owner_missing_governance_rollup": [("Unowned", 1), ("@team-platform", 1)],
             "owner_risky_rollup": [("@team-platform", 1), ("Unowned", 1)],
@@ -4055,6 +4070,13 @@ def test_inventory_page_is_server_rendered():
             "ai_dependency_risk_rollup": [("repo1", 2)],
             "import_cycle_rollup": [("a.py -> b.py -> a.py", 1)],
             "repo_cycle_rollup": [("repo1 ↔ repo2", 1)],
+            "anti_pattern_rollup": [
+                ("Circular builds", 2),
+                ("Direct DB access from the wrong module", 1),
+                ("Hardcoded cross-service calls", 1),
+                ("Layer violations", 1),
+                ("Overuse of shared libraries", 1),
+            ],
             "policy_violation_rollup": [
                 ("API repos require SECURITY.md", 2),
                 ("Weak-governance repos cannot carry heavy external dependency load", 2),
@@ -4109,6 +4131,7 @@ def test_inventory_page_is_server_rendered():
     assert "Import Cycles" in html
     assert "Repo Cycles" in html
     assert "Repo Dependency Cycles" in html
+    assert "Anti-Patterns" in html
     assert "Policy Violations" in html
     assert "Owners of Shared Assets" in html
     assert "Orphaned Exposed Repos" in html
@@ -4118,8 +4141,13 @@ def test_inventory_page_is_server_rendered():
     assert "svc.cognyte.local" in html
     assert "Cycles: 2" in html
     assert "Repo Cycle" in html
+    assert "Anti: Hardcoded cross-service calls, Direct DB access from the wrong module, Layer violations" in html
     assert "a.py -&gt; b.py -&gt; a.py" in html
     assert "repo1 ↔ repo2" in html
+    assert "Hardcoded cross-service calls" in html
+    assert "Direct DB access from the wrong module" in html
+    assert "Layer violations" in html
+    assert "Overuse of shared libraries" in html
     assert "repo2 (API / IaC)" in html
     assert "Node.js &lt;18" in html
     assert "Python 3.8" in html
@@ -4187,6 +4215,17 @@ def test_inventory_repo_page_is_server_rendered():
             "import_cycle_examples": ["a.py -> b.py -> a.py"],
             "import_cycle_node_count": 2,
             "cross_repo_cycle_peers": ["repo2"],
+            "anti_pattern_labels": [
+                "Hardcoded cross-service calls",
+                "Direct DB access from the wrong module",
+                "Layer violations",
+                "Circular builds",
+            ],
+            "anti_pattern_examples": [
+                "src/ui/page.tsx -> svc.cognyte.local",
+                "DB access in src/service/metrics.py",
+                "UI talks to DB in src/ui/page.tsx",
+            ],
             "missing_governance": ["SECURITY.md"],
             "reports": {"html_name": "demo.html", "json_name": "demo.json"},
         },
@@ -4221,7 +4260,10 @@ def test_inventory_repo_page_is_server_rendered():
     assert "React on Node.js &lt;18" in html
     assert "Import Cycles" in html
     assert "Repo Cycles" in html
+    assert "Anti-Patterns" in html
     assert "repo2" in html
+    assert "Hardcoded cross-service calls" in html
+    assert "DB access in src/service/metrics.py" in html
     assert "Recent Scans" in html
     assert "00:45" in html
 
@@ -4237,6 +4279,40 @@ def test_collect_repo_facts_detects_python_import_cycle(tmp_path):
     assert facts["has_import_cycles"] is True
     assert facts["import_cycle_node_count"] == 2
     assert facts["import_cycle_examples"] == ["a.py -> b.py -> a.py"]
+
+
+def test_collect_repo_facts_detects_antipatterns(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    ui_dir = tmp_path / "src" / "ui"
+    service_dir = tmp_path / "src" / "service"
+    ui_dir.mkdir(parents=True)
+    service_dir.mkdir(parents=True)
+    (ui_dir / "page.tsx").write_text(
+        'const url = "https://svc.cognyte.local/api/orders";\n'
+        'const sql = "select * from orders";\n'
+        'db.query(sql)\n',
+        encoding="utf-8",
+    )
+    (service_dir / "metrics.py").write_text(
+        'import psycopg2\n'
+        'conn = psycopg2.connect("postgres://db")\n',
+        encoding="utf-8",
+    )
+
+    facts = collect_repo_facts(
+        tmp_path,
+        repo="repo1",
+        repo_owner="@team-platform",
+        findings=[],
+    )
+
+    assert "Hardcoded cross-service calls" in facts["anti_pattern_labels"]
+    assert "Direct DB access from the wrong module" in facts["anti_pattern_labels"]
+    assert "Layer violations" in facts["anti_pattern_labels"]
+    assert any("svc.cognyte.local" in item for item in facts["anti_pattern_examples"])
+    assert facts["wrong_module_db_examples"]
+    assert facts["layer_violation_examples"] == ["src/ui/page.tsx"]
 
 
 def test_inventory_snapshot_prefers_repo_details_owner_over_generic_profile_owner():
