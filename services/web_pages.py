@@ -1114,6 +1114,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         runtime_text = ", ".join(item.get("runtimes", []))
         technology_text = ", ".join(item.get("technologies", []))
         version_text = ", ".join(f"{runtime} {version}" for runtime, version in sorted((item.get("runtime_versions") or {}).items()))
+        runtime_drift_text = ", ".join(item.get("runtime_drift_labels", []) or [])
         governance_text = ", ".join(item.get("missing_governance", [])) or "OK"
         governance_meta = []
         ci_text = ", ".join(item.get("ci_systems", [])[:2])
@@ -1137,6 +1138,18 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         owner_text = str(item.get("owner", "") or "Unowned")
         dependency_text = ", ".join(item.get("dependency_names", [])[:6])
         internal_dependency_text = ", ".join(item.get("internal_dependency_names", [])[:4]) or "-"
+        shared_internal_libs_text = ", ".join(item.get("shared_internal_libs", [])[:3]) or "-"
+        dependency_meta = []
+        if item.get("external_dependency_count"):
+            dependency_meta.append(f"External: {item.get('external_dependency_count')}")
+        if item.get("dependency_risk"):
+            dependency_meta.append("Weak Gov")
+        ai_meta = []
+        framework_drift_text = ", ".join(item.get("framework_drift_labels", []) or [])
+        if framework_drift_text:
+            ai_meta.append(framework_drift_text)
+        if item.get("ai_drift_risk"):
+            ai_meta.append("AI Drift Risk")
         date_text, time_text, ts = _fmt_dt(item.get("last_scan_at_utc", ""))
         reports = item.get("reports") or {}
         html_link = (
@@ -1156,17 +1169,17 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             f'data-ts="{ts}">'
             f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
             f'<td>{_esc(item.get("project_key", ""))}</td>'
-            f'<td><strong>{_esc(item.get("repo", ""))}</strong><div class="inventory-sub">{_esc(item.get("scan_id", ""))}</div></td>'
+            f'<td><strong><a href="/inventory/repo?project={quote(str(item.get("project_key", "") or ""))}&repo={quote(str(item.get("repo", "") or ""))}">{_esc(item.get("repo", ""))}</a></strong><div class="inventory-sub">{_esc(item.get("scan_id", ""))}</div></td>'
             f'<td>{_esc(owner_text)}</td>'
             f'<td>{_esc(runtime_text or "-")}</td>'
             f'<td>{_esc(technology_text or "-")}</td>'
-            f'<td>{_esc(version_text or "-")}</td>'
+            f'<td>{_esc(version_text or "-")}<div class="inventory-sub">{_esc(runtime_drift_text or "-")}</div></td>'
             f'<td><span class="inventory-bool {"no" if item.get("missing_governance") else "yes"}">{_esc(governance_text)}</span><div class="inventory-sub">{_esc(", ".join(governance_meta) or "-")}</div></td>'
             f'<td>{_esc(platform_text)}</td>'
             f'<td>{_esc(api_text)}<div class="inventory-sub">{_esc(" | ".join(api_meta) or "-")}</div></td>'
-            f'<td>{_esc(dependency_text or "-")}</td>'
-            f'<td>{_esc(internal_dependency_text)}</td>'
-            f'<td>{_esc(ai_text)}</td>'
+            f'<td>{_esc(dependency_text or "-")}<div class="inventory-sub">{_esc(" | ".join(dependency_meta) or "-")}</div></td>'
+            f'<td>{_esc(internal_dependency_text)}<div class="inventory-sub">{_esc(shared_internal_libs_text)}</div></td>'
+            f'<td>{_esc(ai_text)}<div class="inventory-sub">{_esc(" | ".join(ai_meta) or "-")}</div></td>'
             f'<td>{html_link}</td>'
             "</tr>"
         )
@@ -1190,6 +1203,9 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <div class="inventory-card-stat"><span class="baseline-label">Dependencies</span><strong>{_esc(summary.get("dependency_count", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Repos Using Internal Libs</span><strong>{_esc(summary.get("internal_dependency_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Runtime Drift</span><strong>{_esc(summary.get("runtime_drift_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Dependency Risk</span><strong>{_esc(summary.get("dependency_risk_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">AI Drift Risk</span><strong>{_esc(summary.get("ai_drift_risk_repos", 0))}</strong></div>
       </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
         <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
@@ -1208,6 +1224,11 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>Shared Topic Consumers</strong>{_rollup_list(list(summary.get("shared_consumed_topic_rollup", []) or []), "No shared consumed topics yet.")}</section>
         <section class="inventory-rollup-card"><strong>Dependencies</strong>{_rollup_list(list(summary.get("dependency_rollup", []) or []), "No dependency data yet.")}</section>
         <section class="inventory-rollup-card"><strong>Internal Dependencies</strong>{_rollup_list(list(summary.get("internal_dependency_rollup", []) or []), "No internal dependencies detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Outdated Runtime Posture</strong>{_rollup_list(list(summary.get("runtime_drift_rollup", []) or []), "No runtime drift detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Old Framework / Runtime Combos</strong>{_rollup_list(list(summary.get("framework_drift_rollup", []) or []), "No framework/runtime drift combos detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Shared Internal Library Consumers</strong>{_rollup_list(list(summary.get("shared_internal_lib_repo_rollup", []) or []), "No repos sharing internal libraries yet.")}</section>
+        <section class="inventory-rollup-card"><strong>External Dependency Risk</strong>{_rollup_list(list(summary.get("external_dependency_risk_rollup", []) or []), "No weak-governance dependency hotspots.")}</section>
+        <section class="inventory-rollup-card"><strong>AI Drift / Governance Risk</strong>{_rollup_list(list(summary.get("ai_dependency_risk_rollup", []) or []), "No AI repos with drift or dependency risk.")}</section>
         <section class="inventory-rollup-card"><strong>Shared Internal Libraries</strong>{_rollup_list(list(summary.get("shared_internal_dependency_rollup", []) or []), "No shared internal libraries yet.")}</section>
         <section class="inventory-rollup-card"><strong>Owners of Shared Assets</strong>{_rollup_list(list(summary.get("owner_shared_asset_rollup", []) or []), "No owner-linked shared assets yet.")}</section>
         <section class="inventory-rollup-card"><strong>Orphaned Exposed Repos</strong>{_rollup_list(list(summary.get("orphaned_exposed_rollup", []) or []), "No orphaned repos with API or IaC exposure.")}</section>
@@ -1231,6 +1252,10 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
           <option value="api">API Surface</option>
           <option value="branch_governance">Branch Governance</option>
           <option value="review_gate">Review Gate</option>
+          <option value="runtime_drift">Runtime Drift</option>
+          <option value="shared_internal_libs">Shared Internal Libs</option>
+          <option value="dependency_risk">Dependency Risk</option>
+          <option value="ai_drift_risk">AI Drift Risk</option>
           <option value="agent">Agent / Tool Use</option>
         </select>
       <button type="button" class="ghost" id="inventory-reset">Reset</button>
@@ -1316,6 +1341,114 @@ document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
 sortInventory(0,'datetime');
 </script>"""
     return _layout(title="AI Inventory", body=body, active="inventory", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
+
+
+def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
+    repo = str(repo_profile.get("repo", "") or "")
+    project_key = str(repo_profile.get("project_key", "") or "")
+    owner = str(repo_profile.get("owner", "") or "Unowned")
+    reports = dict(repo_profile.get("reports") or {})
+    provider_text = ", ".join(repo_profile.get("provider_labels", []) or []) or "-"
+    model_text = ", ".join(repo_profile.get("models", []) or []) or "-"
+    runtime_text = ", ".join(repo_profile.get("runtimes", []) or []) or "-"
+    technology_text = ", ".join(repo_profile.get("technologies", []) or []) or "-"
+    version_text = ", ".join(f"{runtime} {version}" for runtime, version in sorted((repo_profile.get("runtime_versions") or {}).items())) or "-"
+    governance_text = ", ".join(repo_profile.get("missing_governance", []) or []) or "OK"
+    ci_text = ", ".join(repo_profile.get("ci_systems", []) or []) or "-"
+    platform_text = ", ".join((repo_profile.get("iac_tools", []) or []) + (repo_profile.get("cloud_platforms", []) or [])) or "-"
+    api_text = ", ".join((repo_profile.get("api_types", []) or []) + (repo_profile.get("event_systems", []) or []) + (repo_profile.get("api_boundaries", []) or [])) or "-"
+    dependency_text = ", ".join(repo_profile.get("dependency_names", []) or []) or "-"
+    internal_dependency_text = ", ".join(repo_profile.get("internal_dependency_names", []) or []) or "-"
+    produced_topics = ", ".join(repo_profile.get("produced_topics", []) or []) or "-"
+    consumed_topics = ", ".join(repo_profile.get("consumed_topics", []) or []) or "-"
+    internal_hosts = ", ".join(repo_profile.get("internal_api_hosts", []) or []) or "-"
+    external_hosts = ", ".join(repo_profile.get("external_api_hosts", []) or []) or "-"
+    date_text, time_text, _ts = _fmt_dt(str(repo_profile.get("last_scan_at_utc", "") or ""))
+    latest_scan_id = str(repo_profile.get("scan_id", "") or "")
+    latest_findings_link = f'/findings?scan_id={quote(latest_scan_id)}' if latest_scan_id else ""
+    latest_html_link = f'/reports/{_esc(reports.get("html_name", ""))}' if reports.get("html_name") else ""
+    latest_json_link = f'/reports/{_esc(reports.get("json_name", ""))}' if reports.get("json_name") else ""
+
+    scan_rows = []
+    for item in recent_scans:
+        scan_date, scan_time, _ = _fmt_dt(str(item.get("started_at_utc", "") or ""))
+        scan_reports = dict(item.get("reports") or {})
+        findings_link = f'/findings?scan_id={quote(str(item.get("scan_id", "") or ""))}'
+        html_link = (
+            f'<a class="icon-link" href="/reports/{_esc(scan_reports.get("html_name", ""))}" target="_blank" title="Open HTML Report"><img src="{HTML_ICON}" alt="HTML"></a>'
+            if scan_reports.get("html_name")
+            else "-"
+        )
+        scan_rows.append(
+            "<tr>"
+            f"<td><div>{_esc(scan_date)}</div><div class=\"history-time\">{_esc(scan_time)}</div></td>"
+            f"<td>{_esc(item.get('scan_id', ''))}</td>"
+            f"<td>{_esc(item.get('state', ''))}</td>"
+            f"<td>{_esc(item.get('finding_total', 0))}</td>"
+            f"<td>{_esc(item.get('duration_label', '-'))}</td>"
+            f"<td><a href=\"{findings_link}\">Findings</a></td>"
+            f"<td>{html_link}</td>"
+            "</tr>"
+        )
+
+    body = f"""
+{_flash(notice, error)}
+<section class="inventory-page-grid">
+  <section class="card">
+    <div class="page-head" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+      <div>
+        <div class="inventory-sub"><a href="/inventory">Inventory</a> / {_esc(project_key or 'LOCAL')}</div>
+        <h2 style="margin:4px 0 8px">{_esc(repo)}</h2>
+        <div class="muted">Latest repository profile with recent scan history and direct workflow links.</div>
+      </div>
+      <div class="stack" style="align-items:flex-end;gap:6px">
+        {'<a class="ghost" href="' + latest_findings_link + '">Open Findings</a>' if latest_findings_link else ''}
+        {'<a class="ghost" href="' + latest_html_link + '" target="_blank">HTML Report</a>' if latest_html_link else ''}
+        {'<a class="ghost" href="' + latest_json_link + '" target="_blank">JSON</a>' if latest_json_link else ''}
+      </div>
+    </div>
+    <div class="inventory-summary-cards" style="margin-top:12px">
+      <div class="inventory-card-stat"><span class="baseline-label">Project</span><strong>{_esc(project_key or 'LOCAL')}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Owner</span><strong>{_esc(owner)}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Last Scan</span><strong>{_esc(date_text)}</strong><div class="inventory-sub">{_esc(time_text)}</div></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Findings</span><strong>{_esc(repo_profile.get("finding_count", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Branch Governance</span><strong>{'Yes' if repo_profile.get('has_branch_governance') else 'No'}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Review Gate</span><strong>{'Yes' if repo_profile.get('has_review_gate') else 'No'}</strong></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="table-shell">
+      <table>
+        <thead><tr><th>Area</th><th>Details</th></tr></thead>
+        <tbody>
+          <tr><td>Runtimes</td><td>{_esc(runtime_text)}</td></tr>
+          <tr><td>Technologies</td><td>{_esc(technology_text)}</td></tr>
+          <tr><td>Versions</td><td>{_esc(version_text)}</td></tr>
+          <tr><td>Governance</td><td>{_esc(governance_text)}<div class="inventory-sub">{_esc(ci_text)}</div></td></tr>
+          <tr><td>IaC / Cloud</td><td>{_esc(platform_text)}</td></tr>
+          <tr><td>API / Events</td><td>{_esc(api_text)}<div class="inventory-sub">Produced: {_esc(produced_topics)} | Consumed: {_esc(consumed_topics)}</div></td></tr>
+          <tr><td>Internal Hosts</td><td>{_esc(internal_hosts)}</td></tr>
+          <tr><td>External Hosts</td><td>{_esc(external_hosts)}</td></tr>
+          <tr><td>Dependencies</td><td>{_esc(dependency_text)}</td></tr>
+          <tr><td>Internal Libraries</td><td>{_esc(internal_dependency_text)}</td></tr>
+          <tr><td>AI Profile</td><td>{_esc(provider_text)}<div class="inventory-sub">{_esc(model_text)}</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 style="margin:0 0 10px">Recent Scans</h3>
+    <div class="table-shell">
+      <table>
+        <thead><tr><th>Date</th><th>Scan ID</th><th>State</th><th>Findings</th><th>Duration</th><th>Findings</th><th>HTML</th></tr></thead>
+        <tbody>{''.join(scan_rows) or '<tr><td colspan="7">No scans found for this repo.</td></tr>'}</tbody>
+      </table>
+    </div>
+  </section>
+</section>"""
+    return _layout(title=f"AI Inventory | {repo}", body=body, active="inventory", show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
 def render_trends_page(*, trends: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:

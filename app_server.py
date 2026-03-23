@@ -109,6 +109,7 @@ from services.web_pages import (
     render_help_page,
     render_history_page,
     render_inventory_page,
+    render_inventory_repo_page,
     render_login_page,
     render_results_page,
     render_scan_page,
@@ -732,6 +733,46 @@ def _generate_selected_findings_artifact(findings: list[dict], *, export_type: s
 
 
 def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
+    def _looks_outdated_runtime(runtime: str, version: str) -> str:
+        text = str(version or "").strip()
+        if runtime == "Python" and text:
+            try:
+                parts = [int(part) for part in text.split(".")[:2]]
+                if tuple(parts + [0] * (2 - len(parts))) <= (3, 9):
+                    return f"Python {text}"
+            except Exception:
+                pass
+        if runtime == "Node.js" and text == "<18":
+            return "Node.js <18"
+        if runtime == "JVM" and text in {"8", "11"}:
+            return f"JVM {text}"
+        if runtime == "Go" and text:
+            try:
+                parts = [int(part) for part in text.split(".")[:2]]
+                if tuple(parts + [0] * (2 - len(parts))) < (1, 21):
+                    return f"Go {text}"
+            except Exception:
+                pass
+        if runtime == ".NET" and text == "<6":
+            return ".NET <6"
+        return ""
+
+    def _risk_framework_combo(item: dict, drift_labels: list[str]) -> list[str]:
+        combos: list[str] = []
+        techs = set(item.get("technologies", []) or [])
+        for label in drift_labels:
+            if "Python" in label and techs & {"Django"}:
+                combos.append(f"Django on {label}")
+            if "Node.js" in label and techs & {"React", "Angular", "Node.js"}:
+                combos.append(f"{sorted(techs & {'React', 'Angular', 'Node.js'})[0]} on {label}")
+            if "JVM" in label and techs & {"Spring Boot"}:
+                combos.append(f"Spring Boot on {label}")
+            if ".NET" in label and techs & {".NET"}:
+                combos.append(f".NET on {label}")
+            if "Go" in label and techs & {"Go"}:
+                combos.append(f"Go on {label}")
+        return combos
+
     latest_by_repo: dict[str, dict] = {}
     for record in _history_records_for_user():
         inventory = record.get("inventory") or {}
@@ -840,6 +881,11 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     dependency_rollup: dict[str, int] = {}
     internal_dependency_rollup: dict[str, int] = {}
     external_dependency_rollup: dict[str, int] = {}
+    runtime_drift_rollup: dict[str, int] = {}
+    framework_drift_rollup: dict[str, int] = {}
+    shared_internal_lib_repo_rollup: dict[str, int] = {}
+    external_dependency_risk_rollup: dict[str, int] = {}
+    ai_dependency_risk_rollup: dict[str, int] = {}
     for item in repo_inventory:
         for runtime in item.get("runtimes", []) or []:
             runtime_rollup[runtime] = runtime_rollup.get(runtime, 0) + 1
@@ -879,6 +925,44 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         if item.get("missing_governance"):
             owner_missing_governance_rollup[owner] = owner_missing_governance_rollup.get(owner, 0) + 1
 
+    for item in repo_inventory:
+        drift_labels = [label for runtime, version in (item.get("runtime_versions") or {}).items() if (label := _looks_outdated_runtime(runtime, version))]
+        framework_drift = _risk_framework_combo(item, drift_labels)
+        shared_internal_libs = [dep for dep in item.get("internal_dependency_names", []) or [] if internal_dependency_rollup.get(dep, 0) > 1]
+        external_dependency_count = len(item.get("external_dependency_names", []) or [])
+        weak_governance = bool(item.get("missing_governance"))
+        ai_usage = bool(item.get("finding_count", 0) or item.get("provider_labels"))
+        dependency_risk = external_dependency_count >= 3 and weak_governance
+        ai_drift_risk = ai_usage and bool(drift_labels or dependency_risk)
+
+        item["runtime_drift_labels"] = drift_labels
+        item["framework_drift_labels"] = framework_drift
+        item["shared_internal_libs"] = shared_internal_libs
+        item["external_dependency_count"] = external_dependency_count
+        item["dependency_risk"] = dependency_risk
+        item["ai_drift_risk"] = ai_drift_risk
+        usage_tags = list(item.get("usage_tags", []) or [])
+        if drift_labels:
+            usage_tags.append("runtime_drift")
+        if shared_internal_libs:
+            usage_tags.append("shared_internal_libs")
+        if dependency_risk:
+            usage_tags.append("dependency_risk")
+        if ai_drift_risk:
+            usage_tags.append("ai_drift_risk")
+        item["usage_tags"] = sorted(set(usage_tags))
+
+        for label in drift_labels:
+            runtime_drift_rollup[label] = runtime_drift_rollup.get(label, 0) + 1
+        for label in framework_drift:
+            framework_drift_rollup[label] = framework_drift_rollup.get(label, 0) + 1
+        if shared_internal_libs:
+            shared_internal_lib_repo_rollup[str(item.get("repo", "") or "")] = len(shared_internal_libs)
+        if dependency_risk:
+            external_dependency_risk_rollup[str(item.get("repo", "") or "")] = external_dependency_count
+        if ai_drift_risk:
+            ai_dependency_risk_rollup[str(item.get("repo", "") or "")] = len(drift_labels) + (1 if dependency_risk else 0)
+
     orphaned_exposed_repos = [
         item for item in repo_inventory
         if item.get("is_orphaned") and (item.get("has_iac") or item.get("has_api_surface"))
@@ -913,9 +997,12 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
           "api_repos": sum(1 for item in repo_inventory if item.get("has_api_surface")),
           "branch_governed_repos": sum(1 for item in repo_inventory if item.get("has_branch_governance")),
           "review_gated_repos": sum(1 for item in repo_inventory if item.get("has_review_gate")),
-          "orphaned_repos": sum(1 for item in repo_inventory if item.get("is_orphaned")),
-          "dependency_count": len(dependency_rollup),
-          "internal_dependency_repos": sum(1 for item in repo_inventory if item.get("internal_dependency_names")),
+        "orphaned_repos": sum(1 for item in repo_inventory if item.get("is_orphaned")),
+        "dependency_count": len(dependency_rollup),
+        "internal_dependency_repos": sum(1 for item in repo_inventory if item.get("internal_dependency_names")),
+        "runtime_drift_repos": sum(1 for item in repo_inventory if item.get("runtime_drift_labels")),
+        "dependency_risk_repos": sum(1 for item in repo_inventory if item.get("dependency_risk")),
+        "ai_drift_risk_repos": sum(1 for item in repo_inventory if item.get("ai_drift_risk")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -952,6 +1039,11 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "dependency_rollup": sorted(dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "internal_dependency_rollup": sorted(internal_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "external_dependency_rollup": sorted(external_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "runtime_drift_rollup": sorted(runtime_drift_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "framework_drift_rollup": sorted(framework_drift_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "shared_internal_lib_repo_rollup": sorted(shared_internal_lib_repo_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "external_dependency_risk_rollup": sorted(external_dependency_risk_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "ai_dependency_risk_rollup": sorted(ai_dependency_risk_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary
 
@@ -962,6 +1054,61 @@ def _find_history_record_by_scan_id(scan_id: str) -> dict | None:
 
 def _find_history_record_by_report_name(filename: str) -> dict | None:
     return find_history_record_by_report_name(_history_records_for_user(), filename)
+
+
+def _inventory_repo_detail_for_user(project_key: str, repo: str) -> tuple[dict | None, list[dict]]:
+    project_key = str(project_key or "").strip()
+    repo = str(repo or "").strip()
+    if not repo:
+        return None, []
+
+    repo_inventory, _summary = _inventory_snapshot_for_user()
+    repo_profile = next(
+        (
+            item for item in repo_inventory
+            if str(item.get("repo", "") or "").strip() == repo
+            and str(item.get("project_key", "") or "").strip() == project_key
+        ),
+        None,
+    )
+    if not repo_profile:
+        repo_profile = next(
+            (item for item in repo_inventory if str(item.get("repo", "") or "").strip() == repo),
+            None,
+        )
+    if not repo_profile:
+        return None, []
+
+    recent_scans: list[dict] = []
+    for record in _history_records_for_user():
+        record_project = str(record.get("project_key", "") or "").strip()
+        if project_key and record_project != project_key:
+            continue
+        record_repos = [str(slug or "").strip() for slug in list(record.get("repo_slugs") or [])]
+        inventory_profiles = list(((record.get("inventory") or {}).get("repo_profiles") or []))
+        in_repo_slugs = repo in record_repos
+        in_profiles = any(str(item.get("repo", "") or "").strip() == repo for item in inventory_profiles)
+        if not in_repo_slugs and not in_profiles:
+            continue
+        reports = dict((record.get("reports") or {}).get("__all__", {}) or {})
+        findings = list(record.get("findings") or [])
+        try:
+            duration_total = int(record.get("duration_s", 0) or 0)
+        except Exception:
+            duration_total = 0
+        minutes, seconds = divmod(max(duration_total, 0), 60)
+        recent_scans.append(
+            {
+                "scan_id": str(record.get("scan_id", "") or ""),
+                "started_at_utc": str(record.get("started_at_utc", "") or ""),
+                "state": str(record.get("state", "") or ""),
+                "finding_total": int(record.get("finding_total", len(findings)) or 0),
+                "duration_label": f"{minutes:02d}:{seconds:02d}",
+                "reports": reports,
+            }
+        )
+    recent_scans.sort(key=lambda item: item.get("started_at_utc", ""), reverse=True)
+    return repo_profile, recent_scans[:12]
 
 
 def _report_record_for_scan(scan_id: str) -> dict | None:
@@ -1761,6 +1908,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 return True
             self._render_inventory_page()
             return True
+        if p == "/inventory/repo":
+            if not _is_connected():
+                self._redirect("/login")
+                return True
+            if self._require_browser_session():
+                return True
+            self._render_inventory_repo_page()
+            return True
         if p == "/trends":
             if not _is_connected():
                 self._redirect("/login")
@@ -2315,6 +2470,27 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         html = render_inventory_page(
             repo_inventory=repo_inventory,
             summary=summary,
+            csrf_token=_current_csrf_token(self),
+            notice=notice or (qs.get("notice", [""])[0] or ""),
+            error=error or (qs.get("error", [""])[0] or ""),
+            show_scan_results=_has_scan_results(),
+            current_scan=_current_scan_nav_context(),
+        )
+        self._send(200, "text/html; charset=utf-8", html)
+
+    def _render_inventory_repo_page(self, *, notice: str = "", error: str = ""):
+        if _require_role(self, ROLE_VIEWER):
+            return
+        qs = parse_qs(urlparse(self.path).query)
+        project_key = str(qs.get("project", [""])[0] or "")
+        repo = str(qs.get("repo", [""])[0] or "")
+        repo_profile, recent_scans = _inventory_repo_detail_for_user(project_key, repo)
+        if not repo_profile:
+            self._redirect(_with_query("/inventory", error="Repository profile not found"))
+            return
+        html = render_inventory_repo_page(
+            repo_profile=repo_profile,
+            recent_scans=recent_scans,
             csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
