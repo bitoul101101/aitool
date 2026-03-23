@@ -1205,6 +1205,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             dependency_meta.append("Drift")
         if item.get("has_overlap_risk"):
             dependency_meta.append(f"Overlap: {int(item.get('overlap_score', 0) or 0)}")
+        if item.get("has_hidden_coupling"):
+            dependency_meta.append(f"Coupling: {int(item.get('hidden_coupling_count', 0) or 0)}")
         ai_meta = []
         framework_drift_text = ", ".join(item.get("framework_drift_labels", []) or [])
         if framework_drift_text:
@@ -1292,6 +1294,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <div class="inventory-card-stat"><span class="baseline-label">High Inbound Risk</span><strong>{_esc(summary.get("inbound_dependency_risk_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">High Outbound Risk</span><strong>{_esc(summary.get("outbound_dependency_risk_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Critical Infra</span><strong>{_esc(summary.get("critical_infrastructure_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Hidden Coupling</span><strong>{_esc(summary.get("hidden_coupling_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Boundary Violations</span><strong>{_esc(summary.get("boundary_violation_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Architecture Drift</span><strong>{_esc(summary.get("architecture_drift_repos", 0))}</strong></div>
       </div>
@@ -1331,6 +1334,10 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>High Inbound Dependency Risk</strong>{_rollup_list(list(summary.get("inbound_dependency_rollup", []) or []), "No inbound dependency hotspots.")}</section>
         <section class="inventory-rollup-card"><strong>High Outbound Dependency Risk</strong>{_rollup_list(list(summary.get("outbound_dependency_rollup", []) or []), "No outbound dependency hotspots.")}</section>
         <section class="inventory-rollup-card"><strong>Critical Infrastructure</strong>{_rollup_list(list(summary.get("critical_infrastructure_rollup", []) or []), "No central dependency hubs detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Hidden Coupling</strong>{_rollup_list(list(summary.get("hidden_coupling_rollup", []) or []), "No cross-team hidden coupling detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Team Dependency Flows</strong>{_rollup_list(list(summary.get("team_dependency_flow_rollup", []) or []), "No cross-team repo dependencies detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Team API Flows</strong>{_rollup_list(list(summary.get("team_api_flow_rollup", []) or []), "No cross-team API flows detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Team Event Flows</strong>{_rollup_list(list(summary.get("team_event_flow_rollup", []) or []), "No cross-team event flows detected.")}</section>
         <section class="inventory-rollup-card"><strong>Boundary Violations</strong>{_rollup_list(list(summary.get("boundary_violation_rollup", []) or []), "No boundary violations detected.")}</section>
         <section class="inventory-rollup-card"><strong>Architecture Drift</strong>{_rollup_list(list(summary.get("architecture_drift_rollup", []) or []), "No architecture drift detected.")}</section>
         <section class="inventory-rollup-card"><strong>Policy Violations</strong>{_rollup_list(list(summary.get("policy_violation_rollup", []) or []), "No policy violations.")}</section>
@@ -1371,6 +1378,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
           <option value="inbound_dependency_risk"{" selected" if selected_usage == "inbound_dependency_risk" else ""}>High Inbound Risk</option>
           <option value="outbound_dependency_risk"{" selected" if selected_usage == "outbound_dependency_risk" else ""}>High Outbound Risk</option>
           <option value="critical_infrastructure"{" selected" if selected_usage == "critical_infrastructure" else ""}>Critical Infrastructure</option>
+          <option value="hidden_coupling"{" selected" if selected_usage == "hidden_coupling" else ""}>Hidden Coupling</option>
           <option value="boundary_violation"{" selected" if selected_usage == "boundary_violation" else ""}>Boundary Violations</option>
           <option value="architecture_drift"{" selected" if selected_usage == "architecture_drift" else ""}>Architecture Drift</option>
           <option value="agent"{" selected" if selected_usage == "agent" else ""}>Agent / Tool Use</option>
@@ -1527,6 +1535,10 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
     overlap_peers = ", ".join(repo_profile.get("overlap_peers", []) or []) or "-"
     overlap_examples = " | ".join(repo_profile.get("overlap_examples", []) or []) or "-"
     duplicate_modules = ", ".join(repo_profile.get("duplicate_module_examples", []) or []) or "-"
+    hidden_coupling = " | ".join(repo_profile.get("hidden_coupling_examples", []) or []) or "-"
+    cross_team_repo_dependencies = ", ".join(repo_profile.get("cross_team_repo_dependencies", []) or []) or "-"
+    cross_team_api_usage = ", ".join(repo_profile.get("cross_team_api_usage", []) or []) or "-"
+    cross_team_event_flows = ", ".join(repo_profile.get("cross_team_event_flows", []) or []) or "-"
     inbound_dependency_count = int(repo_profile.get("inbound_dependency_count", 0) or 0)
     outbound_dependency_count = int(repo_profile.get("outbound_dependency_count", 0) or 0)
     dependency_centrality_score = int(repo_profile.get("dependency_centrality_score", 0) or 0)
@@ -1601,6 +1613,7 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
         f"Outbound repo deps: {', '.join(outbound_repo_dependencies[:5]) or str(outbound_dependency_count)}",
         f"Known risks: {anti_patterns}",
         f"Service role: {service_role}",
+        f"Hidden coupling: {hidden_coupling}",
         f"Boundary validation: {boundary_violations}",
         f"Architecture drift: {architecture_drift}",
         f"Start with findings from scan {latest_scan_id or '-'}",
@@ -1697,6 +1710,10 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
           <tr><td>Overlap Candidates</td><td>{_esc(overlap_peers)}<div class="inventory-sub">{_esc(overlap_examples)}</div></td></tr>
           <tr><td>Duplicate Modules</td><td>{_esc(duplicate_modules)}</td></tr>
           <tr><td>Service Role</td><td>{_esc(service_role)}</td></tr>
+          <tr><td>Hidden Coupling</td><td>{_esc(hidden_coupling)}</td></tr>
+          <tr><td>Cross-Team Repo Deps</td><td>{_esc(cross_team_repo_dependencies)}</td></tr>
+          <tr><td>Cross-Team API Usage</td><td>{_esc(cross_team_api_usage)}</td></tr>
+          <tr><td>Cross-Team Event Flows</td><td>{_esc(cross_team_event_flows)}</td></tr>
           <tr><td>Boundary Validation</td><td>{_esc(boundary_violations)}</td></tr>
           <tr><td>Architecture Drift</td><td>{_esc(architecture_drift)}</td></tr>
           <tr><td>Anti-Patterns</td><td>{_esc(anti_patterns)}<div class="inventory-sub">{_esc(anti_pattern_examples)}</div></td></tr>
@@ -1717,6 +1734,7 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
       <div class="inventory-card-stat"><span class="baseline-label">Anti-Patterns</span><strong>{_esc(str(len(repo_profile.get("anti_pattern_labels", []) or [])))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Overlap Risk</span><strong>{_esc(str(int(repo_profile.get("overlap_score", 0) or 0)))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Centrality</span><strong>{_esc(str(dependency_centrality_score))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Hidden Coupling</span><strong>{_esc(str(int(repo_profile.get("hidden_coupling_count", 0) or 0)))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Boundary Violations</span><strong>{_esc(str(len(repo_profile.get("boundary_violations", []) or [])))}</strong></div>
     </div>
   </section>

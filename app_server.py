@@ -977,6 +977,10 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     duplicate_module_rollup: dict[str, int] = {}
     policy_violation_rollup: dict[str, int] = {}
     owner_policy_violation_rollup: dict[str, int] = {}
+    hidden_coupling_rollup: dict[str, int] = {}
+    team_dependency_flow_rollup: dict[str, int] = {}
+    team_api_flow_rollup: dict[str, int] = {}
+    team_event_flow_rollup: dict[str, int] = {}
     for item in repo_inventory:
         for runtime in item.get("runtimes", []) or []:
             runtime_rollup[runtime] = runtime_rollup.get(runtime, 0) + 1
@@ -1207,6 +1211,98 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["critical_infrastructure"]))
             central_dependency_rollup[repo_name] = dependency_centrality_score
 
+    repo_map = {str(item.get("repo", "") or ""): item for item in repo_inventory}
+    route_provider_map: dict[str, set[str]] = {}
+    host_provider_map: dict[str, set[str]] = {}
+    produced_topic_map: dict[str, set[str]] = {}
+    for item in repo_inventory:
+        repo_name = str(item.get("repo", "") or "")
+        if item.get("has_api_surface"):
+            for route in item.get("internal_api_routes", []) or []:
+                route_provider_map.setdefault(route, set()).add(repo_name)
+            for host in item.get("internal_api_hosts", []) or []:
+                host_provider_map.setdefault(host, set()).add(repo_name)
+        for topic in item.get("produced_topics", []) or []:
+            produced_topic_map.setdefault(topic, set()).add(repo_name)
+
+    for item in repo_inventory:
+        repo_name = str(item.get("repo", "") or "")
+        owner = str(item.get("owner", "") or "").strip() or "Unowned"
+        hidden_examples: list[str] = []
+        hidden_peers: list[str] = []
+        cross_team_repo_dependencies: list[str] = []
+        cross_team_api_usage: list[str] = []
+        cross_team_event_flows: list[str] = []
+
+        for peer in item.get("outbound_repo_dependencies", []) or []:
+            peer_item = repo_map.get(peer)
+            if not peer_item:
+                continue
+            peer_owner = str(peer_item.get("owner", "") or "").strip() or "Unowned"
+            if peer_owner == owner:
+                continue
+            hidden_peers.append(peer)
+            cross_team_repo_dependencies.append(f"{peer} ({peer_owner})")
+            hidden_examples.append(f"Depends on {peer} owned by {peer_owner}")
+            team_dependency_flow_rollup[f"{owner} -> {peer_owner}"] = team_dependency_flow_rollup.get(f"{owner} -> {peer_owner}", 0) + 1
+
+        for route in item.get("internal_api_routes", []) or []:
+            providers = sorted(route_provider_map.get(route, set()) - {repo_name})
+            for provider in providers:
+                peer_item = repo_map.get(provider)
+                if not peer_item:
+                    continue
+                peer_owner = str(peer_item.get("owner", "") or "").strip() or "Unowned"
+                if peer_owner == owner:
+                    continue
+                hidden_peers.append(provider)
+                cross_team_api_usage.append(f"{route} -> {provider} ({peer_owner})")
+                hidden_examples.append(f"Uses internal API route from {provider}: {route}")
+                team_api_flow_rollup[f"{owner} -> {peer_owner}"] = team_api_flow_rollup.get(f"{owner} -> {peer_owner}", 0) + 1
+        for host in item.get("internal_api_hosts", []) or []:
+            providers = sorted(host_provider_map.get(host, set()) - {repo_name})
+            for provider in providers:
+                peer_item = repo_map.get(provider)
+                if not peer_item:
+                    continue
+                peer_owner = str(peer_item.get("owner", "") or "").strip() or "Unowned"
+                if peer_owner == owner:
+                    continue
+                hidden_peers.append(provider)
+                cross_team_api_usage.append(f"{host} -> {provider} ({peer_owner})")
+                hidden_examples.append(f"Uses internal API host from {provider}: {host}")
+                team_api_flow_rollup[f"{owner} -> {peer_owner}"] = team_api_flow_rollup.get(f"{owner} -> {peer_owner}", 0) + 1
+
+        for topic in item.get("consumed_topics", []) or []:
+            producers = sorted(produced_topic_map.get(topic, set()) - {repo_name})
+            for producer in producers:
+                peer_item = repo_map.get(producer)
+                if not peer_item:
+                    continue
+                peer_owner = str(peer_item.get("owner", "") or "").strip() or "Unowned"
+                if peer_owner == owner:
+                    continue
+                hidden_peers.append(producer)
+                cross_team_event_flows.append(f"{topic} <- {producer} ({peer_owner})")
+                hidden_examples.append(f"Consumes topic from {producer}: {topic}")
+                team_event_flow_rollup[f"{peer_owner} -> {owner}"] = team_event_flow_rollup.get(f"{peer_owner} -> {owner}", 0) + 1
+
+        item["hidden_coupling_examples"] = list(dict.fromkeys(hidden_examples))[:8]
+        item["hidden_coupling_peers"] = sorted(set(hidden_peers))
+        item["cross_team_repo_dependencies"] = list(dict.fromkeys(cross_team_repo_dependencies))[:8]
+        item["cross_team_api_usage"] = list(dict.fromkeys(cross_team_api_usage))[:8]
+        item["cross_team_event_flows"] = list(dict.fromkeys(cross_team_event_flows))[:8]
+        item["hidden_coupling_count"] = (
+            len(item["cross_team_repo_dependencies"])
+            + len(item["cross_team_api_usage"])
+            + len(item["cross_team_event_flows"])
+        )
+        item["has_hidden_coupling"] = bool(item["hidden_coupling_count"])
+        if item["has_hidden_coupling"]:
+            item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["hidden_coupling"]))
+            for example in item["hidden_coupling_examples"]:
+                hidden_coupling_rollup[example] = hidden_coupling_rollup.get(example, 0) + 1
+
     role_map = {str(item.get("repo", "") or ""): _service_role(item) for item in repo_inventory}
     allowed_targets = {
         "ui": {"api", "library"},
@@ -1345,6 +1441,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "inbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("inbound_dependency_risk")),
         "outbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("outbound_dependency_risk")),
         "critical_infrastructure_repos": sum(1 for item in repo_inventory if item.get("critical_infrastructure_risk")),
+        "hidden_coupling_repos": sum(1 for item in repo_inventory if item.get("has_hidden_coupling")),
         "boundary_violation_repos": sum(1 for item in repo_inventory if item.get("has_boundary_violations")),
         "architecture_drift_repos": sum(1 for item in repo_inventory if item.get("has_architecture_drift")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1420,6 +1517,10 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "inbound_dependency_rollup": sorted(inbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "outbound_dependency_rollup": sorted(outbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "critical_infrastructure_rollup": sorted(central_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "hidden_coupling_rollup": sorted(hidden_coupling_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "team_dependency_flow_rollup": sorted(team_dependency_flow_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "team_api_flow_rollup": sorted(team_api_flow_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "team_event_flow_rollup": sorted(team_event_flow_rollup.items(), key=lambda item: (-item[1], item[0])),
         "boundary_violation_rollup": sorted(boundary_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
         "architecture_drift_rollup": sorted(architecture_drift_rollup.items(), key=lambda item: (-item[1], item[0])),
         "policy_violation_rollup": sorted(policy_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1519,6 +1620,10 @@ def _filter_inventory_rows(repo_inventory: list[dict], filters: dict[str, str] |
                 ", ".join(item.get("deprecated_api_routes", []) or []),
                 ", ".join(item.get("api_sdk_names", []) or []),
                 ", ".join(item.get("policy_violations", []) or []),
+                ", ".join(item.get("hidden_coupling_examples", []) or []),
+                ", ".join(item.get("cross_team_repo_dependencies", []) or []),
+                ", ".join(item.get("cross_team_api_usage", []) or []),
+                ", ".join(item.get("cross_team_event_flows", []) or []),
             )
         ).lower()
         if query and query not in haystack:
@@ -1573,6 +1678,10 @@ def _inventory_export_payload(repo_inventory: list[dict], filters: dict[str, str
                 "service_role": str(item.get("service_role", "") or ""),
                 "boundary_violations": ", ".join(item.get("boundary_violations", []) or []),
                 "architecture_drift": " | ".join(item.get("architecture_drift_examples", []) or []),
+                "hidden_coupling": " | ".join(item.get("hidden_coupling_examples", []) or []),
+                "cross_team_repo_dependencies": ", ".join(item.get("cross_team_repo_dependencies", []) or []),
+                "cross_team_api_usage": ", ".join(item.get("cross_team_api_usage", []) or []),
+                "cross_team_event_flows": ", ".join(item.get("cross_team_event_flows", []) or []),
                 "risk_flags": ", ".join(item.get("usage_tags", []) or []),
                 "html_report": str((item.get("reports") or {}).get("html_name", "") or ""),
             }
@@ -3074,6 +3183,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "api_sdks",
                 "dependencies",
                 "internal_dependencies",
+                "hidden_coupling",
+                "cross_team_repo_dependencies",
+                "cross_team_api_usage",
+                "cross_team_event_flows",
                 "risk_flags",
                 "html_report",
             ]

@@ -3953,6 +3953,16 @@ def test_inventory_page_is_server_rendered():
                 "duplicate_module_examples": ["billing", "orders"],
                 "overlap_score": 6,
                 "has_overlap_risk": True,
+                "hidden_coupling_examples": [
+                    "Depends on repo2 owned by Unowned",
+                    "Consumes topic from repo2: orders.created",
+                ],
+                "hidden_coupling_peers": ["repo2"],
+                "cross_team_repo_dependencies": ["repo2 (Unowned)"],
+                "cross_team_api_usage": ["svc.cognyte.local/api/orders -> repo2 (Unowned)"],
+                "cross_team_event_flows": ["orders.created <- repo2 (Unowned)"],
+                "hidden_coupling_count": 3,
+                "has_hidden_coupling": True,
                 "inbound_dependency_count": 2,
                 "outbound_dependency_count": 1,
                 "dependency_centrality_score": 3,
@@ -3981,7 +3991,7 @@ def test_inventory_page_is_server_rendered():
                 "agent_tool_use": True,
                 "risky_repo": True,
                 "orphaned_risky": False,
-                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift", "risky", "import_cycle", "cross_repo_cycle", "anti_pattern"],
+                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift", "risky", "import_cycle", "cross_repo_cycle", "anti_pattern", "hidden_coupling"],
                 "reports": {"html_name": "demo.html"},
             },
             {
@@ -4034,6 +4044,13 @@ def test_inventory_page_is_server_rendered():
                 "duplicate_module_examples": ["billing", "orders"],
                 "overlap_score": 5,
                 "has_overlap_risk": True,
+                "hidden_coupling_examples": ["Depends on repo1 owned by @team-platform"],
+                "hidden_coupling_peers": ["repo1"],
+                "cross_team_repo_dependencies": ["repo1 (@team-platform)"],
+                "cross_team_api_usage": [],
+                "cross_team_event_flows": [],
+                "hidden_coupling_count": 1,
+                "has_hidden_coupling": True,
                 "inbound_dependency_count": 1,
                 "outbound_dependency_count": 2,
                 "dependency_centrality_score": 3,
@@ -4063,7 +4080,7 @@ def test_inventory_page_is_server_rendered():
                 "agent_tool_use": False,
                 "risky_repo": True,
                 "orphaned_risky": True,
-                "usage_tags": ["iac", "api", "missing_governance", "orphaned", "dependency_risk", "shared_internal_libs", "runtime_drift", "risky", "orphaned_risky", "cross_repo_cycle", "anti_pattern"],
+                "usage_tags": ["iac", "api", "missing_governance", "orphaned", "dependency_risk", "shared_internal_libs", "runtime_drift", "risky", "orphaned_risky", "cross_repo_cycle", "anti_pattern", "hidden_coupling"],
                 "reports": {},
             },
         ],
@@ -4094,6 +4111,7 @@ def test_inventory_page_is_server_rendered():
             "inbound_dependency_risk_repos": 1,
             "outbound_dependency_risk_repos": 1,
             "critical_infrastructure_repos": 2,
+            "hidden_coupling_repos": 2,
             "boundary_violation_repos": 1,
             "architecture_drift_repos": 1,
             "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
@@ -4141,6 +4159,14 @@ def test_inventory_page_is_server_rendered():
             "inbound_dependency_rollup": [("repo1", 2)],
             "outbound_dependency_rollup": [("repo2", 2)],
             "critical_infrastructure_rollup": [("repo1", 3), ("repo2", 3)],
+            "hidden_coupling_rollup": [
+                ("Consumes topic from repo2: orders.created", 1),
+                ("Depends on repo1 owned by @team-platform", 1),
+                ("Depends on repo2 owned by Unowned", 1),
+            ],
+            "team_dependency_flow_rollup": [("@team-platform -> Unowned", 1), ("Unowned -> @team-platform", 1)],
+            "team_api_flow_rollup": [("@team-platform -> Unowned", 1)],
+            "team_event_flow_rollup": [("Unowned -> @team-platform", 1)],
             "boundary_violation_rollup": [("UI depends on disallowed worker repo repo2", 1)],
             "architecture_drift_rollup": [("New repo dependencies: repo2", 1)],
             "policy_violation_rollup": [
@@ -4207,6 +4233,10 @@ def test_inventory_page_is_server_rendered():
     assert "High Inbound Risk" in html
     assert "High Outbound Risk" in html
     assert "Critical Infrastructure" in html
+    assert "Hidden Coupling" in html
+    assert "Team Dependency Flows" in html
+    assert "Team API Flows" in html
+    assert "Team Event Flows" in html
     assert "Boundary Violations" in html
     assert "Architecture Drift" in html
     assert "Policy Violations" in html
@@ -4222,6 +4252,7 @@ def test_inventory_page_is_server_rendered():
     assert "Cycles: 2" in html
     assert "Repo Cycle" in html
     assert "Overlap: 6" in html
+    assert "Coupling: 3" in html
     assert "Anti: Hardcoded cross-service calls, Direct DB access from the wrong module, Layer violations" in html
     assert "In: 2" in html
     assert "Out: 2" in html
@@ -4255,6 +4286,7 @@ def test_inventory_page_is_server_rendered():
     assert 'id="inventory-export-json"' in html
     assert '<option value="@team-platform" selected>@team-platform</option>' in html
     assert '<option value="risky" selected>Risky Repos</option>' in html
+    assert '<option value="hidden_coupling">Hidden Coupling</option>' in html
     assert 'href="/reports/demo.html"' in html
     assert 'href="/inventory/repo?project=COGI&repo=repo1"' in html
     assert 'href="/inventory?owner=%40team-platform&usage=risky"' in html
@@ -4323,6 +4355,14 @@ def test_inventory_repo_page_is_server_rendered():
             "overlap_examples": ["Shared module markers: billing, orders"],
             "duplicate_module_examples": ["billing", "orders"],
             "overlap_score": 6,
+            "hidden_coupling_examples": [
+                "Depends on repo2 owned by @team-data",
+                "Consumes topic from repo2: orders.created",
+            ],
+            "cross_team_repo_dependencies": ["repo2 (@team-data)"],
+            "cross_team_api_usage": ["svc.cognyte.local/api/orders -> repo2 (@team-data)"],
+            "cross_team_event_flows": ["orders.created <- repo2 (@team-data)"],
+            "hidden_coupling_count": 3,
             "dependency_files": ["package.json", "pyproject.toml"],
             "inbound_dependency_count": 2,
             "outbound_dependency_count": 1,
@@ -4384,9 +4424,15 @@ def test_inventory_repo_page_is_server_rendered():
     assert "Inbound: 2 | Outbound: 1 | Centrality: 3" in html
     assert "Centrality" in html
     assert "Service Role" in html
+    assert "Hidden Coupling" in html
+    assert "Cross-Team Repo Deps" in html
+    assert "Cross-Team API Usage" in html
+    assert "Cross-Team Event Flows" in html
     assert "Boundary Validation" in html
     assert "Architecture Drift" in html
     assert "ui" in html
+    assert "Depends on repo2 owned by @team-data" in html
+    assert "repo2 (@team-data)" in html
     assert "UI depends on disallowed worker repo repo2" in html
     assert "New repo dependencies: repo2" in html
     assert "repo2" in html
@@ -4712,6 +4758,63 @@ def test_inventory_snapshot_detects_overlap_between_similar_repos():
     assert repo_map["orders-console"]["duplicate_module_examples"] == ["billing", "orders"]
     assert summary["overlap_risk_repos"] == 2
     assert summary["overlap_rollup"] == [("orders-console ↔ orders-ui", 8)]
+
+
+def test_inventory_snapshot_detects_hidden_cross_team_coupling():
+    import app_server as srv
+
+    history = [
+        {
+            "scan_id": "20260323_150000",
+            "project_key": "COGI",
+            "started_at_utc": "2026-03-23T15:00:00Z",
+            "completed_at_utc": "2026-03-23T15:05:00Z",
+            "inventory": {
+                "repo_profiles": [
+                    {
+                        "repo": "frontend",
+                        "owner": "@team-ui",
+                        "api_types": ["REST"],
+                        "api_boundaries": ["Internal API"],
+                        "internal_api_routes": ["svc.cognyte.local/api/orders"],
+                        "consumed_topics": ["orders.created"],
+                        "internal_dependency_names": ["orders-service"],
+                        "dependency_names": ["orders-service"],
+                        "external_dependency_names": [],
+                    },
+                    {
+                        "repo": "orders-service",
+                        "owner": "@team-orders",
+                        "api_types": ["REST"],
+                        "api_boundaries": ["Internal API"],
+                        "internal_api_routes": ["svc.cognyte.local/api/orders"],
+                        "produced_topics": ["orders.created"],
+                        "has_api_surface": True,
+                        "internal_dependency_names": [],
+                        "dependency_names": [],
+                        "external_dependency_names": [],
+                    },
+                ]
+            },
+            "reports": {"__all__": {}},
+        }
+    ]
+
+    original = srv._history_records_for_user
+    try:
+        srv._history_records_for_user = lambda: history
+        repo_inventory, summary = srv._inventory_snapshot_for_user()
+    finally:
+        srv._history_records_for_user = original
+
+    repo_map = {item["repo"]: item for item in repo_inventory}
+    assert repo_map["frontend"]["has_hidden_coupling"] is True
+    assert repo_map["frontend"]["cross_team_repo_dependencies"] == ["orders-service (@team-orders)"]
+    assert "svc.cognyte.local/api/orders -> orders-service (@team-orders)" in repo_map["frontend"]["cross_team_api_usage"]
+    assert "orders.created <- orders-service (@team-orders)" in repo_map["frontend"]["cross_team_event_flows"]
+    assert "hidden_coupling" in repo_map["frontend"]["usage_tags"]
+    assert summary["hidden_coupling_repos"] == 1
+    assert summary["team_dependency_flow_rollup"] == [("@team-ui -> @team-orders", 1)]
 
 
 def test_inventory_repo_detail_collects_recent_scans_for_repo():
