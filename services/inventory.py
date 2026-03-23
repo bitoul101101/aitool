@@ -519,6 +519,61 @@ def _looks_like_service_module(path: str) -> bool:
     )
 
 
+_GENERIC_MODULE_MARKERS = {
+    "app",
+    "main",
+    "index",
+    "init",
+    "utils",
+    "util",
+    "common",
+    "helper",
+    "helpers",
+    "config",
+    "settings",
+    "model",
+    "models",
+    "service",
+    "services",
+    "controller",
+    "controllers",
+    "handler",
+    "handlers",
+    "route",
+    "routes",
+    "page",
+    "pages",
+    "view",
+    "views",
+    "test",
+    "tests",
+    "spec",
+    "specs",
+    "readme",
+    "setup",
+    "build",
+    "dist",
+}
+
+
+def _extract_module_markers(names: set[str]) -> list[str]:
+    markers: Counter[str] = Counter()
+    for path in sorted(names):
+        if not _is_code_file(path):
+            continue
+        cleaned = str(path or "").replace("\\", "/")
+        parts = [part for part in cleaned.split("/") if part]
+        for part in parts[:-1]:
+            token = re.sub(r"[^a-z0-9]+", "-", part.lower()).strip("-")
+            if len(token) >= 4 and token not in _GENERIC_MODULE_MARKERS:
+                markers[token] += 1
+        stem = Path(parts[-1]).stem.lower()
+        stem = re.sub(r"[^a-z0-9]+", "-", stem).strip("-")
+        if len(stem) >= 4 and stem not in _GENERIC_MODULE_MARKERS:
+            markers[stem] += 1
+    return [label for label, _count in markers.most_common(16)]
+
+
 def _detect_hardcoded_service_calls(contents: dict[str, str]) -> list[str]:
     examples: list[str] = []
     for path, text in sorted(contents.items()):
@@ -764,6 +819,7 @@ def collect_repo_facts(
     hardcoded_service_call_examples = _detect_hardcoded_service_calls(contents)
     wrong_module_db_examples, layer_violation_examples = _detect_db_layer_violations(contents)
     import_cycle_examples, cycle_nodes = _detect_internal_import_cycles(names, contents)
+    module_markers = _extract_module_markers(names)
     anti_pattern_labels: list[str] = []
     anti_pattern_examples: list[str] = []
     if hardcoded_service_call_examples:
@@ -804,6 +860,7 @@ def collect_repo_facts(
             "dependency_names": sorted(dependency_names),
             "internal_dependency_names": sorted(internal_dependency_names),
             "external_dependency_names": sorted(external_dependency_names),
+            "module_markers": module_markers,
             "import_cycle_examples": import_cycle_examples[:8],
             "import_cycle_node_count": len(cycle_nodes),
             "has_import_cycles": bool(import_cycle_examples),
@@ -922,6 +979,7 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         dependency_names = sorted(set(facts.get("dependency_names", []) or []))
         internal_dependency_names = sorted(set(facts.get("internal_dependency_names", []) or []))
         external_dependency_names = sorted(set(facts.get("external_dependency_names", []) or []))
+        module_markers = sorted(set(facts.get("module_markers", []) or []))
         governance = dict(facts.get("governance") or {})
         missing_governance = list(facts.get("missing_governance") or [])
         for runtime in runtimes:
@@ -982,6 +1040,7 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "dependency_names": dependency_names,
             "internal_dependency_names": internal_dependency_names,
             "external_dependency_names": external_dependency_names,
+            "module_markers": module_markers,
             "governance": governance,
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),

@@ -864,12 +864,13 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                   "external_api_hosts": list(profile.get("external_api_hosts", []) or []),
                   "ci_systems": list(profile.get("ci_systems", []) or []),
                   "dependency_files": list(profile.get("dependency_files", []) or []),
-                  "dependency_names": list(profile.get("dependency_names", []) or []),
-                  "internal_dependency_names": list(profile.get("internal_dependency_names", []) or []),
-                  "external_dependency_names": list(profile.get("external_dependency_names", []) or []),
-                  "import_cycle_examples": list(profile.get("import_cycle_examples", []) or []),
-                  "import_cycle_node_count": int(profile.get("import_cycle_node_count", 0) or 0),
-                  "has_import_cycles": bool(profile.get("has_import_cycles")),
+                "dependency_names": list(profile.get("dependency_names", []) or []),
+                "internal_dependency_names": list(profile.get("internal_dependency_names", []) or []),
+                "external_dependency_names": list(profile.get("external_dependency_names", []) or []),
+                "module_markers": list(profile.get("module_markers", []) or []),
+                "import_cycle_examples": list(profile.get("import_cycle_examples", []) or []),
+                "import_cycle_node_count": int(profile.get("import_cycle_node_count", 0) or 0),
+                "has_import_cycles": bool(profile.get("has_import_cycles")),
                   "hardcoded_service_call_examples": list(profile.get("hardcoded_service_call_examples", []) or []),
                   "wrong_module_db_examples": list(profile.get("wrong_module_db_examples", []) or []),
                   "layer_violation_examples": list(profile.get("layer_violation_examples", []) or []),
@@ -965,6 +966,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     central_dependency_rollup: dict[str, int] = {}
     boundary_violation_rollup: dict[str, int] = {}
     architecture_drift_rollup: dict[str, int] = {}
+    overlap_rollup: dict[str, int] = {}
+    duplicate_module_rollup: dict[str, int] = {}
     policy_violation_rollup: dict[str, int] = {}
     owner_policy_violation_rollup: dict[str, int] = {}
     for item in repo_inventory:
@@ -1009,6 +1012,61 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             owner_missing_governance_rollup[owner] = owner_missing_governance_rollup.get(owner, 0) + 1
         if int(item.get("finding_count", 0) or 0) > 0:
             owner_open_findings_rollup[owner] = owner_open_findings_rollup.get(owner, 0) + int(item.get("finding_count", 0) or 0)
+
+    for item in repo_inventory:
+        item["overlap_peers"] = []
+        item["overlap_examples"] = []
+        item["overlap_score"] = 0
+        item["has_overlap_risk"] = False
+        item["duplicate_module_examples"] = []
+
+    for idx, left in enumerate(repo_inventory):
+        for right in repo_inventory[idx + 1:]:
+            left_repo = str(left.get("repo", "") or "")
+            right_repo = str(right.get("repo", "") or "")
+            if not left_repo or not right_repo or left_repo == right_repo:
+                continue
+            shared_techs = sorted(set(left.get("technologies", []) or []) & set(right.get("technologies", []) or []))
+            shared_runtimes = sorted(set(left.get("runtimes", []) or []) & set(right.get("runtimes", []) or []))
+            shared_modules = sorted(set(left.get("module_markers", []) or []) & set(right.get("module_markers", []) or []))
+            shared_internal_libs = sorted(set(left.get("internal_dependency_names", []) or []) & set(right.get("internal_dependency_names", []) or []))
+            shared_api = sorted(set(left.get("api_types", []) or []) & set(right.get("api_types", []) or []))
+            shared_events = sorted(set(left.get("event_systems", []) or []) & set(right.get("event_systems", []) or []))
+            score = 0
+            reasons: list[str] = []
+            if shared_techs:
+                score += min(len(shared_techs), 2)
+                reasons.append("Shared stack: " + ", ".join(shared_techs[:3]))
+            if shared_runtimes:
+                score += 1
+            if shared_api:
+                score += 1
+                reasons.append("Shared API patterns: " + ", ".join(shared_api[:2]))
+            if shared_events:
+                score += 1
+                reasons.append("Shared event systems: " + ", ".join(shared_events[:2]))
+            if shared_internal_libs:
+                score += min(len(shared_internal_libs), 2)
+                reasons.append("Shared internal libs: " + ", ".join(shared_internal_libs[:3]))
+            if len(shared_modules) >= 2:
+                score += 2
+                reasons.append("Shared module markers: " + ", ".join(shared_modules[:4]))
+            elif shared_modules:
+                score += 1
+                reasons.append("Similar module: " + shared_modules[0])
+            if score < 4:
+                continue
+            pair_label = " ↔ ".join(sorted({left_repo, right_repo}))
+            overlap_rollup[pair_label] = max(overlap_rollup.get(pair_label, 0), score)
+            for marker in shared_modules[:6]:
+                duplicate_module_rollup[marker] = duplicate_module_rollup.get(marker, 0) + 1
+            for item, peer in ((left, right_repo), (right, left_repo)):
+                item["overlap_peers"] = sorted(set(list(item.get("overlap_peers", []) or []) + [peer]))
+                item["overlap_examples"] = list(dict.fromkeys(list(item.get("overlap_examples", []) or []) + reasons))[:8]
+                item["duplicate_module_examples"] = list(dict.fromkeys(list(item.get("duplicate_module_examples", []) or []) + shared_modules[:6]))[:8]
+                item["overlap_score"] = max(int(item.get("overlap_score", 0) or 0), score)
+                item["has_overlap_risk"] = True
+                item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["overlap_risk"]))
 
     for item in repo_inventory:
         drift_labels = [label for runtime, version in (item.get("runtime_versions") or {}).items() if (label := _looks_outdated_runtime(runtime, version))]
@@ -1056,6 +1114,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             usage_tags.append("import_cycle")
         if item.get("anti_pattern_labels"):
             usage_tags.append("anti_pattern")
+        if item.get("has_overlap_risk"):
+            usage_tags.append("overlap_risk")
         item["usage_tags"] = sorted(set(usage_tags))
 
         for label in drift_labels:
@@ -1268,6 +1328,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "import_cycle_repos": sum(1 for item in repo_inventory if item.get("has_import_cycles")),
         "cross_repo_cycle_repos": sum(1 for item in repo_inventory if item.get("has_cross_repo_cycles")),
         "anti_pattern_repos": sum(1 for item in repo_inventory if item.get("anti_pattern_labels")),
+        "overlap_risk_repos": sum(1 for item in repo_inventory if item.get("has_overlap_risk")),
         "inbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("inbound_dependency_risk")),
         "outbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("outbound_dependency_risk")),
         "critical_infrastructure_repos": sum(1 for item in repo_inventory if item.get("critical_infrastructure_risk")),
@@ -1329,6 +1390,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "import_cycle_rollup": sorted(import_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
         "repo_cycle_rollup": sorted(repo_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
         "anti_pattern_rollup": sorted(anti_pattern_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "overlap_rollup": sorted(overlap_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "duplicate_module_rollup": sorted(duplicate_module_rollup.items(), key=lambda item: (-item[1], item[0])),
         "inbound_dependency_rollup": sorted(inbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "outbound_dependency_rollup": sorted(outbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "critical_infrastructure_rollup": sorted(central_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1468,7 +1531,10 @@ def _inventory_export_payload(repo_inventory: list[dict], filters: dict[str, str
                 "api_events": ", ".join((item.get("api_types", []) or []) + (item.get("event_systems", []) or []) + (item.get("api_boundaries", []) or [])),
                 "dependencies": ", ".join(item.get("dependency_names", []) or []),
                 "internal_dependencies": ", ".join(item.get("internal_dependency_names", []) or []),
+                "module_markers": ", ".join(item.get("module_markers", []) or []),
                 "anti_patterns": ", ".join(item.get("anti_pattern_labels", []) or []),
+                "overlap_peers": ", ".join(item.get("overlap_peers", []) or []),
+                "overlap_examples": " | ".join(item.get("overlap_examples", []) or []),
                 "inbound_dependencies": int(item.get("inbound_dependency_count", 0) or 0),
                 "outbound_dependencies": int(item.get("outbound_dependency_count", 0) or 0),
                 "dependency_centrality": int(item.get("dependency_centrality_score", 0) or 0),

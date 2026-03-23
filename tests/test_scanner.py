@@ -3940,6 +3940,15 @@ def test_inventory_page_is_server_rendered():
                     "DB access in src/service/metrics.py",
                     "UI talks to DB in src/ui/page.tsx",
                 ],
+                "module_markers": ["orders", "billing", "invoice"],
+                "overlap_peers": ["repo2"],
+                "overlap_examples": [
+                    "Shared stack: Django, React",
+                    "Shared module markers: billing, orders",
+                ],
+                "duplicate_module_examples": ["billing", "orders"],
+                "overlap_score": 6,
+                "has_overlap_risk": True,
                 "inbound_dependency_count": 2,
                 "outbound_dependency_count": 1,
                 "dependency_centrality_score": 3,
@@ -4008,6 +4017,15 @@ def test_inventory_page_is_server_rendered():
                 "has_cross_repo_cycles": True,
                 "anti_pattern_labels": ["Circular builds"],
                 "anti_pattern_examples": ["Repo dependency cycle with repo1"],
+                "module_markers": ["orders", "billing", "worker"],
+                "overlap_peers": ["repo1"],
+                "overlap_examples": [
+                    "Shared stack: Django",
+                    "Shared module markers: billing, orders",
+                ],
+                "duplicate_module_examples": ["billing", "orders"],
+                "overlap_score": 5,
+                "has_overlap_risk": True,
                 "inbound_dependency_count": 1,
                 "outbound_dependency_count": 2,
                 "dependency_centrality_score": 3,
@@ -4064,6 +4082,7 @@ def test_inventory_page_is_server_rendered():
             "import_cycle_repos": 1,
             "cross_repo_cycle_repos": 2,
             "anti_pattern_repos": 2,
+            "overlap_risk_repos": 2,
             "inbound_dependency_risk_repos": 1,
             "outbound_dependency_risk_repos": 1,
             "critical_infrastructure_repos": 2,
@@ -4106,6 +4125,8 @@ def test_inventory_page_is_server_rendered():
                 ("Layer violations", 1),
                 ("Overuse of shared libraries", 1),
             ],
+            "overlap_rollup": [("repo1 ↔ repo2", 6)],
+            "duplicate_module_rollup": [("billing", 2), ("orders", 2)],
             "inbound_dependency_rollup": [("repo1", 2)],
             "outbound_dependency_rollup": [("repo2", 2)],
             "critical_infrastructure_rollup": [("repo1", 3), ("repo2", 3)],
@@ -4166,6 +4187,9 @@ def test_inventory_page_is_server_rendered():
     assert "Repo Cycles" in html
     assert "Repo Dependency Cycles" in html
     assert "Anti-Patterns" in html
+    assert "Overlap Risk" in html
+    assert "Potential Overlap" in html
+    assert "Duplicate Modules" in html
     assert "High Inbound Risk" in html
     assert "High Outbound Risk" in html
     assert "Critical Infrastructure" in html
@@ -4180,6 +4204,7 @@ def test_inventory_page_is_server_rendered():
     assert "svc.cognyte.local" in html
     assert "Cycles: 2" in html
     assert "Repo Cycle" in html
+    assert "Overlap: 6" in html
     assert "Anti: Hardcoded cross-service calls, Direct DB access from the wrong module, Layer violations" in html
     assert "In: 2" in html
     assert "Out: 2" in html
@@ -4197,6 +4222,7 @@ def test_inventory_page_is_server_rendered():
     assert "Python 3.8" in html
     assert "Django on Python 3.8" in html
     assert "React on Node.js &lt;18" in html
+    assert "repo1 ↔ repo2" in html
     assert "AI Drift Risk" in html
     assert "API repos require SECURITY.md" in html
     assert "IaC repos require CI" in html
@@ -4272,6 +4298,10 @@ def test_inventory_repo_page_is_server_rendered():
                 "DB access in src/service/metrics.py",
                 "UI talks to DB in src/ui/page.tsx",
             ],
+            "overlap_peers": ["repo2"],
+            "overlap_examples": ["Shared module markers: billing, orders"],
+            "duplicate_module_examples": ["billing", "orders"],
+            "overlap_score": 6,
             "dependency_files": ["package.json", "pyproject.toml"],
             "inbound_dependency_count": 2,
             "outbound_dependency_count": 1,
@@ -4325,6 +4355,8 @@ def test_inventory_repo_page_is_server_rendered():
     assert "Dependency files: package.json, pyproject.toml" in html
     assert "Start with findings from scan 20260318_101500" in html
     assert "Dependency Health" in html
+    assert "Overlap Candidates" in html
+    assert "Duplicate Modules" in html
     assert "Inbound: 2 | Outbound: 1 | Centrality: 3" in html
     assert "Centrality" in html
     assert "Service Role" in html
@@ -4336,6 +4368,7 @@ def test_inventory_repo_page_is_server_rendered():
     assert "repo2" in html
     assert "Hardcoded cross-service calls" in html
     assert "DB access in src/service/metrics.py" in html
+    assert "Shared module markers: billing, orders" in html
     assert "Recent Scans" in html
     assert "00:45" in html
 
@@ -4580,6 +4613,57 @@ def test_inventory_snapshot_detects_boundary_violations_and_architecture_drift()
     assert repo_map["frontend"]["has_architecture_drift"] is True
     assert "New repo dependencies: worker" in repo_map["frontend"]["architecture_drift_examples"]
     assert summary["boundary_violation_rollup"] == [("UI depends on disallowed worker repo worker", 1)]
+
+
+def test_inventory_snapshot_detects_overlap_between_similar_repos():
+    import app_server as srv
+
+    history = [
+        {
+            "scan_id": "20260323_140000",
+            "project_key": "COGI",
+            "started_at_utc": "2026-03-23T14:00:00Z",
+            "completed_at_utc": "2026-03-23T14:05:00Z",
+            "inventory": {
+                "repo_profiles": [
+                    {
+                        "repo": "orders-ui",
+                        "technologies": ["React", "Django"],
+                        "runtimes": ["Node.js", "Python"],
+                        "api_types": ["REST"],
+                        "event_systems": ["Kafka"],
+                        "internal_dependency_names": ["@cognyte/ui"],
+                        "module_markers": ["orders", "billing", "invoice"],
+                    },
+                    {
+                        "repo": "orders-console",
+                        "technologies": ["React", "Django"],
+                        "runtimes": ["Node.js", "Python"],
+                        "api_types": ["REST"],
+                        "event_systems": ["Kafka"],
+                        "internal_dependency_names": ["@cognyte/ui"],
+                        "module_markers": ["orders", "billing", "payments"],
+                    },
+                ]
+            },
+            "reports": {"__all__": {}},
+        }
+    ]
+
+    original = srv._history_records_for_user
+    try:
+        srv._history_records_for_user = lambda: history
+        repo_inventory, summary = srv._inventory_snapshot_for_user()
+    finally:
+        srv._history_records_for_user = original
+
+    repo_map = {item["repo"]: item for item in repo_inventory}
+    assert repo_map["orders-ui"]["has_overlap_risk"] is True
+    assert repo_map["orders-ui"]["overlap_peers"] == ["orders-console"]
+    assert "Shared module markers: billing, orders" in repo_map["orders-ui"]["overlap_examples"]
+    assert repo_map["orders-console"]["duplicate_module_examples"] == ["billing", "orders"]
+    assert summary["overlap_risk_repos"] == 2
+    assert summary["overlap_rollup"] == [("orders-console ↔ orders-ui", 8)]
 
 
 def test_inventory_repo_detail_collects_recent_scans_for_repo():

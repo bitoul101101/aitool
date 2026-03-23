@@ -1194,6 +1194,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             dependency_meta.append(f"Boundary: {item.get('boundary_violation_count', 0)}")
         if item.get("has_architecture_drift"):
             dependency_meta.append("Drift")
+        if item.get("has_overlap_risk"):
+            dependency_meta.append(f"Overlap: {int(item.get('overlap_score', 0) or 0)}")
         ai_meta = []
         framework_drift_text = ", ".join(item.get("framework_drift_labels", []) or [])
         if framework_drift_text:
@@ -1277,6 +1279,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <div class="inventory-card-stat"><span class="baseline-label">Import Cycles</span><strong>{_esc(summary.get("import_cycle_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Repo Cycles</span><strong>{_esc(summary.get("cross_repo_cycle_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Anti-Patterns</span><strong>{_esc(summary.get("anti_pattern_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Overlap Risk</span><strong>{_esc(summary.get("overlap_risk_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">High Inbound Risk</span><strong>{_esc(summary.get("inbound_dependency_risk_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">High Outbound Risk</span><strong>{_esc(summary.get("outbound_dependency_risk_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Critical Infra</span><strong>{_esc(summary.get("critical_infrastructure_repos", 0))}</strong></div>
@@ -1311,6 +1314,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>Import Cycles</strong>{_rollup_list(list(summary.get("import_cycle_rollup", []) or []), "No intra-repo import cycles detected.")}</section>
         <section class="inventory-rollup-card"><strong>Repo Dependency Cycles</strong>{_rollup_list(list(summary.get("repo_cycle_rollup", []) or []), "No cross-repo dependency cycles detected.")}</section>
         <section class="inventory-rollup-card"><strong>Anti-Patterns</strong>{_rollup_list(list(summary.get("anti_pattern_rollup", []) or []), "No anti-patterns detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Potential Overlap</strong>{_rollup_list(list(summary.get("overlap_rollup", []) or []), "No overlapping repo implementations detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Duplicate Modules</strong>{_rollup_list(list(summary.get("duplicate_module_rollup", []) or []), "No duplicate module markers detected.")}</section>
         <section class="inventory-rollup-card"><strong>High Inbound Dependency Risk</strong>{_rollup_list(list(summary.get("inbound_dependency_rollup", []) or []), "No inbound dependency hotspots.")}</section>
         <section class="inventory-rollup-card"><strong>High Outbound Dependency Risk</strong>{_rollup_list(list(summary.get("outbound_dependency_rollup", []) or []), "No outbound dependency hotspots.")}</section>
         <section class="inventory-rollup-card"><strong>Critical Infrastructure</strong>{_rollup_list(list(summary.get("critical_infrastructure_rollup", []) or []), "No central dependency hubs detected.")}</section>
@@ -1350,6 +1355,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
           <option value="import_cycle"{" selected" if selected_usage == "import_cycle" else ""}>Import Cycles</option>
           <option value="cross_repo_cycle"{" selected" if selected_usage == "cross_repo_cycle" else ""}>Repo Cycles</option>
           <option value="anti_pattern"{" selected" if selected_usage == "anti_pattern" else ""}>Anti-Patterns</option>
+          <option value="overlap_risk"{" selected" if selected_usage == "overlap_risk" else ""}>Overlap Risk</option>
           <option value="inbound_dependency_risk"{" selected" if selected_usage == "inbound_dependency_risk" else ""}>High Inbound Risk</option>
           <option value="outbound_dependency_risk"{" selected" if selected_usage == "outbound_dependency_risk" else ""}>High Outbound Risk</option>
           <option value="critical_infrastructure"{" selected" if selected_usage == "critical_infrastructure" else ""}>Critical Infrastructure</option>
@@ -1503,6 +1509,9 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
     cross_repo_cycles = ", ".join(repo_profile.get("cross_repo_cycle_peers", []) or []) or "-"
     anti_patterns = ", ".join(repo_profile.get("anti_pattern_labels", []) or []) or "-"
     anti_pattern_examples = " | ".join(repo_profile.get("anti_pattern_examples", []) or []) or "-"
+    overlap_peers = ", ".join(repo_profile.get("overlap_peers", []) or []) or "-"
+    overlap_examples = " | ".join(repo_profile.get("overlap_examples", []) or []) or "-"
+    duplicate_modules = ", ".join(repo_profile.get("duplicate_module_examples", []) or []) or "-"
     inbound_dependency_count = int(repo_profile.get("inbound_dependency_count", 0) or 0)
     outbound_dependency_count = int(repo_profile.get("outbound_dependency_count", 0) or 0)
     dependency_centrality_score = int(repo_profile.get("dependency_centrality_score", 0) or 0)
@@ -1667,6 +1676,8 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
           <tr><td>Import Cycles</td><td>{_esc(import_cycles)}</td></tr>
           <tr><td>Repo Cycles</td><td>{_esc(cross_repo_cycles)}</td></tr>
           <tr><td>Dependency Health</td><td>{_esc(f"Inbound: {inbound_dependency_count} | Outbound: {outbound_dependency_count} | Centrality: {dependency_centrality_score}")}</td></tr>
+          <tr><td>Overlap Candidates</td><td>{_esc(overlap_peers)}<div class="inventory-sub">{_esc(overlap_examples)}</div></td></tr>
+          <tr><td>Duplicate Modules</td><td>{_esc(duplicate_modules)}</td></tr>
           <tr><td>Service Role</td><td>{_esc(service_role)}</td></tr>
           <tr><td>Boundary Validation</td><td>{_esc(boundary_violations)}</td></tr>
           <tr><td>Architecture Drift</td><td>{_esc(architecture_drift)}</td></tr>
@@ -1686,6 +1697,7 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
       <div class="inventory-card-stat"><span class="baseline-label">Shared Internal Libs</span><strong>{_esc(", ".join(repo_profile.get("shared_internal_libs", []) or []) or "-")}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Import Cycles</span><strong>{_esc(str(repo_profile.get("import_cycle_node_count", 0) or 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Anti-Patterns</span><strong>{_esc(str(len(repo_profile.get("anti_pattern_labels", []) or [])))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Overlap Risk</span><strong>{_esc(str(int(repo_profile.get("overlap_score", 0) or 0)))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Centrality</span><strong>{_esc(str(dependency_centrality_score))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Boundary Violations</span><strong>{_esc(str(len(repo_profile.get("boundary_violations", []) or [])))}</strong></div>
     </div>
