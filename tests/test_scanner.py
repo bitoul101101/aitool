@@ -3896,39 +3896,79 @@ def test_inventory_page_is_server_rendered():
                 "agent_tool_use": True,
                 "usage_tags": ["iac", "api", "agent", "missing_governance"],
                 "reports": {"html_name": "demo.html"},
-            }
+            },
+            {
+                "repo": "repo2",
+                "project_key": "COGI",
+                "scan_id": "20260318_101700",
+                "last_scan_at_utc": "2026-03-18T10:17:00Z",
+                "finding_count": 0,
+                "owner": "Unowned",
+                "provider_labels": [],
+                "models": [],
+                "runtimes": ["Python"],
+                "technologies": ["Django"],
+                "runtime_versions": {"Python": "3.11"},
+                "iac_tools": ["Terraform"],
+                "cloud_platforms": [],
+                "api_types": ["REST"],
+                "event_systems": [],
+                "api_boundaries": ["Internal API"],
+                "produced_topics": [],
+                "consumed_topics": ["orders.created"],
+                "internal_api_hosts": ["svc.cognyte.local"],
+                "external_api_hosts": [],
+                "ci_systems": [],
+                "has_branch_governance": False,
+                "has_review_gate": False,
+                "branch_restrictions": 0,
+                "default_reviewer_rules": 0,
+                "dependency_names": ["@cognyte/ui"],
+                "internal_dependency_names": ["@cognyte/ui"],
+                "external_dependency_names": [],
+                "missing_governance": ["SECURITY.md", "CI Pipeline"],
+                "has_iac": True,
+                "has_api_surface": True,
+                "agent_tool_use": False,
+                "usage_tags": ["iac", "api", "missing_governance", "orphaned"],
+                "reports": {},
+            },
         ],
         summary={
             "repos_using_ai_count": 1,
-            "repos_total": 1,
+            "repos_total": 2,
             "runtime_count": 2,
             "technology_count": 2,
-            "missing_governance_repos": 1,
-            "iac_repos": 1,
-            "api_repos": 1,
+            "missing_governance_repos": 2,
+            "iac_repos": 2,
+            "api_repos": 2,
             "branch_governed_repos": 1,
             "review_gated_repos": 1,
-            "orphaned_repos": 0,
-            "dependency_count": 2,
-            "internal_dependency_repos": 1,
+            "orphaned_repos": 1,
+            "dependency_count": 3,
+            "internal_dependency_repos": 2,
             "agent_tool_use_repos": 1,
-            "owner_rollup": [("@team-platform", 1)],
-            "runtime_rollup": [("Node.js", 1), ("Python", 1)],
-            "technology_rollup": [("React", 1), ("Django", 1)],
-            "version_rollup": [("Python 3.11", 1), ("Node.js 20", 1)],
-            "governance_rollup": [("SECURITY.md", 1)],
+            "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
+            "owner_missing_governance_rollup": [("Unowned", 1), ("@team-platform", 1)],
+            "owner_shared_asset_rollup": [("Unowned", 3), ("@team-platform", 3)],
+            "runtime_rollup": [("Python", 2), ("Node.js", 1)],
+            "technology_rollup": [("Django", 2), ("React", 1)],
+            "version_rollup": [("Python 3.11", 2), ("Node.js 20", 1)],
+            "governance_rollup": [("SECURITY.md", 2), ("CI Pipeline", 1)],
             "ci_rollup": [("Bitbucket Pipelines", 1)],
-            "iac_rollup": [("Terraform", 1), ("AWS", 1)],
-            "api_rollup": [("REST", 1), ("Kafka", 1)],
-            "boundary_rollup": [("External API", 1), ("Internal API", 1)],
+            "iac_rollup": [("Terraform", 2), ("AWS", 1)],
+            "api_rollup": [("REST", 2), ("Kafka", 1)],
+            "boundary_rollup": [("Internal API", 2), ("External API", 1)],
             "produced_topic_rollup": [("orders.created", 1)],
-            "consumed_topic_rollup": [("orders.created", 1)],
+            "consumed_topic_rollup": [("orders.created", 2)],
+            "internal_api_host_rollup": [("svc.cognyte.local", 2)],
             "shared_internal_api_rollup": [("svc.cognyte.local", 2)],
             "shared_consumed_topic_rollup": [("orders.created", 2)],
-            "dependency_rollup": [("react", 1), ("axios", 1)],
-            "internal_dependency_rollup": [("@cognyte/ui", 1)],
+            "dependency_rollup": [("@cognyte/ui", 2), ("react", 1), ("axios", 1)],
+            "internal_dependency_rollup": [("@cognyte/ui", 2)],
             "shared_internal_dependency_rollup": [("@cognyte/ui", 2)],
             "external_dependency_rollup": [("react", 1), ("axios", 1)],
+            "orphaned_exposed_rollup": [("repo2 (API / IaC)", 1)],
         },
     ).decode("utf-8")
 
@@ -3944,6 +3984,7 @@ def test_inventory_page_is_server_rendered():
     assert "@cognyte/ui" in html
     assert "Version Drift" in html
     assert "Owners" in html
+    assert "Owners With Governance Gaps" in html
     assert "Dependencies" in html
     assert "Internal Dependencies" in html
     assert "External Dependencies" in html
@@ -3960,10 +4001,13 @@ def test_inventory_page_is_server_rendered():
     assert "Consumed Topics" in html
     assert "Shared Topic Consumers" in html
     assert "Shared Internal Libraries" in html
+    assert "Owners of Shared Assets" in html
+    assert "Orphaned Exposed Repos" in html
     assert "Internal API, External API" in html
     assert "Prod: orders.created" in html
     assert "Cons: orders.created" in html
     assert "svc.cognyte.local" in html
+    assert "repo2 (API / IaC)" in html
     assert "Node.js 20" in html
     assert "SECURITY.md" in html
     assert 'id="inventory-search"' in html

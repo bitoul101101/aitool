@@ -824,6 +824,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     ci_rollup: dict[str, int] = {}
     version_rollup: dict[str, int] = {}
     owner_rollup: dict[str, int] = {}
+    owner_missing_governance_rollup: dict[str, int] = {}
+    owner_shared_asset_rollup: dict[str, int] = {}
     dependency_rollup: dict[str, int] = {}
     internal_dependency_rollup: dict[str, int] = {}
     external_dependency_rollup: dict[str, int] = {}
@@ -863,6 +865,30 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             external_dependency_rollup[dependency] = external_dependency_rollup.get(dependency, 0) + 1
         owner = str(item.get("owner", "") or "").strip() or "Unowned"
         owner_rollup[owner] = owner_rollup.get(owner, 0) + 1
+        if item.get("missing_governance"):
+            owner_missing_governance_rollup[owner] = owner_missing_governance_rollup.get(owner, 0) + 1
+
+    orphaned_exposed_repos = [
+        item for item in repo_inventory
+        if item.get("is_orphaned") and (item.get("has_iac") or item.get("has_api_surface"))
+    ]
+    orphaned_exposed_rollup = [
+        (
+            f"{str(item.get('repo', '') or '')} ({' / '.join(filter(None, ['API' if item.get('has_api_surface') else '', 'IaC' if item.get('has_iac') else '']))})",
+            1,
+        )
+        for item in orphaned_exposed_repos
+    ]
+
+    for item in repo_inventory:
+        owner = str(item.get("owner", "") or "").strip() or "Unowned"
+        shared_asset_count = 0
+        shared_asset_count += sum(1 for host in item.get("internal_api_hosts", []) or [] if internal_api_host_rollup.get(host, 0) > 1)
+        shared_asset_count += sum(1 for topic in item.get("consumed_topics", []) or [] if consumed_topic_rollup.get(topic, 0) > 1)
+        shared_asset_count += sum(1 for dep in item.get("internal_dependency_names", []) or [] if internal_dependency_rollup.get(dep, 0) > 1)
+        if shared_asset_count:
+            owner_shared_asset_rollup[owner] = owner_shared_asset_rollup.get(owner, 0) + shared_asset_count
+
     summary = {
         "repos_using_ai_count": sum(1 for item in repo_inventory if item.get("finding_count", 0) > 0),
         "repos_total": len(repo_inventory),
@@ -898,6 +924,15 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         ),
         "shared_internal_dependency_rollup": sorted(
             [(dep, count) for dep, count in internal_dependency_rollup.items() if count > 1],
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "owner_missing_governance_rollup": sorted(
+            owner_missing_governance_rollup.items(),
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "orphaned_exposed_rollup": orphaned_exposed_rollup,
+        "owner_shared_asset_rollup": sorted(
+            owner_shared_asset_rollup.items(),
             key=lambda item: (-item[1], item[0]),
         ),
         "ci_rollup": sorted(ci_rollup.items(), key=lambda item: (-item[1], item[0])),

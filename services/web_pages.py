@@ -1192,8 +1192,9 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
       </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
-      <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
-      <section class="inventory-rollup-card"><strong>Runtimes</strong>{_rollup_list(list(summary.get("runtime_rollup", []) or []), "No runtime data yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Owners With Governance Gaps</strong>{_rollup_list(list(summary.get("owner_missing_governance_rollup", []) or []), "No owner-linked governance gaps.")}</section>
+        <section class="inventory-rollup-card"><strong>Runtimes</strong>{_rollup_list(list(summary.get("runtime_rollup", []) or []), "No runtime data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Technologies</strong>{_rollup_list(list(summary.get("technology_rollup", []) or []), "No technology data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Version Drift</strong>{_rollup_list(list(summary.get("version_rollup", []) or []), "No version markers yet.")}</section>
         <section class="inventory-rollup-card"><strong>Governance Gaps</strong>{_rollup_list(list(summary.get("governance_rollup", []) or []), "No governance gaps detected.")}</section>
@@ -1208,6 +1209,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>Dependencies</strong>{_rollup_list(list(summary.get("dependency_rollup", []) or []), "No dependency data yet.")}</section>
         <section class="inventory-rollup-card"><strong>Internal Dependencies</strong>{_rollup_list(list(summary.get("internal_dependency_rollup", []) or []), "No internal dependencies detected.")}</section>
         <section class="inventory-rollup-card"><strong>Shared Internal Libraries</strong>{_rollup_list(list(summary.get("shared_internal_dependency_rollup", []) or []), "No shared internal libraries yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Owners of Shared Assets</strong>{_rollup_list(list(summary.get("owner_shared_asset_rollup", []) or []), "No owner-linked shared assets yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Orphaned Exposed Repos</strong>{_rollup_list(list(summary.get("orphaned_exposed_rollup", []) or []), "No orphaned repos with API or IaC exposure.")}</section>
         <section class="inventory-rollup-card"><strong>External Dependencies</strong>{_rollup_list(list(summary.get("external_dependency_rollup", []) or []), "No external dependencies detected.")}</section>
     </div>
   </section>
