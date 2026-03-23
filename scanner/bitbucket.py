@@ -258,6 +258,28 @@ class BitbucketClient:
         url = f"{self.base_url}/rest/api/1.0/projects/{project_key}"
         return self._cache_set("project_info", project_key, "", self._get(url))
 
+    def _count_paginated_values(self, url: str, params: dict | None = None) -> int:
+        total = 0
+        start = 0
+        limit = 100
+        while True:
+            query = dict(params or {})
+            query.setdefault("start", start)
+            query.setdefault("limit", limit)
+            data = self._get(url, params=query)
+            values = data.get("values") if isinstance(data, dict) else None
+            if isinstance(values, list):
+                total += len(values)
+                if data.get("isLastPage", True):
+                    return total
+                start = int(data.get("nextPageStart", start + limit) or (start + limit))
+                continue
+            if isinstance(data, list):
+                return len(data)
+            if isinstance(data, dict):
+                return int(data.get("size") or data.get("count") or 0)
+            return 0
+
     def _default_branch_cached(self, project_key: str, repo_slug: str) -> Optional[str]:
         cached = self._cache_get("default_branch", project_key, repo_slug)
         if cached is not None:
@@ -310,6 +332,47 @@ class BitbucketClient:
         }
         self._cache_set("repo_metadata", project_key, repo_slug, metadata)
         return dict(metadata)
+
+    def get_repo_governance(self, project_key: str, repo_slug: str) -> dict:
+        """
+        Return Bitbucket governance signals that are safe to interpret:
+          - branch restriction count
+          - default reviewer rule count
+        Missing plugins/endpoints degrade to zero counts.
+        """
+        cached = self._cache_get("repo_governance", project_key, repo_slug)
+        if cached is not None:
+            return dict(cached)
+
+        branch_restrictions = 0
+        default_reviewer_rules = 0
+
+        try:
+            restrictions_url = (
+                f"{self.base_url}/rest/branch-permissions/2.0/projects/{project_key}"
+                f"/repos/{repo_slug}/restrictions"
+            )
+            branch_restrictions = self._count_paginated_values(restrictions_url)
+        except (RequestException, ValueError, TypeError):
+            branch_restrictions = 0
+
+        try:
+            reviewers_url = (
+                f"{self.base_url}/rest/default-reviewers/1.0/projects/{project_key}"
+                f"/repos/{repo_slug}/conditions"
+            )
+            default_reviewer_rules = self._count_paginated_values(reviewers_url)
+        except (RequestException, ValueError, TypeError):
+            default_reviewer_rules = 0
+
+        governance = {
+            "branch_restrictions": int(branch_restrictions or 0),
+            "default_reviewer_rules": int(default_reviewer_rules or 0),
+            "has_branch_governance": bool(branch_restrictions),
+            "has_review_gate": bool(default_reviewer_rules),
+        }
+        self._cache_set("repo_governance", project_key, repo_slug, governance)
+        return dict(governance)
 
     def cache_stats(self) -> dict[str, int]:
         return {

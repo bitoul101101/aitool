@@ -758,19 +758,24 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 "runtime_versions": dict(profile.get("runtime_versions") or {}),
                 "iac_tools": list(profile.get("iac_tools", []) or []),
                 "cloud_platforms": list(profile.get("cloud_platforms", []) or []),
-                "api_types": list(profile.get("api_types", []) or []),
-                "event_systems": list(profile.get("event_systems", []) or []),
-                "dependency_files": list(profile.get("dependency_files", []) or []),
-                "dependency_names": list(profile.get("dependency_names", []) or []),
-                "internal_dependency_names": list(profile.get("internal_dependency_names", []) or []),
-                "external_dependency_names": list(profile.get("external_dependency_names", []) or []),
-                "governance": dict(profile.get("governance") or {}),
-                "missing_governance": list(profile.get("missing_governance", []) or []),
-                "has_iac": bool(profile.get("has_iac")),
-                "has_api_surface": bool(profile.get("has_api_surface")),
-                "owner": str(profile.get("owner", "") or ""),
-                "owner_source": str(profile.get("owner_source", "") or ""),
-                "is_orphaned": bool(profile.get("is_orphaned")),
+                  "api_types": list(profile.get("api_types", []) or []),
+                  "event_systems": list(profile.get("event_systems", []) or []),
+                  "ci_systems": list(profile.get("ci_systems", []) or []),
+                  "dependency_files": list(profile.get("dependency_files", []) or []),
+                  "dependency_names": list(profile.get("dependency_names", []) or []),
+                  "internal_dependency_names": list(profile.get("internal_dependency_names", []) or []),
+                  "external_dependency_names": list(profile.get("external_dependency_names", []) or []),
+                  "governance": dict(profile.get("governance") or {}),
+                  "missing_governance": list(profile.get("missing_governance", []) or []),
+                  "has_iac": bool(profile.get("has_iac")),
+                  "has_api_surface": bool(profile.get("has_api_surface")),
+                  "has_branch_governance": bool(profile.get("has_branch_governance")),
+                  "has_review_gate": bool(profile.get("has_review_gate")),
+                  "branch_restrictions": int(profile.get("branch_restrictions", 0) or 0),
+                  "default_reviewer_rules": int(profile.get("default_reviewer_rules", 0) or 0),
+                  "owner": str(profile.get("owner", "") or ""),
+                  "owner_source": str(profile.get("owner_source", "") or ""),
+                  "is_orphaned": bool(profile.get("is_orphaned")),
                 "usage_tags": [
                     tag
                     for tag, enabled in (
@@ -778,11 +783,14 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                         ("prompt", profile.get("prompt_handling")),
                         ("serving", profile.get("model_serving")),
                         ("agent", profile.get("agent_tool_use")),
-                        ("iac", profile.get("has_iac")),
-                        ("api", profile.get("has_api_surface")),
-                        ("missing_governance", bool(profile.get("missing_governance"))),
-                        ("orphaned", bool(profile.get("is_orphaned"))),
-                    )
+                          ("iac", profile.get("has_iac")),
+                          ("api", profile.get("has_api_surface")),
+                          ("ci", bool(profile.get("ci_systems"))),
+                          ("branch_governance", bool(profile.get("has_branch_governance"))),
+                          ("review_gate", bool(profile.get("has_review_gate"))),
+                          ("missing_governance", bool(profile.get("missing_governance"))),
+                          ("orphaned", bool(profile.get("is_orphaned"))),
+                      )
                     if enabled
                 ],
                 "reports": (record.get("reports") or {}).get("__all__", {}),
@@ -804,6 +812,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     governance_rollup: dict[str, int] = {}
     iac_rollup: dict[str, int] = {}
     api_rollup: dict[str, int] = {}
+    ci_rollup: dict[str, int] = {}
     version_rollup: dict[str, int] = {}
     owner_rollup: dict[str, int] = {}
     dependency_rollup: dict[str, int] = {}
@@ -824,6 +833,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             api_rollup[api_type] = api_rollup.get(api_type, 0) + 1
         for event_system in item.get("event_systems", []) or []:
             api_rollup[event_system] = api_rollup.get(event_system, 0) + 1
+        for ci_system in item.get("ci_systems", []) or []:
+            ci_rollup[ci_system] = ci_rollup.get(ci_system, 0) + 1
         for runtime, version in (item.get("runtime_versions") or {}).items():
             key = f"{runtime} {version}"
             version_rollup[key] = version_rollup.get(key, 0) + 1
@@ -845,16 +856,19 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "technology_count": len(technologies),
         "missing_governance_repos": sum(1 for item in repo_inventory if item.get("missing_governance")),
         "iac_repos": sum(1 for item in repo_inventory if item.get("has_iac")),
-        "api_repos": sum(1 for item in repo_inventory if item.get("has_api_surface")),
-        "orphaned_repos": sum(1 for item in repo_inventory if item.get("is_orphaned")),
-        "dependency_count": len(dependency_rollup),
-        "internal_dependency_repos": sum(1 for item in repo_inventory if item.get("internal_dependency_names")),
+          "api_repos": sum(1 for item in repo_inventory if item.get("has_api_surface")),
+          "branch_governed_repos": sum(1 for item in repo_inventory if item.get("has_branch_governance")),
+          "review_gated_repos": sum(1 for item in repo_inventory if item.get("has_review_gate")),
+          "orphaned_repos": sum(1 for item in repo_inventory if item.get("is_orphaned")),
+          "dependency_count": len(dependency_rollup),
+          "internal_dependency_repos": sum(1 for item in repo_inventory if item.get("internal_dependency_names")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
-        "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
-        "iac_rollup": sorted(iac_rollup.items(), key=lambda item: (-item[1], item[0])),
-        "api_rollup": sorted(api_rollup.items(), key=lambda item: (-item[1], item[0])),
-        "version_rollup": sorted(version_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "iac_rollup": sorted(iac_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "api_rollup": sorted(api_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "ci_rollup": sorted(ci_rollup.items(), key=lambda item: (-item[1], item[0])),
+          "version_rollup": sorted(version_rollup.items(), key=lambda item: (-item[1], item[0])),
         "owner_rollup": sorted(owner_rollup.items(), key=lambda item: (-item[1], item[0])),
         "dependency_rollup": sorted(dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "internal_dependency_rollup": sorted(internal_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),

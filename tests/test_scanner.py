@@ -1308,6 +1308,63 @@ def test_collect_repo_facts_marks_generic_owner_as_orphaned(tmp_path):
     assert facts["is_orphaned"] is True
 
 
+def test_collect_repo_facts_merges_ci_and_bitbucket_governance(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "bitbucket-pipelines.yml").write_text("pipelines:\n  default:\n    - step:\n        script:\n          - pytest\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "LICENSE").write_text("Apache-2.0\n", encoding="utf-8")
+    (tmp_path / "SECURITY.md").write_text("Contact security\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_demo.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+
+    facts = collect_repo_facts(
+        tmp_path,
+        "demo-repo",
+        [],
+        repo_owner="Repo Lead",
+        repo_governance={
+            "branch_restrictions": 2,
+            "default_reviewer_rules": 1,
+            "has_branch_governance": True,
+            "has_review_gate": True,
+        },
+    )
+
+    assert "Bitbucket Pipelines" in facts["ci_systems"]
+    assert facts["has_branch_governance"] is True
+    assert facts["has_review_gate"] is True
+    assert facts["branch_restrictions"] == 2
+    assert facts["default_reviewer_rules"] == 1
+    assert "Branch Governance" not in facts["missing_governance"]
+    assert "Review Gate" not in facts["missing_governance"]
+
+
+def test_bitbucket_client_get_repo_governance_counts_rules():
+    from scanner.bitbucket import BitbucketClient
+
+    client = BitbucketClient("https://bitbucket.example")
+    calls = []
+
+    def fake_get(url, params=None):
+        calls.append((url, dict(params or {})))
+        if "branch-permissions" in url:
+            return {"values": [{"id": 1}, {"id": 2}], "isLastPage": True}
+        if "default-reviewers" in url:
+            return {"values": [{"id": 3}], "isLastPage": True}
+        return {}
+
+    client._get = fake_get  # type: ignore[method-assign]
+    governance = client.get_repo_governance("PROJ", "repo1")
+
+    assert governance["branch_restrictions"] == 2
+    assert governance["default_reviewer_rules"] == 1
+    assert governance["has_branch_governance"] is True
+    assert governance["has_review_gate"] is True
+    assert any("branch-permissions" in url for url, _ in calls)
+    assert any("default-reviewers" in url for url, _ in calls)
+
+
 # ── History persistence (_save_history_record) ────────────────────
 
 def test_save_history_record_creates_file():
@@ -3795,6 +3852,11 @@ def test_inventory_page_is_server_rendered():
                 "cloud_platforms": ["AWS"],
                 "api_types": ["REST"],
                 "event_systems": ["Kafka"],
+                "ci_systems": ["Bitbucket Pipelines"],
+                "has_branch_governance": True,
+                "has_review_gate": True,
+                "branch_restrictions": 2,
+                "default_reviewer_rules": 1,
                 "dependency_names": ["axios", "react"],
                 "internal_dependency_names": ["@cognyte/ui"],
                 "external_dependency_names": ["axios", "react"],
@@ -3814,6 +3876,8 @@ def test_inventory_page_is_server_rendered():
             "missing_governance_repos": 1,
             "iac_repos": 1,
             "api_repos": 1,
+            "branch_governed_repos": 1,
+            "review_gated_repos": 1,
             "orphaned_repos": 0,
             "dependency_count": 2,
             "internal_dependency_repos": 1,
@@ -3823,6 +3887,7 @@ def test_inventory_page_is_server_rendered():
             "technology_rollup": [("React", 1), ("Django", 1)],
             "version_rollup": [("Python 3.11", 1), ("Node.js 20", 1)],
             "governance_rollup": [("SECURITY.md", 1)],
+            "ci_rollup": [("Bitbucket Pipelines", 1)],
             "iac_rollup": [("Terraform", 1), ("AWS", 1)],
             "api_rollup": [("REST", 1), ("Kafka", 1)],
             "dependency_rollup": [("react", 1), ("axios", 1)],
@@ -3846,7 +3911,13 @@ def test_inventory_page_is_server_rendered():
     assert "Dependencies" in html
     assert "Internal Dependencies" in html
     assert "External Dependencies" in html
+    assert "CI Systems" in html
+    assert "Branch Governed" in html
+    assert "Review Gated" in html
     assert "Governance Gaps" in html
+    assert "Bitbucket Pipelines" in html
+    assert "Branch Gov" in html
+    assert "Review Gate" in html
     assert "Node.js 20" in html
     assert "SECURITY.md" in html
     assert 'id="inventory-search"' in html

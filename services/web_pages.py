@@ -1115,6 +1115,14 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         technology_text = ", ".join(item.get("technologies", []))
         version_text = ", ".join(f"{runtime} {version}" for runtime, version in sorted((item.get("runtime_versions") or {}).items()))
         governance_text = ", ".join(item.get("missing_governance", [])) or "OK"
+        governance_meta = []
+        ci_text = ", ".join(item.get("ci_systems", [])[:2])
+        if ci_text:
+            governance_meta.append(ci_text)
+        if item.get("has_branch_governance"):
+            governance_meta.append("Branch Gov")
+        if item.get("has_review_gate"):
+            governance_meta.append("Review Gate")
         platform_text = ", ".join(item.get("iac_tools", []) + item.get("cloud_platforms", [])) or "-"
         api_text = ", ".join(item.get("api_types", []) + item.get("event_systems", [])) or "-"
         ai_text = provider_text or "-"
@@ -1142,11 +1150,11 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             f'<td>{_esc(item.get("project_key", ""))}</td>'
             f'<td><strong>{_esc(item.get("repo", ""))}</strong><div class="inventory-sub">{_esc(item.get("scan_id", ""))}</div></td>'
             f'<td>{_esc(owner_text)}</td>'
-            f'<td>{_esc(runtime_text or "-")}</td>'
-            f'<td>{_esc(technology_text or "-")}</td>'
-            f'<td>{_esc(version_text or "-")}</td>'
-            f'<td><span class="inventory-bool {"no" if item.get("missing_governance") else "yes"}">{_esc(governance_text)}</span></td>'
-            f'<td>{_esc(platform_text)}</td>'
+              f'<td>{_esc(runtime_text or "-")}</td>'
+              f'<td>{_esc(technology_text or "-")}</td>'
+              f'<td>{_esc(version_text or "-")}</td>'
+              f'<td><span class="inventory-bool {"no" if item.get("missing_governance") else "yes"}">{_esc(governance_text)}</span><div class="inventory-sub">{_esc(", ".join(governance_meta) or "-")}</div></td>'
+              f'<td>{_esc(platform_text)}</td>'
             f'<td>{_esc(api_text)}</td>'
             f'<td>{_esc(dependency_text or "-")}</td>'
             f'<td>{_esc(internal_dependency_text)}</td>'
@@ -1167,19 +1175,22 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
       <div class="inventory-card-stat"><span class="baseline-label">Technologies</span><strong>{_esc(summary.get("technology_count", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Missing Governance</span><strong>{_esc(summary.get("missing_governance_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">IaC / Cloud</span><strong>{_esc(summary.get("iac_repos", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">API Surface</span><strong>{_esc(summary.get("api_repos", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">Orphaned</span><strong>{_esc(summary.get("orphaned_repos", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">Dependencies</span><strong>{_esc(summary.get("dependency_count", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">Repos Using Internal Libs</span><strong>{_esc(summary.get("internal_dependency_repos", 0))}</strong></div>
-      <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
-    </div>
+        <div class="inventory-card-stat"><span class="baseline-label">API Surface</span><strong>{_esc(summary.get("api_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Branch Governed</span><strong>{_esc(summary.get("branch_governed_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Review Gated</span><strong>{_esc(summary.get("review_gated_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Orphaned</span><strong>{_esc(summary.get("orphaned_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Dependencies</span><strong>{_esc(summary.get("dependency_count", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Repos Using Internal Libs</span><strong>{_esc(summary.get("internal_dependency_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
+      </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
       <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Runtimes</strong>{_rollup_list(list(summary.get("runtime_rollup", []) or []), "No runtime data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Technologies</strong>{_rollup_list(list(summary.get("technology_rollup", []) or []), "No technology data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Version Drift</strong>{_rollup_list(list(summary.get("version_rollup", []) or []), "No version markers yet.")}</section>
-      <section class="inventory-rollup-card"><strong>Governance Gaps</strong>{_rollup_list(list(summary.get("governance_rollup", []) or []), "No governance gaps detected.")}</section>
-      <section class="inventory-rollup-card"><strong>IaC / Cloud</strong>{_rollup_list(list(summary.get("iac_rollup", []) or []), "No IaC or cloud markers yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Governance Gaps</strong>{_rollup_list(list(summary.get("governance_rollup", []) or []), "No governance gaps detected.")}</section>
+        <section class="inventory-rollup-card"><strong>CI Systems</strong>{_rollup_list(list(summary.get("ci_rollup", []) or []), "No CI markers detected.")}</section>
+        <section class="inventory-rollup-card"><strong>IaC / Cloud</strong>{_rollup_list(list(summary.get("iac_rollup", []) or []), "No IaC or cloud markers yet.")}</section>
       <section class="inventory-rollup-card"><strong>API / Events</strong>{_rollup_list(list(summary.get("api_rollup", []) or []), "No API surface detected.")}</section>
       <section class="inventory-rollup-card"><strong>Dependencies</strong>{_rollup_list(list(summary.get("dependency_rollup", []) or []), "No dependency data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Internal Dependencies</strong>{_rollup_list(list(summary.get("internal_dependency_rollup", []) or []), "No internal dependencies detected.")}</section>
@@ -1195,13 +1206,16 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
       <select id="inventory-runtime">{_opts(runtimes, 'All Runtimes')}</select>
       <select id="inventory-technology">{_opts(technologies, 'All Technologies')}</select>
       <select id="inventory-dependency">{_opts(dependencies, 'All Dependencies')}</select>
-      <select id="inventory-usage">
-        <option value="">All Postures</option>
-        <option value="missing_governance">Missing Governance</option>
-        <option value="iac">IaC / Cloud</option>
-        <option value="api">API Surface</option>
-        <option value="agent">Agent / Tool Use</option>
-      </select>
+        <select id="inventory-usage">
+          <option value="">All Postures</option>
+          <option value="missing_governance">Missing Governance</option>
+          <option value="ci">Has CI</option>
+          <option value="iac">IaC / Cloud</option>
+          <option value="api">API Surface</option>
+          <option value="branch_governance">Branch Governance</option>
+          <option value="review_gate">Review Gate</option>
+          <option value="agent">Agent / Tool Use</option>
+        </select>
       <button type="button" class="ghost" id="inventory-reset">Reset</button>
     </div>
     <div class="table-shell history-table-shell">

@@ -1256,6 +1256,7 @@ class ScanJobService:
                     "branch": branch,
                     "owner": owner,
                     "url": str(local_root),
+                    "governance": {},
                 }
                 log(f"  {slug}  branch:{branch}  owner:{owner}  source:local", "dim")
                 continue
@@ -1266,13 +1267,14 @@ class ScanJobService:
                 branch = metadata.get("branch")
                 owner = metadata.get("owner", "User")
                 url = metadata.get("clone_url")
+                governance = client.get_repo_governance(session.project_key, slug)
                 per_branch[slug] = branch or "default"
-                repo_meta[slug] = {"branch": branch, "owner": owner, "url": url}
+                repo_meta[slug] = {"branch": branch, "owner": owner, "url": url, "governance": governance}
                 log(f"  {slug}  branch:{branch or '?'}  owner:{owner}", "dim")
             except EXPECTED_METADATA_ERRORS as exc:
                 session.record_error("META_FETCH_FAILED", "metadata", f"{slug}: {exc}", repo=slug)
                 log(f"  [META_FETCH] {slug}: {exc}", "err")
-                repo_meta[slug] = {"branch": None, "owner": "User", "url": ""}
+                repo_meta[slug] = {"branch": None, "owner": "User", "url": "", "governance": {}}
 
         log("=" * 58, "dim")
 
@@ -1432,7 +1434,7 @@ class ScanJobService:
                         total_s=round(time.perf_counter() - repo_started, 2),
                     )
                     log(f"  [{slug}] No files matched the selected scan scope", "dim")
-                    return slug, [], owner, 0, None, collect_repo_facts(repo_root, slug, [], repo_owner=owner)
+                    return slug, [], owner, 0, None, collect_repo_facts(repo_root, slug, [], repo_owner=owner, repo_governance=dict(repo_meta.get(slug, {}).get("governance") or {}))
                 if excluded_paths:
                     log(f"  [{slug}] Local scan excludes: {', '.join(excluded_paths)}", "dim")
 
@@ -1505,7 +1507,7 @@ class ScanJobService:
                     llm_review_s=round(llm_duration, 2),
                     total_s=round(time.perf_counter() - repo_started, 2),
                 )
-                return slug, analyzed, owner, pre_llm_count, None, collect_repo_facts(repo_root, slug, analyzed, repo_owner=owner)
+                return slug, analyzed, owner, pre_llm_count, None, collect_repo_facts(repo_root, slug, analyzed, repo_owner=owner, repo_governance=dict(repo_meta.get(slug, {}).get("governance") or {}))
             except (OSError, ValueError, TypeError, KeyError, JSONDecodeError) as exc:
                 session.record_error("REPO_SCAN_FAILED", "scan", str(exc), repo=slug)
                 return slug, None, owner, 0, f"scan error: {exc}", {}

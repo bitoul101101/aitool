@@ -309,7 +309,13 @@ def _classify_dependency_scope(name: str) -> str:
     return "external"
 
 
-def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str, Any]] | None = None, repo_owner: str = "") -> dict[str, Any]:
+def collect_repo_facts(
+    repo_root: str | Path,
+    repo: str,
+    findings: list[dict[str, Any]] | None = None,
+    repo_owner: str = "",
+    repo_governance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     root = Path(repo_root)
     names, contents = _interesting_repo_files(root)
     lower_names = {name.lower() for name in names}
@@ -322,6 +328,7 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
     cloud_platforms: list[str] = []
     api_types: list[str] = []
     event_systems: list[str] = []
+    ci_systems: list[str] = []
     dependency_files: list[str] = []
     dependency_names: set[str] = set()
     internal_dependency_names: set[str] = set()
@@ -448,15 +455,24 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
     has_readme = any(Path(name).name.lower().startswith("readme") for name in lower_names)
     has_license = any(Path(name).name.lower().startswith("license") for name in lower_names)
     has_security = any(Path(name).name.lower() == "security.md" for name in lower_names)
-    has_ci_pipeline = any(
-        name in {"bitbucket-pipelines.yml", ".gitlab-ci.yml", "jenkinsfile", "azure-pipelines.yml"}
-        or ".github/workflows/" in name
-        for name in lower_names
-    )
+    if "bitbucket-pipelines.yml" in lower_names:
+        ci_systems.append("Bitbucket Pipelines")
+    if ".gitlab-ci.yml" in lower_names:
+        ci_systems.append("GitLab CI")
+    if "jenkinsfile" in lower_names:
+        ci_systems.append("Jenkins")
+    if "azure-pipelines.yml" in lower_names:
+        ci_systems.append("Azure Pipelines")
+    if any(".github/workflows/" in name for name in lower_names):
+        ci_systems.append("GitHub Actions")
+    has_ci_pipeline = bool(ci_systems)
     has_tests = (
         any("/tests/" in f"/{name}/" or "/__tests__/" in f"/{name}/" for name in lower_names)
         or any(re.search(r"(^|/)(test_[^/]+|[^/]+\.(spec|test)\.(py|js|ts|tsx|jsx|go|java|cs))$", name) for name in lower_names)
     )
+    governance_source = dict(repo_governance or {})
+    has_branch_governance = bool(governance_source.get("has_branch_governance"))
+    has_review_gate = bool(governance_source.get("has_review_gate"))
     governance = {
         "readme": has_readme,
         "license": has_license,
@@ -464,6 +480,9 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
         "ci_pipeline": has_ci_pipeline,
         "tests": has_tests,
     }
+    if repo_governance is not None:
+        governance["branch_governance"] = has_branch_governance
+        governance["review_gate"] = has_review_gate
     missing_governance = [label for label, present in (
         ("README", has_readme),
         ("LICENSE", has_license),
@@ -471,6 +490,11 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
         ("CI Pipeline", has_ci_pipeline),
         ("Tests", has_tests),
     ) if not present]
+    if repo_governance is not None:
+        if not has_branch_governance:
+            missing_governance.append("Branch Governance")
+        if not has_review_gate:
+            missing_governance.append("Review Gate")
     codeowners_owner = _codeowners_owner(contents)
     owner = codeowners_owner or str(repo_owner or "").strip()
     owner_label = owner or "Unowned"
@@ -494,6 +518,7 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
             "cloud_platforms": sorted(set(cloud_platforms)),
             "api_types": sorted(set(api_types)),
             "event_systems": sorted(set(event_systems)),
+            "ci_systems": sorted(set(ci_systems)),
             "dependency_files": sorted(set(dependency_files)),
             "dependency_names": sorted(dependency_names),
             "internal_dependency_names": sorted(internal_dependency_names),
@@ -502,6 +527,10 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),
             "has_api_surface": bool(api_types),
+            "has_branch_governance": has_branch_governance,
+            "has_review_gate": has_review_gate,
+            "branch_restrictions": int(governance_source.get("branch_restrictions", 0) or 0),
+            "default_reviewer_rules": int(governance_source.get("default_reviewer_rules", 0) or 0),
             "owner": owner_label,
             "owner_source": "codeowners" if codeowners_owner else ("repo_metadata" if owner else "none"),
             "is_orphaned": is_orphaned,
@@ -520,6 +549,9 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
     missing_governance_repos = 0
     iac_repos = 0
     api_repos = 0
+    ci_counts: Counter[str] = Counter()
+    branch_governed_repos = 0
+    review_gated_repos = 0
     dependency_counts: Counter[str] = Counter()
     internal_dependency_counts: Counter[str] = Counter()
     external_dependency_counts: Counter[str] = Counter()
@@ -588,6 +620,7 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         cloud_platforms = sorted(set(facts.get("cloud_platforms", []) or []))
         api_types = sorted(set(facts.get("api_types", []) or []))
         event_systems = sorted(set(facts.get("event_systems", []) or []))
+        ci_systems = sorted(set(facts.get("ci_systems", []) or []))
         dependency_files = sorted(set(facts.get("dependency_files", []) or []))
         dependency_names = sorted(set(facts.get("dependency_names", []) or []))
         internal_dependency_names = sorted(set(facts.get("internal_dependency_names", []) or []))
@@ -604,6 +637,12 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             iac_repos += 1
         if api_types:
             api_repos += 1
+        for ci_system in ci_systems:
+            ci_counts[ci_system] += 1
+        if facts.get("has_branch_governance"):
+            branch_governed_repos += 1
+        if facts.get("has_review_gate"):
+            review_gated_repos += 1
         for dep in dependency_names:
             dependency_counts[dep] += 1
         if internal_dependency_names:
@@ -630,6 +669,7 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "cloud_platforms": cloud_platforms,
             "api_types": api_types,
             "event_systems": event_systems,
+            "ci_systems": ci_systems,
             "dependency_files": dependency_files,
             "dependency_names": dependency_names,
             "internal_dependency_names": internal_dependency_names,
@@ -638,6 +678,13 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),
             "has_api_surface": bool(api_types),
+            "has_branch_governance": bool(facts.get("has_branch_governance")),
+            "has_review_gate": bool(facts.get("has_review_gate")),
+            "branch_restrictions": int(facts.get("branch_restrictions", 0) or 0),
+            "default_reviewer_rules": int(facts.get("default_reviewer_rules", 0) or 0),
+            "owner": str(facts.get("owner", "") or ""),
+            "owner_source": str(facts.get("owner_source", "") or ""),
+            "is_orphaned": bool(facts.get("is_orphaned")),
         })
 
     return {
@@ -666,8 +713,11 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         "missing_governance_repos": missing_governance_repos,
         "iac_repos": iac_repos,
         "api_repos": api_repos,
+        "branch_governed_repos": branch_governed_repos,
+        "review_gated_repos": review_gated_repos,
         "dependency_count": len(dependency_counts),
         "internal_dependency_repos": internal_dependency_repos,
+        "ci_by_count": [{"ci_system": key, "count": count} for key, count in ci_counts.most_common()],
         "dependencies_by_count": [{"dependency": key, "count": count} for key, count in dependency_counts.most_common()],
         "internal_dependencies_by_count": [{"dependency": key, "count": count} for key, count in internal_dependency_counts.most_common()],
         "external_dependencies_by_count": [{"dependency": key, "count": count} for key, count in external_dependency_counts.most_common()],
