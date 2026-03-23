@@ -3923,6 +3923,11 @@ def test_inventory_page_is_server_rendered():
                 "internal_dependency_names": ["@cognyte/ui"],
                 "external_dependency_names": ["axios", "react", "openai"],
                 "shared_internal_libs": ["@cognyte/ui"],
+                "import_cycle_examples": ["a.py -> b.py -> a.py"],
+                "import_cycle_node_count": 2,
+                "has_import_cycles": True,
+                "cross_repo_cycle_peers": ["repo2"],
+                "has_cross_repo_cycles": True,
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": True,
@@ -3939,7 +3944,7 @@ def test_inventory_page_is_server_rendered():
                 "agent_tool_use": True,
                 "risky_repo": True,
                 "orphaned_risky": False,
-                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift", "risky"],
+                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift", "risky", "import_cycle", "cross_repo_cycle"],
                 "reports": {"html_name": "demo.html"},
             },
             {
@@ -3972,6 +3977,11 @@ def test_inventory_page_is_server_rendered():
                 "internal_dependency_names": ["@cognyte/ui"],
                 "external_dependency_names": ["requests", "flask", "numpy"],
                 "shared_internal_libs": ["@cognyte/ui"],
+                "import_cycle_examples": [],
+                "import_cycle_node_count": 0,
+                "has_import_cycles": False,
+                "cross_repo_cycle_peers": ["repo1"],
+                "has_cross_repo_cycles": True,
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": False,
@@ -4013,6 +4023,8 @@ def test_inventory_page_is_server_rendered():
             "risky_repos": 2,
             "orphaned_risky_repos": 1,
             "policy_violation_repos": 2,
+            "import_cycle_repos": 1,
+            "cross_repo_cycle_repos": 2,
             "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
             "owner_missing_governance_rollup": [("Unowned", 1), ("@team-platform", 1)],
             "owner_risky_rollup": [("@team-platform", 1), ("Unowned", 1)],
@@ -4041,6 +4053,8 @@ def test_inventory_page_is_server_rendered():
             "shared_internal_lib_repo_rollup": [("repo1", 1), ("repo2", 1)],
             "external_dependency_risk_rollup": [("repo1", 3), ("repo2", 3)],
             "ai_dependency_risk_rollup": [("repo1", 2)],
+            "import_cycle_rollup": [("a.py -> b.py -> a.py", 1)],
+            "repo_cycle_rollup": [("repo1 ↔ repo2", 1)],
             "policy_violation_rollup": [
                 ("API repos require SECURITY.md", 2),
                 ("Weak-governance repos cannot carry heavy external dependency load", 2),
@@ -4092,6 +4106,9 @@ def test_inventory_page_is_server_rendered():
     assert "Shared Internal Library Consumers" in html
     assert "External Dependency Risk" in html
     assert "AI Drift / Governance Risk" in html
+    assert "Import Cycles" in html
+    assert "Repo Cycles" in html
+    assert "Repo Dependency Cycles" in html
     assert "Policy Violations" in html
     assert "Owners of Shared Assets" in html
     assert "Orphaned Exposed Repos" in html
@@ -4099,6 +4116,10 @@ def test_inventory_page_is_server_rendered():
     assert "Prod: orders.created" in html
     assert "Cons: orders.created" in html
     assert "svc.cognyte.local" in html
+    assert "Cycles: 2" in html
+    assert "Repo Cycle" in html
+    assert "a.py -&gt; b.py -&gt; a.py" in html
+    assert "repo1 ↔ repo2" in html
     assert "repo2 (API / IaC)" in html
     assert "Node.js &lt;18" in html
     assert "Python 3.8" in html
@@ -4163,6 +4184,9 @@ def test_inventory_repo_page_is_server_rendered():
             "shared_internal_libs": ["@cognyte/ui"],
             "runtime_drift_labels": ["Node.js <18"],
             "framework_drift_labels": ["React on Node.js <18"],
+            "import_cycle_examples": ["a.py -> b.py -> a.py"],
+            "import_cycle_node_count": 2,
+            "cross_repo_cycle_peers": ["repo2"],
             "missing_governance": ["SECURITY.md"],
             "reports": {"html_name": "demo.html", "json_name": "demo.json"},
         },
@@ -4195,8 +4219,24 @@ def test_inventory_repo_page_is_server_rendered():
     assert "svc.cognyte.local" in html
     assert "Current Action Focus" in html
     assert "React on Node.js &lt;18" in html
+    assert "Import Cycles" in html
+    assert "Repo Cycles" in html
+    assert "repo2" in html
     assert "Recent Scans" in html
     assert "00:45" in html
+
+
+def test_collect_repo_facts_detects_python_import_cycle(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "a.py").write_text("import b\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("import a\n", encoding="utf-8")
+
+    facts = collect_repo_facts(tmp_path, repo="repo1")
+
+    assert facts["has_import_cycles"] is True
+    assert facts["import_cycle_node_count"] == 2
+    assert facts["import_cycle_examples"] == ["a.py -> b.py -> a.py"]
 
 
 def test_inventory_snapshot_prefers_repo_details_owner_over_generic_profile_owner():

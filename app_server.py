@@ -790,6 +790,12 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             violations.append("Weak-governance repos cannot carry heavy external dependency load")
         return violations
 
+    def _normalize_repo_token(value: str) -> str:
+        token = str(value or "").strip().lower()
+        if "/" in token:
+            token = token.rsplit("/", 1)[-1]
+        return token.replace("_", "-").replace(".", "-")
+
     latest_by_repo: dict[str, dict] = {}
     for record in _history_records_for_user():
         inventory = record.get("inventory") or {}
@@ -839,6 +845,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                   "dependency_names": list(profile.get("dependency_names", []) or []),
                   "internal_dependency_names": list(profile.get("internal_dependency_names", []) or []),
                   "external_dependency_names": list(profile.get("external_dependency_names", []) or []),
+                  "import_cycle_examples": list(profile.get("import_cycle_examples", []) or []),
+                  "import_cycle_node_count": int(profile.get("import_cycle_node_count", 0) or 0),
+                  "has_import_cycles": bool(profile.get("has_import_cycles")),
                   "governance": dict(profile.get("governance") or {}),
                   "missing_governance": list(profile.get("missing_governance", []) or []),
                   "has_iac": bool(profile.get("has_iac")),
@@ -905,6 +914,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     shared_internal_lib_repo_rollup: dict[str, int] = {}
     external_dependency_risk_rollup: dict[str, int] = {}
     ai_dependency_risk_rollup: dict[str, int] = {}
+    import_cycle_rollup: dict[str, int] = {}
+    repo_cycle_rollup: dict[str, int] = {}
     policy_violation_rollup: dict[str, int] = {}
     owner_policy_violation_rollup: dict[str, int] = {}
     for item in repo_inventory:
@@ -941,6 +952,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             internal_dependency_rollup[dependency] = internal_dependency_rollup.get(dependency, 0) + 1
         for dependency in item.get("external_dependency_names", []) or []:
             external_dependency_rollup[dependency] = external_dependency_rollup.get(dependency, 0) + 1
+        for cycle in item.get("import_cycle_examples", []) or []:
+            import_cycle_rollup[cycle] = import_cycle_rollup.get(cycle, 0) + 1
         owner = str(item.get("owner", "") or "").strip() or "Unowned"
         owner_rollup[owner] = owner_rollup.get(owner, 0) + 1
         if item.get("missing_governance"):
@@ -990,6 +1003,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             usage_tags.append("orphaned_risky")
         if policy_violations:
             usage_tags.append("policy_violation")
+        if item.get("has_import_cycles"):
+            usage_tags.append("import_cycle")
         item["usage_tags"] = sorted(set(usage_tags))
 
         for label in drift_labels:
@@ -1010,6 +1025,30 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             owner_policy_violation_rollup[owner] = owner_policy_violation_rollup.get(owner, 0) + len(policy_violations)
             for violation in policy_violations:
                 policy_violation_rollup[violation] = policy_violation_rollup.get(violation, 0) + 1
+
+    repo_alias_map: dict[str, str] = {}
+    for item in repo_inventory:
+        repo_name = str(item.get("repo", "") or "")
+        normalized = _normalize_repo_token(repo_name)
+        if normalized:
+            repo_alias_map[normalized] = repo_name
+    repo_edges: dict[str, set[str]] = {str(item.get("repo", "") or ""): set() for item in repo_inventory}
+    for item in repo_inventory:
+        repo_name = str(item.get("repo", "") or "")
+        for dep in item.get("internal_dependency_names", []) or []:
+            target = repo_alias_map.get(_normalize_repo_token(dep))
+            if target and target != repo_name:
+                repo_edges[repo_name].add(target)
+    for repo_name, targets in repo_edges.items():
+        cycle_peers = sorted(target for target in targets if repo_name in repo_edges.get(target, set()))
+        for peer in cycle_peers:
+            repo_cycle_rollup[" ↔ ".join(sorted({repo_name, peer}))] = 1
+        matched = next((item for item in repo_inventory if str(item.get("repo", "") or "") == repo_name), None)
+        if matched is not None:
+            matched["cross_repo_cycle_peers"] = cycle_peers
+            matched["has_cross_repo_cycles"] = bool(cycle_peers)
+            if cycle_peers:
+                matched["usage_tags"] = sorted(set(list(matched.get("usage_tags", []) or []) + ["cross_repo_cycle"]))
 
     orphaned_exposed_repos = [
         item for item in repo_inventory
@@ -1054,6 +1093,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "risky_repos": sum(1 for item in repo_inventory if item.get("risky_repo")),
         "orphaned_risky_repos": sum(1 for item in repo_inventory if item.get("orphaned_risky")),
         "policy_violation_repos": sum(1 for item in repo_inventory if item.get("policy_violations")),
+        "import_cycle_repos": sum(1 for item in repo_inventory if item.get("has_import_cycles")),
+        "cross_repo_cycle_repos": sum(1 for item in repo_inventory if item.get("has_cross_repo_cycles")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1107,6 +1148,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "shared_internal_lib_repo_rollup": sorted(shared_internal_lib_repo_rollup.items(), key=lambda item: (-item[1], item[0])),
         "external_dependency_risk_rollup": sorted(external_dependency_risk_rollup.items(), key=lambda item: (-item[1], item[0])),
         "ai_dependency_risk_rollup": sorted(ai_dependency_risk_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "import_cycle_rollup": sorted(import_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "repo_cycle_rollup": sorted(repo_cycle_rollup.items(), key=lambda item: (-item[1], item[0])),
         "policy_violation_rollup": sorted(policy_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary

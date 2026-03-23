@@ -1177,6 +1177,10 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             dependency_meta.append(f"External: {item.get('external_dependency_count')}")
         if item.get("dependency_risk"):
             dependency_meta.append("Weak Gov")
+        if item.get("has_import_cycles"):
+            dependency_meta.append(f"Cycles: {item.get('import_cycle_node_count', 0)}")
+        if item.get("has_cross_repo_cycles"):
+            dependency_meta.append("Repo Cycle")
         ai_meta = []
         framework_drift_text = ", ".join(item.get("framework_drift_labels", []) or [])
         if framework_drift_text:
@@ -1257,6 +1261,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <div class="inventory-card-stat"><span class="baseline-label">Risky Repos</span><strong>{_esc(summary.get("risky_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Orphaned Risky</span><strong>{_esc(summary.get("orphaned_risky_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Policy Violations</span><strong>{_esc(summary.get("policy_violation_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Import Cycles</span><strong>{_esc(summary.get("import_cycle_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Repo Cycles</span><strong>{_esc(summary.get("cross_repo_cycle_repos", 0))}</strong></div>
       </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
         <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
@@ -1283,6 +1289,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>Shared Internal Library Consumers</strong>{_rollup_list(list(summary.get("shared_internal_lib_repo_rollup", []) or []), "No repos sharing internal libraries yet.")}</section>
         <section class="inventory-rollup-card"><strong>External Dependency Risk</strong>{_rollup_list(list(summary.get("external_dependency_risk_rollup", []) or []), "No weak-governance dependency hotspots.")}</section>
         <section class="inventory-rollup-card"><strong>AI Drift / Governance Risk</strong>{_rollup_list(list(summary.get("ai_dependency_risk_rollup", []) or []), "No AI repos with drift or dependency risk.")}</section>
+        <section class="inventory-rollup-card"><strong>Import Cycles</strong>{_rollup_list(list(summary.get("import_cycle_rollup", []) or []), "No intra-repo import cycles detected.")}</section>
+        <section class="inventory-rollup-card"><strong>Repo Dependency Cycles</strong>{_rollup_list(list(summary.get("repo_cycle_rollup", []) or []), "No cross-repo dependency cycles detected.")}</section>
         <section class="inventory-rollup-card"><strong>Policy Violations</strong>{_rollup_list(list(summary.get("policy_violation_rollup", []) or []), "No policy violations.")}</section>
         <section class="inventory-rollup-card"><strong>Shared Internal Libraries</strong>{_rollup_list(list(summary.get("shared_internal_dependency_rollup", []) or []), "No shared internal libraries yet.")}</section>
         <section class="inventory-rollup-card"><strong>Owners of Shared Assets</strong>{_rollup_list(list(summary.get("owner_shared_asset_rollup", []) or []), "No owner-linked shared assets yet.")}</section>
@@ -1314,6 +1322,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
           <option value="risky"{" selected" if selected_usage == "risky" else ""}>Risky Repos</option>
           <option value="orphaned_risky"{" selected" if selected_usage == "orphaned_risky" else ""}>Orphaned Risky</option>
           <option value="policy_violation"{" selected" if selected_usage == "policy_violation" else ""}>Policy Violations</option>
+          <option value="import_cycle"{" selected" if selected_usage == "import_cycle" else ""}>Import Cycles</option>
+          <option value="cross_repo_cycle"{" selected" if selected_usage == "cross_repo_cycle" else ""}>Repo Cycles</option>
           <option value="agent"{" selected" if selected_usage == "agent" else ""}>Agent / Tool Use</option>
         </select>
       <button type="button" class="ghost" id="inventory-export-csv">Export CSV</button>
@@ -1438,6 +1448,8 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
     consumed_topics = ", ".join(repo_profile.get("consumed_topics", []) or []) or "-"
     internal_hosts = ", ".join(repo_profile.get("internal_api_hosts", []) or []) or "-"
     external_hosts = ", ".join(repo_profile.get("external_api_hosts", []) or []) or "-"
+    import_cycles = ", ".join(repo_profile.get("import_cycle_examples", []) or []) or "-"
+    cross_repo_cycles = ", ".join(repo_profile.get("cross_repo_cycle_peers", []) or []) or "-"
     date_text, time_text, _ts = _fmt_dt(str(repo_profile.get("last_scan_at_utc", "") or ""))
     latest_scan_id = str(repo_profile.get("scan_id", "") or "")
     latest_findings_link = f'/findings?scan_id={quote(latest_scan_id)}' if latest_scan_id else ""
@@ -1510,6 +1522,8 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
           <tr><td>External Hosts</td><td>{_esc(external_hosts)}</td></tr>
           <tr><td>Dependencies</td><td>{_esc(dependency_text)}</td></tr>
           <tr><td>Internal Libraries</td><td>{_esc(internal_dependency_text)}</td></tr>
+          <tr><td>Import Cycles</td><td>{_esc(import_cycles)}</td></tr>
+          <tr><td>Repo Cycles</td><td>{_esc(cross_repo_cycles)}</td></tr>
           <tr><td>AI Profile</td><td>{_esc(provider_text)}<div class="inventory-sub">{_esc(model_text)}</div></td></tr>
         </tbody>
       </table>
@@ -1523,6 +1537,7 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
       <div class="inventory-card-stat"><span class="baseline-label">Runtime Drift</span><strong>{_esc(", ".join(repo_profile.get("runtime_drift_labels", []) or []) or "-")}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Framework Drift</span><strong>{_esc(", ".join(repo_profile.get("framework_drift_labels", []) or []) or "-")}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Shared Internal Libs</span><strong>{_esc(", ".join(repo_profile.get("shared_internal_libs", []) or []) or "-")}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Import Cycles</span><strong>{_esc(str(repo_profile.get("import_cycle_node_count", 0) or 0))}</strong></div>
     </div>
   </section>
 

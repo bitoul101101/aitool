@@ -60,6 +60,10 @@ _TOPIC_CALL_RE = re.compile(
 )
 
 _URL_RE = re.compile(r"""https?://([A-Za-z0-9._:-]+)""", re.IGNORECASE)
+_PY_IMPORT_RE = re.compile(r"^\s*import\s+([A-Za-z0-9_.,\s]+)", re.MULTILINE)
+_PY_FROM_RE = re.compile(r"^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+", re.MULTILINE)
+_JS_IMPORT_RE = re.compile(r"""import\s+(?:[^'"]+?\s+from\s+)?['"]([^'"]+)['"]""")
+_JS_REQUIRE_RE = re.compile(r"""require\(\s*['"]([^'"]+)['"]\s*\)""")
 
 
 def _normalise_label(value: str) -> str:
@@ -363,6 +367,104 @@ def _extract_event_topics(contents: dict[str, str]) -> tuple[list[str], list[str
     return sorted(produced), sorted(consumed)
 
 
+def _module_key_for_path(path: str) -> str:
+    rel = str(path or "").replace("\\", "/")
+    stem = rel.rsplit(".", 1)[0]
+    if stem.endswith("/__init__"):
+        stem = stem[:-9]
+    return stem.replace("/", ".").strip(".")
+
+
+def _candidate_module_keys(path: str) -> set[str]:
+    rel = str(path or "").replace("\\", "/")
+    stem = rel.rsplit(".", 1)[0]
+    parts = [part for part in stem.split("/") if part]
+    keys = {".".join(parts).strip(".")}
+    if parts and parts[-1] == "__init__":
+        keys.add(".".join(parts[:-1]).strip("."))
+    return {key for key in keys if key}
+
+
+def _resolve_relative_module(current_path: str, target: str) -> str:
+    current = Path(str(current_path or "").replace("\\", "/"))
+    target_path = Path(str(target or ""))
+    resolved = (current.parent / target_path).as_posix()
+    while "/../" in resolved:
+        resolved = str(Path(resolved).as_posix())
+    return resolved.rsplit(".", 1)[0].replace("/", ".").strip(".")
+
+
+def _detect_internal_import_cycles(names: set[str], contents: dict[str, str]) -> tuple[list[str], list[str]]:
+    source_files = sorted(
+        name for name in names
+        if name.lower().endswith((".py", ".js", ".jsx", ".ts", ".tsx"))
+    )
+    if not source_files:
+        return [], []
+
+    module_to_file: dict[str, str] = {}
+    for path in source_files:
+        for key in _candidate_module_keys(path):
+            module_to_file.setdefault(key, path)
+
+    graph: dict[str, set[str]] = {path: set() for path in source_files}
+    for path in source_files:
+        text = str(contents.get(path, "") or "")
+        lower = path.lower()
+        if lower.endswith(".py"):
+            for match in _PY_IMPORT_RE.findall(text):
+                for part in [item.strip().split(" as ", 1)[0].strip() for item in match.split(",")]:
+                    target = module_to_file.get(part)
+                    if target and target != path:
+                        graph[path].add(target)
+            for match in _PY_FROM_RE.findall(text):
+                target = module_to_file.get(match)
+                if target and target != path:
+                    graph[path].add(target)
+        else:
+            for match in list(_JS_IMPORT_RE.findall(text)) + list(_JS_REQUIRE_RE.findall(text)):
+                mod = str(match or "").strip()
+                if not mod.startswith("."):
+                    continue
+                resolved = _resolve_relative_module(path, mod)
+                target = module_to_file.get(resolved)
+                if target and target != path:
+                    graph[path].add(target)
+
+    cycles: set[tuple[str, ...]] = set()
+    cycle_nodes: set[str] = set()
+    stack: list[str] = []
+    active: set[str] = set()
+    visited: set[str] = set()
+
+    def _walk(node: str) -> None:
+        visited.add(node)
+        active.add(node)
+        stack.append(node)
+        for nxt in sorted(graph.get(node, set())):
+            if nxt not in visited:
+                _walk(nxt)
+            elif nxt in active:
+                try:
+                    start = stack.index(nxt)
+                except ValueError:
+                    continue
+                cycle = tuple(stack[start:])
+                if cycle:
+                    rotated = min(tuple(cycle[i:] + cycle[:i]) for i in range(len(cycle)))
+                    cycles.add(rotated)
+                    cycle_nodes.update(cycle)
+        stack.pop()
+        active.discard(node)
+
+    for node in source_files:
+        if node not in visited:
+            _walk(node)
+
+    cycle_labels = [" -> ".join(cycle + (cycle[0],)) for cycle in sorted(cycles)]
+    return cycle_labels, sorted(cycle_nodes)
+
+
 def collect_repo_facts(
     repo_root: str | Path,
     repo: str,
@@ -572,6 +674,7 @@ def collect_repo_facts(
             internal_dependency_names.add(dependency)
         else:
             external_dependency_names.add(dependency)
+    import_cycle_examples, cycle_nodes = _detect_internal_import_cycles(names, contents)
     ai_profile = build_inventory(findings_list, repo_slugs=[repo])["repo_profiles"][0] if repo else {}
     ai_profile.update(
         {
@@ -593,6 +696,9 @@ def collect_repo_facts(
             "dependency_names": sorted(dependency_names),
             "internal_dependency_names": sorted(internal_dependency_names),
             "external_dependency_names": sorted(external_dependency_names),
+            "import_cycle_examples": import_cycle_examples[:8],
+            "import_cycle_node_count": len(cycle_nodes),
+            "has_import_cycles": bool(import_cycle_examples),
             "governance": governance,
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),
