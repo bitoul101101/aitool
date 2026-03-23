@@ -3746,6 +3746,12 @@ def test_inventory_page_is_server_rendered():
             "iac_repos": 1,
             "api_repos": 1,
             "agent_tool_use_repos": 1,
+            "runtime_rollup": [("Node.js", 1), ("Python", 1)],
+            "technology_rollup": [("React", 1), ("Django", 1)],
+            "version_rollup": [("Python 3.11", 1), ("Node.js 20", 1)],
+            "governance_rollup": [("SECURITY.md", 1)],
+            "iac_rollup": [("Terraform", 1), ("AWS", 1)],
+            "api_rollup": [("REST", 1), ("Kafka", 1)],
         },
     ).decode("utf-8")
 
@@ -3756,6 +3762,10 @@ def test_inventory_page_is_server_rendered():
     assert "Node.js, Python" in html
     assert "Terraform, AWS" in html
     assert "REST, Kafka" in html
+    assert "Version Drift" in html
+    assert "Governance Gaps" in html
+    assert "Node.js 20" in html
+    assert "SECURITY.md" in html
     assert 'id="inventory-search"' in html
     assert 'id="inventory-reset"' in html
     assert 'id="inventory-runtime"' in html

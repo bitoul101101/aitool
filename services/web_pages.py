@@ -827,6 +827,14 @@ def render_findings_page(*, findings: list[dict], notice: str = "", error: str =
     def _opts(values: list[str], label: str) -> str:
         return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
 
+    def _rollup_list(items: list[tuple[str, int]], empty: str) -> str:
+        if not items:
+            return f'<div class="muted">{_esc(empty)}</div>'
+        return "".join(
+            f'<div class="inventory-rollup-item"><span>{_esc(label)}</span><strong>{_esc(count)}</strong></div>'
+            for label, count in items[:8]
+        )
+
     def _pill(status: str, note: str = "") -> str:
         key = str(status or "").lower().replace(" ", "_")
         css = {
@@ -1089,6 +1097,14 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
     def _opts(values: list[str], label: str) -> str:
         return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
 
+    def _rollup_list(items: list[tuple[str, int]], empty: str) -> str:
+        if not items:
+            return f'<div class="muted">{_esc(empty)}</div>'
+        return "".join(
+            f'<div class="inventory-rollup-item"><span>{_esc(label)}</span><strong>{_esc(count)}</strong></div>'
+            for label, count in items[:8]
+        )
+
     rows = []
     for item in repo_inventory:
         provider_text = ", ".join(item.get("provider_labels", []))
@@ -1143,6 +1159,14 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
       <div class="inventory-card-stat"><span class="baseline-label">IaC / Cloud</span><strong>{_esc(summary.get("iac_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">API Surface</span><strong>{_esc(summary.get("api_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
+    </div>
+    <div class="inventory-summary-cards" style="margin-top:10px">
+      <section class="inventory-rollup-card"><strong>Runtimes</strong>{_rollup_list(list(summary.get("runtime_rollup", []) or []), "No runtime data yet.")}</section>
+      <section class="inventory-rollup-card"><strong>Technologies</strong>{_rollup_list(list(summary.get("technology_rollup", []) or []), "No technology data yet.")}</section>
+      <section class="inventory-rollup-card"><strong>Version Drift</strong>{_rollup_list(list(summary.get("version_rollup", []) or []), "No version markers yet.")}</section>
+      <section class="inventory-rollup-card"><strong>Governance Gaps</strong>{_rollup_list(list(summary.get("governance_rollup", []) or []), "No governance gaps detected.")}</section>
+      <section class="inventory-rollup-card"><strong>IaC / Cloud</strong>{_rollup_list(list(summary.get("iac_rollup", []) or []), "No IaC or cloud markers yet.")}</section>
+      <section class="inventory-rollup-card"><strong>API / Events</strong>{_rollup_list(list(summary.get("api_rollup", []) or []), "No API surface detected.")}</section>
     </div>
   </section>
 

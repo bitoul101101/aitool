@@ -792,6 +792,30 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     models = {model for item in repo_inventory for model in item.get("models", [])}
     runtimes = {runtime for item in repo_inventory for runtime in item.get("runtimes", [])}
     technologies = {tech for item in repo_inventory for tech in item.get("technologies", [])}
+    runtime_rollup: dict[str, int] = {}
+    technology_rollup: dict[str, int] = {}
+    governance_rollup: dict[str, int] = {}
+    iac_rollup: dict[str, int] = {}
+    api_rollup: dict[str, int] = {}
+    version_rollup: dict[str, int] = {}
+    for item in repo_inventory:
+        for runtime in item.get("runtimes", []) or []:
+            runtime_rollup[runtime] = runtime_rollup.get(runtime, 0) + 1
+        for tech in item.get("technologies", []) or []:
+            technology_rollup[tech] = technology_rollup.get(tech, 0) + 1
+        for missing in item.get("missing_governance", []) or []:
+            governance_rollup[missing] = governance_rollup.get(missing, 0) + 1
+        for tool in item.get("iac_tools", []) or []:
+            iac_rollup[tool] = iac_rollup.get(tool, 0) + 1
+        for cloud in item.get("cloud_platforms", []) or []:
+            iac_rollup[cloud] = iac_rollup.get(cloud, 0) + 1
+        for api_type in item.get("api_types", []) or []:
+            api_rollup[api_type] = api_rollup.get(api_type, 0) + 1
+        for event_system in item.get("event_systems", []) or []:
+            api_rollup[event_system] = api_rollup.get(event_system, 0) + 1
+        for runtime, version in (item.get("runtime_versions") or {}).items():
+            key = f"{runtime} {version}"
+            version_rollup[key] = version_rollup.get(key, 0) + 1
     summary = {
         "repos_using_ai_count": sum(1 for item in repo_inventory if item.get("finding_count", 0) > 0),
         "repos_total": len(repo_inventory),
@@ -803,6 +827,12 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "missing_governance_repos": sum(1 for item in repo_inventory if item.get("missing_governance")),
         "iac_repos": sum(1 for item in repo_inventory if item.get("has_iac")),
         "api_repos": sum(1 for item in repo_inventory if item.get("has_api_surface")),
+        "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "iac_rollup": sorted(iac_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "api_rollup": sorted(api_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "version_rollup": sorted(version_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary
 
