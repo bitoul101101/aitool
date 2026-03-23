@@ -1228,19 +1228,67 @@ def test_collect_repo_facts_classifies_frameworks_governance_and_api_surface(tmp
     (tmp_path / "bitbucket-pipelines.yml").write_text("pipelines:\n  default:\n    - step:\n        script:\n          - pytest\n", encoding="utf-8")
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
 
-    facts = collect_repo_facts(tmp_path, "demo-repo", [])
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github" / "CODEOWNERS").write_text("* @team-platform\n", encoding="utf-8")
+
+    facts = collect_repo_facts(tmp_path, "demo-repo", [], repo_owner="Repo Lead")
 
     assert "React" in facts["technologies"]
     assert "Node.js" in facts["runtimes"]
     assert "Python" in facts["runtimes"]
-    assert facts["runtime_versions"]["Node.js"] == ">=20"
-    assert facts["runtime_versions"]["Python"] == ">=3.11"
+    assert facts["runtime_versions"]["Node.js"] == "20.x"
+    assert facts["runtime_versions"]["Python"] == "3.11"
     assert "Terraform" in facts["iac_tools"]
     assert "AWS" in facts["cloud_platforms"]
     assert "REST" in facts["api_types"]
     assert facts["governance"]["readme"] is True
     assert facts["governance"]["ci_pipeline"] is True
     assert "SECURITY.md" in facts["missing_governance"]
+    assert facts["owner"] == "@team-platform"
+    assert facts["owner_source"] == "codeowners"
+    assert facts["is_orphaned"] is False
+
+
+def test_collect_repo_facts_normalizes_version_drift_buckets(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "package.json").write_text('{"engines":{"node":"16.20.0"}}', encoding="utf-8")
+    (tmp_path / "go.mod").write_text("module demo\n\ngo 1.21\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project><properties><java.version>11</java.version></properties></project>", encoding="utf-8")
+
+    facts = collect_repo_facts(tmp_path, "demo-repo", [])
+
+    assert facts["runtime_versions"]["Node.js"] == "<18"
+    assert facts["runtime_versions"]["Go"] == "1.21"
+    assert facts["runtime_versions"]["JVM"] == "11"
+    assert "demo" not in facts.get("dependency_names", [])
+
+
+def test_collect_repo_facts_extracts_dependency_names_from_common_manifests(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "package.json").write_text('{"dependencies":{"react":"18.2.0","axios":"1.7.0"}}', encoding="utf-8")
+    (tmp_path / "requirements.txt").write_text("fastapi==0.115.0\nuvicorn>=0.30\n", encoding="utf-8")
+    (tmp_path / "go.mod").write_text("module demo\n\ngo 1.21\nrequire github.com/gin-gonic/gin v1.10.0\n", encoding="utf-8")
+
+    facts = collect_repo_facts(tmp_path, "demo-repo", [])
+
+    assert "react" in facts["dependency_names"]
+    assert "axios" in facts["dependency_names"]
+    assert "fastapi" in facts["dependency_names"]
+    assert "uvicorn" in facts["dependency_names"]
+    assert "github.com/gin-gonic/gin" in facts["dependency_names"]
+
+
+def test_collect_repo_facts_marks_generic_owner_as_orphaned(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+
+    facts = collect_repo_facts(tmp_path, "demo-repo", [], repo_owner="User")
+
+    assert facts["owner"] == "User"
+    assert facts["is_orphaned"] is True
 
 
 # ── History persistence (_save_history_record) ────────────────────
@@ -3720,6 +3768,7 @@ def test_inventory_page_is_server_rendered():
                 "scan_id": "20260318_101500",
                 "last_scan_at_utc": "2026-03-18T10:15:00Z",
                 "finding_count": 4,
+                "owner": "@team-platform",
                 "provider_labels": ["Openai", "Langchain"],
                 "models": ["gpt-4o"],
                 "runtimes": ["Node.js", "Python"],
@@ -3729,6 +3778,7 @@ def test_inventory_page_is_server_rendered():
                 "cloud_platforms": ["AWS"],
                 "api_types": ["REST"],
                 "event_systems": ["Kafka"],
+                "dependency_names": ["axios", "react"],
                 "missing_governance": ["SECURITY.md"],
                 "has_iac": True,
                 "has_api_surface": True,
@@ -3745,31 +3795,41 @@ def test_inventory_page_is_server_rendered():
             "missing_governance_repos": 1,
             "iac_repos": 1,
             "api_repos": 1,
+            "orphaned_repos": 0,
+            "dependency_count": 2,
             "agent_tool_use_repos": 1,
+            "owner_rollup": [("@team-platform", 1)],
             "runtime_rollup": [("Node.js", 1), ("Python", 1)],
             "technology_rollup": [("React", 1), ("Django", 1)],
             "version_rollup": [("Python 3.11", 1), ("Node.js 20", 1)],
             "governance_rollup": [("SECURITY.md", 1)],
             "iac_rollup": [("Terraform", 1), ("AWS", 1)],
             "api_rollup": [("REST", 1), ("Kafka", 1)],
+            "dependency_rollup": [("react", 1), ("axios", 1)],
         },
     ).decode("utf-8")
 
     assert '<a class="nav active" href="/inventory">AI Inventory</a>' in html
     assert "Latest known repository classification per repo from scan history." in html
     assert "repo1" in html
+    assert "@team-platform" in html
     assert "React, Django" in html
     assert "Node.js, Python" in html
     assert "Terraform, AWS" in html
     assert "REST, Kafka" in html
+    assert "axios, react" in html
     assert "Version Drift" in html
+    assert "Owners" in html
+    assert "Dependencies" in html
     assert "Governance Gaps" in html
     assert "Node.js 20" in html
     assert "SECURITY.md" in html
     assert 'id="inventory-search"' in html
     assert 'id="inventory-reset"' in html
+    assert 'id="inventory-owner"' in html
     assert 'id="inventory-runtime"' in html
     assert 'id="inventory-technology"' in html
+    assert 'id="inventory-dependency"' in html
     assert 'href="/reports/demo.html"' in html
 
 

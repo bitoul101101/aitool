@@ -1432,7 +1432,7 @@ class ScanJobService:
                         total_s=round(time.perf_counter() - repo_started, 2),
                     )
                     log(f"  [{slug}] No files matched the selected scan scope", "dim")
-                    return slug, [], owner, 0, None, collect_repo_facts(repo_root, slug, [])
+                    return slug, [], owner, 0, None, collect_repo_facts(repo_root, slug, [], repo_owner=owner)
                 if excluded_paths:
                     log(f"  [{slug}] Local scan excludes: {', '.join(excluded_paths)}", "dim")
 
@@ -1505,7 +1505,7 @@ class ScanJobService:
                     llm_review_s=round(llm_duration, 2),
                     total_s=round(time.perf_counter() - repo_started, 2),
                 )
-                return slug, analyzed, owner, pre_llm_count, None, collect_repo_facts(repo_root, slug, analyzed)
+                return slug, analyzed, owner, pre_llm_count, None, collect_repo_facts(repo_root, slug, analyzed, repo_owner=owner)
             except (OSError, ValueError, TypeError, KeyError, JSONDecodeError) as exc:
                 session.record_error("REPO_SCAN_FAILED", "scan", str(exc), repo=slug)
                 return slug, None, owner, 0, f"scan error: {exc}", {}

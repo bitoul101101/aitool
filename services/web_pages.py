@@ -1093,6 +1093,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
     models = sorted({model for item in repo_inventory for model in item.get("models", []) if model})
     runtimes = sorted({runtime for item in repo_inventory for runtime in item.get("runtimes", []) if runtime})
     technologies = sorted({tech for item in repo_inventory for tech in item.get("technologies", []) if tech})
+    owners = sorted({str(item.get("owner", "")) for item in repo_inventory if item.get("owner")})
+    dependencies = sorted({dep for item in repo_inventory for dep in item.get("dependency_names", []) if dep})
 
     def _opts(values: list[str], label: str) -> str:
         return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
@@ -1116,6 +1118,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         platform_text = ", ".join(item.get("iac_tools", []) + item.get("cloud_platforms", [])) or "-"
         api_text = ", ".join(item.get("api_types", []) + item.get("event_systems", [])) or "-"
         ai_text = provider_text or "-"
+        owner_text = str(item.get("owner", "") or "Unowned")
+        dependency_text = ", ".join(item.get("dependency_names", [])[:6])
         date_text, time_text, ts = _fmt_dt(item.get("last_scan_at_utc", ""))
         reports = item.get("reports") or {}
         html_link = (
@@ -1125,8 +1129,10 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         )
         rows.append(
             f'<tr data-project="{_esc(item.get("project_key", ""))}" '
+            f'data-owner="{_esc(owner_text.lower())}" '
             f'data-runtime="{_esc(runtime_text.lower())}" '
             f'data-technology="{_esc(technology_text.lower())}" '
+            f'data-dependency="{_esc(dependency_text.lower())}" '
             f'data-provider="{_esc(provider_text.lower())}" '
             f'data-model="{_esc(model_text.lower())}" '
             f'data-flags="{_esc(" ".join(item.get("usage_tags", [])))}" '
@@ -1134,12 +1140,14 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             f'<td><div>{_esc(date_text)}</div><div class="history-time">{_esc(time_text)}</div></td>'
             f'<td>{_esc(item.get("project_key", ""))}</td>'
             f'<td><strong>{_esc(item.get("repo", ""))}</strong><div class="inventory-sub">{_esc(item.get("scan_id", ""))}</div></td>'
+            f'<td>{_esc(owner_text)}</td>'
             f'<td>{_esc(runtime_text or "-")}</td>'
             f'<td>{_esc(technology_text or "-")}</td>'
             f'<td>{_esc(version_text or "-")}</td>'
             f'<td><span class="inventory-bool {"no" if item.get("missing_governance") else "yes"}">{_esc(governance_text)}</span></td>'
             f'<td>{_esc(platform_text)}</td>'
             f'<td>{_esc(api_text)}</td>'
+            f'<td>{_esc(dependency_text or "-")}</td>'
             f'<td>{_esc(ai_text)}</td>'
             f'<td>{html_link}</td>'
             "</tr>"
@@ -1158,15 +1166,19 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
       <div class="inventory-card-stat"><span class="baseline-label">Missing Governance</span><strong>{_esc(summary.get("missing_governance_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">IaC / Cloud</span><strong>{_esc(summary.get("iac_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">API Surface</span><strong>{_esc(summary.get("api_repos", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Orphaned</span><strong>{_esc(summary.get("orphaned_repos", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Dependencies</span><strong>{_esc(summary.get("dependency_count", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
     </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
+      <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Runtimes</strong>{_rollup_list(list(summary.get("runtime_rollup", []) or []), "No runtime data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Technologies</strong>{_rollup_list(list(summary.get("technology_rollup", []) or []), "No technology data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Version Drift</strong>{_rollup_list(list(summary.get("version_rollup", []) or []), "No version markers yet.")}</section>
       <section class="inventory-rollup-card"><strong>Governance Gaps</strong>{_rollup_list(list(summary.get("governance_rollup", []) or []), "No governance gaps detected.")}</section>
       <section class="inventory-rollup-card"><strong>IaC / Cloud</strong>{_rollup_list(list(summary.get("iac_rollup", []) or []), "No IaC or cloud markers yet.")}</section>
       <section class="inventory-rollup-card"><strong>API / Events</strong>{_rollup_list(list(summary.get("api_rollup", []) or []), "No API surface detected.")}</section>
+      <section class="inventory-rollup-card"><strong>Dependencies</strong>{_rollup_list(list(summary.get("dependency_rollup", []) or []), "No dependency data yet.")}</section>
     </div>
   </section>
 
@@ -1174,8 +1186,10 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
     <div class="inventory-toolbar filters-row">
       <input type="search" id="inventory-search" placeholder="Search repo, runtime, technology, API, or scan">
       <select id="inventory-project">{_opts(projects, 'All Projects')}</select>
+      <select id="inventory-owner">{_opts(owners, 'All Owners')}</select>
       <select id="inventory-runtime">{_opts(runtimes, 'All Runtimes')}</select>
       <select id="inventory-technology">{_opts(technologies, 'All Technologies')}</select>
+      <select id="inventory-dependency">{_opts(dependencies, 'All Dependencies')}</select>
       <select id="inventory-usage">
         <option value="">All Postures</option>
         <option value="missing_governance">Missing Governance</option>
@@ -1190,19 +1204,21 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <thead>
           <tr>
             <th data-sort="datetime">Last Scan</th>
-            <th data-sort="text">Project</th>
-            <th data-sort="text">Repo</th>
-            <th data-sort="text">Runtimes</th>
+                <th data-sort="text">Project</th>
+                <th data-sort="text">Repo</th>
+                <th data-sort="text">Owner</th>
+                <th data-sort="text">Runtimes</th>
             <th data-sort="text">Technologies</th>
             <th data-sort="text">Versions</th>
-            <th data-sort="text">Governance</th>
-            <th data-sort="text">IaC / Cloud</th>
-            <th data-sort="text">API / Events</th>
-            <th data-sort="text">AI Profile</th>
-            <th>HTML</th>
-          </tr>
-        </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="11">No repository inventory available yet.</td></tr>'}</tbody>
+                <th data-sort="text">Governance</th>
+                <th data-sort="text">IaC / Cloud</th>
+                <th data-sort="text">API / Events</th>
+                <th data-sort="text">Dependencies</th>
+                <th data-sort="text">AI Profile</th>
+                <th>HTML</th>
+              </tr>
+            </thead>
+        <tbody>{''.join(rows) or '<tr><td colspan="13">No repository inventory available yet.</td></tr>'}</tbody>
       </table>
     </div>
   </section>
@@ -1211,8 +1227,10 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
 const iBody=document.querySelector('#inventory-table tbody');
 const iSearch=document.getElementById('inventory-search');
 const iProject=document.getElementById('inventory-project');
+const iOwner=document.getElementById('inventory-owner');
 const iRuntime=document.getElementById('inventory-runtime');
 const iTechnology=document.getElementById('inventory-technology');
+const iDependency=document.getElementById('inventory-dependency');
 const iUsage=document.getElementById('inventory-usage');
 function iRows(){{return Array.from(iBody.querySelectorAll('tr')).filter(r=>r.querySelectorAll('td').length>1);}}
 function inventoryMatchesUsage(row){{
@@ -1225,9 +1243,11 @@ function applyInventoryFilters(){{
     const text=row.textContent.toLowerCase();
     const okQ=!q || text.includes(q);
     const okP=!iProject.value || row.dataset.project===iProject.value;
+    const okOwner=!iOwner.value || (row.dataset.owner||'').includes(iOwner.value.toLowerCase());
     const okRuntime=!iRuntime.value || (row.dataset.runtime||'').includes(iRuntime.value.toLowerCase());
     const okTechnology=!iTechnology.value || (row.dataset.technology||'').includes(iTechnology.value.toLowerCase());
-    row.style.display=(okQ && okP && okRuntime && okTechnology && inventoryMatchesUsage(row)) ? '' : 'none';
+    const okDependency=!iDependency.value || (row.dataset.dependency||'').includes(iDependency.value.toLowerCase());
+    row.style.display=(okQ && okP && okOwner && okRuntime && okTechnology && okDependency && inventoryMatchesUsage(row)) ? '' : 'none';
   }});
 }}
 let inventorySort={{index:null,dir:-1,kind:'datetime'}};
@@ -1251,10 +1271,10 @@ function sortInventory(index,kind){{
   applyInventoryFilters();
 }}
 document.querySelectorAll('#inventory-table thead th[data-sort]').forEach((th,index)=>th.addEventListener('click',()=>sortInventory(index,th.dataset.sort)));
-[iSearch,iProject,iRuntime,iTechnology].forEach(el=>el?.addEventListener('input',applyInventoryFilters));
-[iProject,iRuntime,iTechnology,iUsage].forEach(el=>el?.addEventListener('change',applyInventoryFilters));
+[iSearch,iProject,iOwner,iRuntime,iTechnology,iDependency].forEach(el=>el?.addEventListener('input',applyInventoryFilters));
+[iProject,iOwner,iRuntime,iTechnology,iDependency,iUsage].forEach(el=>el?.addEventListener('change',applyInventoryFilters));
 document.getElementById('inventory-reset')?.addEventListener('click',()=>{{
-  iSearch.value=''; iProject.value=''; iRuntime.value=''; iTechnology.value=''; iUsage.value=''; applyInventoryFilters();
+  iSearch.value=''; iProject.value=''; iOwner.value=''; iRuntime.value=''; iTechnology.value=''; iDependency.value=''; iUsage.value=''; applyInventoryFilters();
 }});
 sortInventory(0,'datetime');
 </script>"""

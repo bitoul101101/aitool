@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -130,7 +131,7 @@ def _interesting_repo_files(root: Path) -> tuple[set[str], dict[str, str]]:
         lower = rel.lower()
         should_read = (
             path.suffix.lower() in {".json", ".toml", ".txt", ".py", ".xml", ".gradle", ".kts", ".yaml", ".yml", ".mod", ".csproj", ".props", ".md", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".proto", ".tf"}
-            or path.name.lower() in {"dockerfile", "jenkinsfile", "security.md", "license", "license.md", "readme", "readme.md", "chart.yaml", "bitbucket-pipelines.yml", "azure-pipelines.yml", ".nvmrc", "runtime.txt"}
+            or path.name.lower() in {"dockerfile", "jenkinsfile", "security.md", "license", "license.md", "readme", "readme.md", "chart.yaml", "bitbucket-pipelines.yml", "azure-pipelines.yml", ".nvmrc", "runtime.txt", "codeowners"}
             or ".github/workflows/" in lower
         )
         if should_read:
@@ -156,7 +157,137 @@ def _extract_first(contents: dict[str, str], pattern: str) -> str:
     return ""
 
 
-def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _codeowners_owner(contents: dict[str, str]) -> str:
+    for path, text in contents.items():
+        if Path(path).name.upper() != "CODEOWNERS":
+            continue
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            owners = [part for part in parts[1:] if part.startswith("@") or "@" in part]
+            if owners:
+                return owners[0]
+    return ""
+
+
+def _major_version(value: str) -> int | None:
+    match = re.search(r"(\d+)", str(value or ""))
+    return int(match.group(1)) if match else None
+
+
+def _normalize_runtime_version(runtime: str, version: str) -> str:
+    text = str(version or "").strip()
+    major = _major_version(text)
+    if runtime == "Python":
+        if major is None:
+            return text
+        minor_match = re.search(r"(\d+)\.(\d+)", text)
+        if minor_match:
+            return f"{minor_match.group(1)}.{minor_match.group(2)}"
+        return str(major)
+    if runtime == "Node.js":
+        if major is None:
+            return text
+        if major < 18:
+            return "<18"
+        if major < 20:
+            return "18.x"
+        if major < 22:
+            return "20.x"
+        return f"{major}.x"
+    if runtime == "JVM":
+        if major is None:
+            return text
+        if major <= 8:
+            return "8"
+        if major <= 11:
+            return "11"
+        if major <= 17:
+            return "17"
+        return f"{major}+"
+    if runtime == "Go":
+        if major is None:
+            return text
+        minor_match = re.search(r"(\d+)\.(\d+)", text)
+        if minor_match:
+            return f"{minor_match.group(1)}.{minor_match.group(2)}"
+        return str(major)
+    if runtime == ".NET":
+        if major is None:
+            return text
+        if major < 6:
+            return "<6"
+        if major < 8:
+            return "6-7"
+        return f"{major}+"
+    return text
+
+
+def _parse_package_json_dependencies(text: str) -> list[str]:
+    try:
+        payload = json.loads(text or "{}")
+    except Exception:
+        return []
+    deps: set[str] = set()
+    for key in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+        values = payload.get(key) or {}
+        if isinstance(values, dict):
+            deps.update(str(name).strip() for name in values.keys() if str(name).strip())
+    return sorted(deps)
+
+
+def _parse_requirements_dependencies(text: str) -> list[str]:
+    deps: set[str] = set()
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or line.startswith("-"):
+            continue
+        line = re.split(r"[<>=!~\[\s]", line, maxsplit=1)[0].strip()
+        if line:
+            deps.add(line)
+    return sorted(deps)
+
+
+def _parse_pyproject_dependencies(text: str) -> list[str]:
+    deps: set[str] = set()
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip().strip(",")
+        if not line or line.startswith("["):
+            continue
+        if "=" in line and not line.startswith('"') and not line.startswith("'"):
+            name = line.split("=", 1)[0].strip().strip('"\'')
+        else:
+            name = line.strip('"\'')
+        name = re.split(r"[<>=!~\[\s]", name, maxsplit=1)[0].strip()
+        if name and re.match(r"[A-Za-z0-9_.-]+$", name):
+            deps.add(name)
+    return sorted(deps)
+
+
+def _parse_pom_dependencies(text: str) -> list[str]:
+    deps = re.findall(r"<artifactId>([^<]+)</artifactId>", str(text or ""), re.IGNORECASE)
+    return sorted({dep.strip() for dep in deps if dep.strip() and dep.strip().lower() not in {"project"}})
+
+
+def _parse_go_mod_dependencies(text: str) -> list[str]:
+    deps: set[str] = set()
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("module ") or line.startswith("go ") or line.startswith("require (") or line == ")":
+            continue
+        if line.startswith("require "):
+            line = line[len("require "):].strip()
+        dep = line.split()[0].strip()
+        if dep:
+            deps.add(dep)
+    return sorted(deps)
+
+
+def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str, Any]] | None = None, repo_owner: str = "") -> dict[str, Any]:
     root = Path(repo_root)
     names, contents = _interesting_repo_files(root)
     lower_names = {name.lower() for name in names}
@@ -170,6 +301,7 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
     api_types: list[str] = []
     event_systems: list[str] = []
     dependency_files: list[str] = []
+    dependency_names: set[str] = set()
 
     has_package_json = "package.json" in lower_names
     has_pyproject = "pyproject.toml" in lower_names
@@ -203,6 +335,7 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
         dependency_files.append(".csproj")
 
     package_json = contents.get("package.json", "")
+    dependency_names.update(_parse_package_json_dependencies(package_json))
     if re.search(r'"react"\s*:', package_json, re.IGNORECASE) or _content_matches(contents, r"\bfrom ['\"]react['\"]|\breact-dom\b"):
         technologies.append("React")
     if "angular.json" in lower_names or re.search(r"@angular/core", package_json, re.IGNORECASE):
@@ -236,6 +369,13 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
     )
     go_version = _extract_first(contents, r"^go\s+([0-9.]+)$")
     dotnet_version = _extract_first(contents, r"<TargetFramework(?:s)?>([^<]+)</TargetFramework(?:s)?>")
+    dependency_names.update(_parse_requirements_dependencies("\n".join(text for path, text in contents.items() if path.lower().endswith("requirements.txt"))))
+    if has_pyproject:
+        dependency_names.update(_parse_pyproject_dependencies(contents.get("pyproject.toml", "")))
+    if has_pom:
+        dependency_names.update(_parse_pom_dependencies(contents.get("pom.xml", "")))
+    if "go.mod" in lower_names:
+        dependency_names.update(_parse_go_mod_dependencies(contents.get("go.mod", "")))
     for runtime, version in (
         ("Python", python_version),
         ("Node.js", node_version),
@@ -244,7 +384,7 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
         (".NET", dotnet_version),
     ):
         if version:
-            runtime_versions[runtime] = version
+            runtime_versions[runtime] = _normalize_runtime_version(runtime, version)
 
     if any(name.endswith(".tf") for name in lower_names):
         iac_tools.append("Terraform")
@@ -307,6 +447,11 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
         ("CI Pipeline", has_ci_pipeline),
         ("Tests", has_tests),
     ) if not present]
+    codeowners_owner = _codeowners_owner(contents)
+    owner = codeowners_owner or str(repo_owner or "").strip()
+    owner_label = owner or "Unowned"
+    owner_key = owner_label.strip().lower()
+    is_orphaned = owner_key in {"", "unknown", "user", "unowned"}
 
     findings_list = list(findings or [])
     ai_profile = build_inventory(findings_list, repo_slugs=[repo])["repo_profiles"][0] if repo else {}
@@ -321,10 +466,14 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
             "api_types": sorted(set(api_types)),
             "event_systems": sorted(set(event_systems)),
             "dependency_files": sorted(set(dependency_files)),
+            "dependency_names": sorted(dependency_names),
             "governance": governance,
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),
             "has_api_surface": bool(api_types),
+            "owner": owner_label,
+            "owner_source": "codeowners" if codeowners_owner else ("repo_metadata" if owner else "none"),
+            "is_orphaned": is_orphaned,
         }
     )
     return ai_profile
@@ -340,6 +489,7 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
     missing_governance_repos = 0
     iac_repos = 0
     api_repos = 0
+    dependency_counts: Counter[str] = Counter()
 
     for finding in findings:
         repo = str(finding.get("repo", "") or "")
@@ -405,6 +555,7 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         api_types = sorted(set(facts.get("api_types", []) or []))
         event_systems = sorted(set(facts.get("event_systems", []) or []))
         dependency_files = sorted(set(facts.get("dependency_files", []) or []))
+        dependency_names = sorted(set(facts.get("dependency_names", []) or []))
         governance = dict(facts.get("governance") or {})
         missing_governance = list(facts.get("missing_governance") or [])
         for runtime in runtimes:
@@ -417,6 +568,8 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             iac_repos += 1
         if api_types:
             api_repos += 1
+        for dep in dependency_names:
+            dependency_counts[dep] += 1
         serialised_profiles.append({
             "repo": repo,
             "finding_count": base["finding_count"],
@@ -436,6 +589,7 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "api_types": api_types,
             "event_systems": event_systems,
             "dependency_files": dependency_files,
+            "dependency_names": dependency_names,
             "governance": governance,
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),
@@ -468,6 +622,8 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         "missing_governance_repos": missing_governance_repos,
         "iac_repos": iac_repos,
         "api_repos": api_repos,
+        "dependency_count": len(dependency_counts),
+        "dependencies_by_count": [{"dependency": key, "count": count} for key, count in dependency_counts.most_common()],
         "runtimes_by_count": [{"runtime": key, "count": count} for key, count in runtime_counts.most_common()],
         "technologies_by_count": [{"technology": key, "count": count} for key, count in technology_counts.most_common()],
         "repo_profiles": serialised_profiles,
