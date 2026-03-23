@@ -3900,7 +3900,9 @@ def test_inventory_page_is_server_rendered():
                 "has_iac": True,
                 "has_api_surface": True,
                 "agent_tool_use": True,
-                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift"],
+                "risky_repo": True,
+                "orphaned_risky": False,
+                "usage_tags": ["iac", "api", "agent", "missing_governance", "dependency_risk", "ai_drift_risk", "shared_internal_libs", "runtime_drift", "risky"],
                 "reports": {"html_name": "demo.html"},
             },
             {
@@ -3942,7 +3944,9 @@ def test_inventory_page_is_server_rendered():
                 "has_iac": True,
                 "has_api_surface": True,
                 "agent_tool_use": False,
-                "usage_tags": ["iac", "api", "missing_governance", "orphaned", "dependency_risk", "shared_internal_libs", "runtime_drift"],
+                "risky_repo": True,
+                "orphaned_risky": True,
+                "usage_tags": ["iac", "api", "missing_governance", "orphaned", "dependency_risk", "shared_internal_libs", "runtime_drift", "risky", "orphaned_risky"],
                 "reports": {},
             },
         ],
@@ -3963,6 +3967,8 @@ def test_inventory_page_is_server_rendered():
             "runtime_drift_repos": 2,
             "dependency_risk_repos": 2,
             "ai_drift_risk_repos": 1,
+            "risky_repos": 2,
+            "orphaned_risky_repos": 1,
             "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
             "owner_missing_governance_rollup": [("Unowned", 1), ("@team-platform", 1)],
             "owner_shared_asset_rollup": [("Unowned", 3), ("@team-platform", 3)],
@@ -3996,6 +4002,8 @@ def test_inventory_page_is_server_rendered():
     assert "Latest known repository classification per repo from scan history." in html
     assert "repo1" in html
     assert "@team-platform" in html
+    assert "Risky Repos" in html
+    assert "Orphaned Risky" in html
     assert "React, Django" in html
     assert "Node.js, Python" in html
     assert "Terraform, AWS" in html
@@ -4048,6 +4056,8 @@ def test_inventory_page_is_server_rendered():
     assert 'id="inventory-dependency"' in html
     assert 'href="/reports/demo.html"' in html
     assert 'href="/inventory/repo?project=COGI&repo=repo1"' in html
+    assert '>Profile</a>' in html
+    assert '>Findings</a>' in html
 
 
 def test_inventory_repo_page_is_server_rendered():
@@ -4080,6 +4090,9 @@ def test_inventory_repo_page_is_server_rendered():
             "has_review_gate": True,
             "dependency_names": ["axios", "react"],
             "internal_dependency_names": ["@cognyte/ui"],
+            "shared_internal_libs": ["@cognyte/ui"],
+            "runtime_drift_labels": ["Node.js <18"],
+            "framework_drift_labels": ["React on Node.js <18"],
             "missing_governance": ["SECURITY.md"],
             "reports": {"html_name": "demo.html", "json_name": "demo.json"},
         },
@@ -4095,7 +4108,7 @@ def test_inventory_repo_page_is_server_rendered():
         ],
     ).decode("utf-8")
 
-    assert "Latest repository profile with recent scan history and direct workflow links." in html
+    assert "Latest repository profile with recent scan history, governance context, and direct workflow links." in html
     assert '<a href="/inventory">Inventory</a> / COGI' in html
     assert ">repo1</h2>" in html
     assert "Open Findings" in html
@@ -4107,6 +4120,8 @@ def test_inventory_repo_page_is_server_rendered():
     assert "Produced: orders.created | Consumed: orders.created" in html
     assert "Internal Hosts" in html
     assert "svc.cognyte.local" in html
+    assert "Current Action Focus" in html
+    assert "React on Node.js &lt;18" in html
     assert "Recent Scans" in html
     assert "00:45" in html
 

@@ -934,6 +934,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         ai_usage = bool(item.get("finding_count", 0) or item.get("provider_labels"))
         dependency_risk = external_dependency_count >= 3 and weak_governance
         ai_drift_risk = ai_usage and bool(drift_labels or dependency_risk)
+        risky_repo = bool(drift_labels or dependency_risk or framework_drift or weak_governance)
+        orphaned_risky = bool(item.get("is_orphaned")) and risky_repo
 
         item["runtime_drift_labels"] = drift_labels
         item["framework_drift_labels"] = framework_drift
@@ -941,6 +943,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         item["external_dependency_count"] = external_dependency_count
         item["dependency_risk"] = dependency_risk
         item["ai_drift_risk"] = ai_drift_risk
+        item["risky_repo"] = risky_repo
+        item["orphaned_risky"] = orphaned_risky
         usage_tags = list(item.get("usage_tags", []) or [])
         if drift_labels:
             usage_tags.append("runtime_drift")
@@ -950,6 +954,10 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             usage_tags.append("dependency_risk")
         if ai_drift_risk:
             usage_tags.append("ai_drift_risk")
+        if risky_repo:
+            usage_tags.append("risky")
+        if orphaned_risky:
+            usage_tags.append("orphaned_risky")
         item["usage_tags"] = sorted(set(usage_tags))
 
         for label in drift_labels:
@@ -1003,6 +1011,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "runtime_drift_repos": sum(1 for item in repo_inventory if item.get("runtime_drift_labels")),
         "dependency_risk_repos": sum(1 for item in repo_inventory if item.get("dependency_risk")),
         "ai_drift_risk_repos": sum(1 for item in repo_inventory if item.get("ai_drift_risk")),
+        "risky_repos": sum(1 for item in repo_inventory if item.get("risky_repo")),
+        "orphaned_risky_repos": sum(1 for item in repo_inventory if item.get("orphaned_risky")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
