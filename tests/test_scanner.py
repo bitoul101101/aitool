@@ -3946,6 +3946,12 @@ def test_inventory_page_is_server_rendered():
                 "inbound_dependency_risk": True,
                 "outbound_dependency_risk": False,
                 "critical_infrastructure_risk": True,
+                "service_role": "ui",
+                "boundary_violations": ["UI depends on disallowed worker repo repo2"],
+                "boundary_violation_count": 1,
+                "has_boundary_violations": True,
+                "architecture_drift_examples": ["New repo dependencies: repo2"],
+                "has_architecture_drift": True,
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": True,
@@ -4008,6 +4014,12 @@ def test_inventory_page_is_server_rendered():
                 "inbound_dependency_risk": False,
                 "outbound_dependency_risk": True,
                 "critical_infrastructure_risk": True,
+                "service_role": "worker",
+                "boundary_violations": [],
+                "boundary_violation_count": 0,
+                "has_boundary_violations": False,
+                "architecture_drift_examples": [],
+                "has_architecture_drift": False,
                 "external_dependency_count": 3,
                 "dependency_risk": True,
                 "ai_drift_risk": False,
@@ -4055,6 +4067,8 @@ def test_inventory_page_is_server_rendered():
             "inbound_dependency_risk_repos": 1,
             "outbound_dependency_risk_repos": 1,
             "critical_infrastructure_repos": 2,
+            "boundary_violation_repos": 1,
+            "architecture_drift_repos": 1,
             "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
             "owner_missing_governance_rollup": [("Unowned", 1), ("@team-platform", 1)],
             "owner_risky_rollup": [("@team-platform", 1), ("Unowned", 1)],
@@ -4095,6 +4109,8 @@ def test_inventory_page_is_server_rendered():
             "inbound_dependency_rollup": [("repo1", 2)],
             "outbound_dependency_rollup": [("repo2", 2)],
             "critical_infrastructure_rollup": [("repo1", 3), ("repo2", 3)],
+            "boundary_violation_rollup": [("UI depends on disallowed worker repo repo2", 1)],
+            "architecture_drift_rollup": [("New repo dependencies: repo2", 1)],
             "policy_violation_rollup": [
                 ("API repos require SECURITY.md", 2),
                 ("Weak-governance repos cannot carry heavy external dependency load", 2),
@@ -4153,6 +4169,8 @@ def test_inventory_page_is_server_rendered():
     assert "High Inbound Risk" in html
     assert "High Outbound Risk" in html
     assert "Critical Infrastructure" in html
+    assert "Boundary Violations" in html
+    assert "Architecture Drift" in html
     assert "Policy Violations" in html
     assert "Owners of Shared Assets" in html
     assert "Orphaned Exposed Repos" in html
@@ -4166,6 +4184,8 @@ def test_inventory_page_is_server_rendered():
     assert "In: 2" in html
     assert "Out: 2" in html
     assert "Critical Infra" in html
+    assert "Boundary: 1" in html
+    assert "Drift" in html
     assert "a.py -&gt; b.py -&gt; a.py" in html
     assert "repo1 ↔ repo2" in html
     assert "Hardcoded cross-service calls" in html
@@ -4256,6 +4276,9 @@ def test_inventory_repo_page_is_server_rendered():
             "inbound_dependency_count": 2,
             "outbound_dependency_count": 1,
             "dependency_centrality_score": 3,
+            "service_role": "ui",
+            "boundary_violations": ["UI depends on disallowed worker repo repo2"],
+            "architecture_drift_examples": ["New repo dependencies: repo2"],
             "missing_governance": ["SECURITY.md"],
             "reports": {"html_name": "demo.html", "json_name": "demo.json"},
         },
@@ -4304,6 +4327,12 @@ def test_inventory_repo_page_is_server_rendered():
     assert "Dependency Health" in html
     assert "Inbound: 2 | Outbound: 1 | Centrality: 3" in html
     assert "Centrality" in html
+    assert "Service Role" in html
+    assert "Boundary Validation" in html
+    assert "Architecture Drift" in html
+    assert "ui" in html
+    assert "UI depends on disallowed worker repo repo2" in html
+    assert "New repo dependencies: repo2" in html
     assert "repo2" in html
     assert "Hardcoded cross-service calls" in html
     assert "DB access in src/service/metrics.py" in html
@@ -4465,6 +4494,92 @@ def test_inventory_snapshot_tracks_dependency_peers_for_architecture_docs():
     repo_map = {item["repo"]: item for item in repo_inventory}
     assert repo_map["repo1"]["inbound_repo_dependents"] == ["repo2", "repo3"]
     assert repo_map["repo2"]["outbound_repo_dependencies"] == ["repo1"]
+
+
+def test_inventory_snapshot_detects_boundary_violations_and_architecture_drift():
+    import app_server as srv
+
+    history = [
+        {
+            "scan_id": "20260322_090000",
+            "project_key": "COGI",
+            "started_at_utc": "2026-03-22T09:00:00Z",
+            "completed_at_utc": "2026-03-22T09:05:00Z",
+            "inventory": {
+                "repo_profiles": [
+                    {
+                        "repo": "frontend",
+                        "technologies": ["React"],
+                        "internal_dependency_names": [],
+                        "dependency_names": [],
+                        "external_dependency_names": [],
+                        "api_types": [],
+                        "event_systems": [],
+                        "api_boundaries": [],
+                    },
+                    {
+                        "repo": "worker",
+                        "technologies": [],
+                        "internal_dependency_names": [],
+                        "dependency_names": [],
+                        "external_dependency_names": [],
+                        "api_types": [],
+                        "event_systems": ["Kafka"],
+                        "api_boundaries": [],
+                        "consumed_topics": ["orders.created"],
+                    },
+                ]
+            },
+            "reports": {"__all__": {}},
+        },
+        {
+            "scan_id": "20260323_090000",
+            "project_key": "COGI",
+            "started_at_utc": "2026-03-23T09:00:00Z",
+            "completed_at_utc": "2026-03-23T09:05:00Z",
+            "inventory": {
+                "repo_profiles": [
+                    {
+                        "repo": "frontend",
+                        "technologies": ["React"],
+                        "internal_dependency_names": ["worker"],
+                        "dependency_names": ["worker"],
+                        "external_dependency_names": [],
+                        "api_types": [],
+                        "event_systems": [],
+                        "api_boundaries": [],
+                    },
+                    {
+                        "repo": "worker",
+                        "technologies": [],
+                        "internal_dependency_names": [],
+                        "dependency_names": [],
+                        "external_dependency_names": [],
+                        "api_types": [],
+                        "event_systems": ["Kafka"],
+                        "api_boundaries": [],
+                        "consumed_topics": ["orders.created"],
+                    },
+                ]
+            },
+            "reports": {"__all__": {}},
+        },
+    ]
+
+    original = srv._history_records_for_user
+    try:
+        srv._history_records_for_user = lambda: history
+        repo_inventory, summary = srv._inventory_snapshot_for_user()
+    finally:
+        srv._history_records_for_user = original
+
+    repo_map = {item["repo"]: item for item in repo_inventory}
+    assert repo_map["frontend"]["service_role"] == "ui"
+    assert repo_map["frontend"]["has_boundary_violations"] is True
+    assert "UI depends on disallowed worker repo worker" in repo_map["frontend"]["boundary_violations"]
+    assert repo_map["frontend"]["has_architecture_drift"] is True
+    assert "New repo dependencies: worker" in repo_map["frontend"]["architecture_drift_examples"]
+    assert summary["boundary_violation_rollup"] == [("UI depends on disallowed worker repo worker", 1)]
 
 
 def test_inventory_repo_detail_collects_recent_scans_for_repo():

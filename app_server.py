@@ -790,6 +790,27 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             violations.append("Weak-governance repos cannot carry heavy external dependency load")
         return violations
 
+    def _service_role(item: dict) -> str:
+        techs = set(item.get("technologies", []) or [])
+        if techs & {"React", "Angular"}:
+            return "ui"
+        if item.get("has_api_surface"):
+            return "api"
+        if (item.get("produced_topics") or item.get("consumed_topics") or item.get("event_systems")):
+            return "worker"
+        if item.get("has_iac"):
+            return "platform"
+        return "service"
+
+    def _boundary_signature(item: dict) -> tuple:
+        return (
+            _service_role(item),
+            tuple(sorted(item.get("internal_dependency_names", []) or [])),
+            tuple(sorted(item.get("api_boundaries", []) or [])),
+            tuple(sorted(item.get("event_systems", []) or [])),
+            bool(item.get("has_api_surface")),
+        )
+
     def _normalize_repo_token(value: str) -> str:
         token = str(value or "").strip().lower()
         if "/" in token:
@@ -797,6 +818,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         return token.replace("_", "-").replace(".", "-")
 
     latest_by_repo: dict[str, dict] = {}
+    previous_by_repo: dict[str, dict] = {}
     for record in _history_records_for_user():
         inventory = record.get("inventory") or {}
         profiles = inventory.get("repo_profiles") or []
@@ -892,8 +914,16 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 "reports": (record.get("reports") or {}).get("__all__", {}),
             }
             previous = latest_by_repo.get(repo)
+            previous_candidate = previous_by_repo.get(repo)
             if not previous or candidate["last_scan_at_utc"] >= previous["last_scan_at_utc"]:
+                if previous and (
+                    not previous_candidate
+                    or previous["last_scan_at_utc"] >= previous_candidate["last_scan_at_utc"]
+                ):
+                    previous_by_repo[repo] = previous
                 latest_by_repo[repo] = candidate
+            elif not previous_candidate or candidate["last_scan_at_utc"] >= previous_candidate["last_scan_at_utc"]:
+                previous_by_repo[repo] = candidate
     repo_inventory = sorted(
         latest_by_repo.values(),
         key=lambda item: (item.get("last_scan_at_utc", ""), item.get("repo", "")),
@@ -933,6 +963,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     inbound_dependency_rollup: dict[str, int] = {}
     outbound_dependency_rollup: dict[str, int] = {}
     central_dependency_rollup: dict[str, int] = {}
+    boundary_violation_rollup: dict[str, int] = {}
+    architecture_drift_rollup: dict[str, int] = {}
     policy_violation_rollup: dict[str, int] = {}
     owner_policy_violation_rollup: dict[str, int] = {}
     for item in repo_inventory:
@@ -1102,6 +1134,77 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["critical_infrastructure"]))
             central_dependency_rollup[repo_name] = dependency_centrality_score
 
+    role_map = {str(item.get("repo", "") or ""): _service_role(item) for item in repo_inventory}
+    allowed_targets = {
+        "ui": {"api", "library"},
+        "api": {"service", "worker", "library", "platform"},
+        "service": {"service", "worker", "library", "platform"},
+        "worker": {"service", "worker", "library", "platform"},
+        "platform": {"platform", "library"},
+        "library": {"library"},
+    }
+    for item in repo_inventory:
+        repo_name = str(item.get("repo", "") or "")
+        service_role = _service_role(item)
+        boundary_violations: list[str] = []
+        outbound_targets = list(item.get("outbound_repo_dependencies", []) or [])
+        if service_role == "ui" and (item.get("produced_topics") or item.get("consumed_topics")):
+            boundary_violations.append("UI service should not use event-driven communication directly")
+        if service_role == "ui" and outbound_targets:
+            for target in outbound_targets:
+                target_role = role_map.get(target, "service")
+                if target_role not in allowed_targets["ui"]:
+                    boundary_violations.append(f"UI depends on disallowed {target_role} repo {target}")
+        if service_role == "api":
+            for target in outbound_targets:
+                target_role = role_map.get(target, "service")
+                if target_role == "ui":
+                    boundary_violations.append(f"API depends on UI repo {target}")
+        if service_role in {"service", "worker"}:
+            for target in outbound_targets:
+                target_role = role_map.get(target, "service")
+                if target_role == "ui":
+                    boundary_violations.append(f"{service_role.title()} depends on UI repo {target}")
+        if service_role == "platform" and item.get("has_api_surface"):
+            boundary_violations.append("Platform repo exposes application API surface")
+        if service_role == "service" and item.get("external_api_hosts"):
+            boundary_violations.append("Service calls external APIs directly")
+
+        item["service_role"] = service_role
+        item["boundary_violations"] = boundary_violations
+        item["boundary_violation_count"] = len(boundary_violations)
+        item["has_boundary_violations"] = bool(boundary_violations)
+        if boundary_violations:
+            item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["boundary_violation"]))
+            for violation in boundary_violations:
+                boundary_violation_rollup[violation] = boundary_violation_rollup.get(violation, 0) + 1
+
+        previous_item = previous_by_repo.get(repo_name)
+        architecture_drift_examples: list[str] = []
+        if previous_item:
+            previous_role = _service_role(previous_item)
+            if previous_role != service_role:
+                architecture_drift_examples.append(f"Role changed from {previous_role} to {service_role}")
+            previous_signature = _boundary_signature(previous_item)
+            current_signature = _boundary_signature(item)
+            if previous_signature != current_signature:
+                previous_deps = set(previous_item.get("internal_dependency_names", []) or [])
+                current_deps = set(item.get("internal_dependency_names", []) or [])
+                added = sorted(current_deps - previous_deps)
+                removed = sorted(previous_deps - current_deps)
+                if added:
+                    architecture_drift_examples.append("New repo dependencies: " + ", ".join(added[:3]))
+                if removed:
+                    architecture_drift_examples.append("Removed repo dependencies: " + ", ".join(removed[:3]))
+                if not architecture_drift_examples:
+                    architecture_drift_examples.append("Boundary posture changed since previous scan")
+        item["architecture_drift_examples"] = architecture_drift_examples[:8]
+        item["has_architecture_drift"] = bool(architecture_drift_examples)
+        if architecture_drift_examples:
+            item["usage_tags"] = sorted(set(list(item.get("usage_tags", []) or []) + ["architecture_drift"]))
+            for drift in architecture_drift_examples:
+                architecture_drift_rollup[drift] = architecture_drift_rollup.get(drift, 0) + 1
+
     for item in repo_inventory:
         shared_internal_lib_count = sum(
             1
@@ -1168,6 +1271,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "inbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("inbound_dependency_risk")),
         "outbound_dependency_risk_repos": sum(1 for item in repo_inventory if item.get("outbound_dependency_risk")),
         "critical_infrastructure_repos": sum(1 for item in repo_inventory if item.get("critical_infrastructure_risk")),
+        "boundary_violation_repos": sum(1 for item in repo_inventory if item.get("has_boundary_violations")),
+        "architecture_drift_repos": sum(1 for item in repo_inventory if item.get("has_architecture_drift")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1227,6 +1332,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "inbound_dependency_rollup": sorted(inbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "outbound_dependency_rollup": sorted(outbound_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
         "critical_infrastructure_rollup": sorted(central_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "boundary_violation_rollup": sorted(boundary_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "architecture_drift_rollup": sorted(architecture_drift_rollup.items(), key=lambda item: (-item[1], item[0])),
         "policy_violation_rollup": sorted(policy_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary
@@ -1365,6 +1472,9 @@ def _inventory_export_payload(repo_inventory: list[dict], filters: dict[str, str
                 "inbound_dependencies": int(item.get("inbound_dependency_count", 0) or 0),
                 "outbound_dependencies": int(item.get("outbound_dependency_count", 0) or 0),
                 "dependency_centrality": int(item.get("dependency_centrality_score", 0) or 0),
+                "service_role": str(item.get("service_role", "") or ""),
+                "boundary_violations": ", ".join(item.get("boundary_violations", []) or []),
+                "architecture_drift": " | ".join(item.get("architecture_drift_examples", []) or []),
                 "risk_flags": ", ".join(item.get("usage_tags", []) or []),
                 "html_report": str((item.get("reports") or {}).get("html_name", "") or ""),
             }
