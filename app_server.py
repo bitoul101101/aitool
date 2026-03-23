@@ -762,6 +762,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 "event_systems": list(profile.get("event_systems", []) or []),
                 "dependency_files": list(profile.get("dependency_files", []) or []),
                 "dependency_names": list(profile.get("dependency_names", []) or []),
+                "internal_dependency_names": list(profile.get("internal_dependency_names", []) or []),
+                "external_dependency_names": list(profile.get("external_dependency_names", []) or []),
                 "governance": dict(profile.get("governance") or {}),
                 "missing_governance": list(profile.get("missing_governance", []) or []),
                 "has_iac": bool(profile.get("has_iac")),
@@ -805,6 +807,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     version_rollup: dict[str, int] = {}
     owner_rollup: dict[str, int] = {}
     dependency_rollup: dict[str, int] = {}
+    internal_dependency_rollup: dict[str, int] = {}
+    external_dependency_rollup: dict[str, int] = {}
     for item in repo_inventory:
         for runtime in item.get("runtimes", []) or []:
             runtime_rollup[runtime] = runtime_rollup.get(runtime, 0) + 1
@@ -825,6 +829,10 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             version_rollup[key] = version_rollup.get(key, 0) + 1
         for dependency in item.get("dependency_names", []) or []:
             dependency_rollup[dependency] = dependency_rollup.get(dependency, 0) + 1
+        for dependency in item.get("internal_dependency_names", []) or []:
+            internal_dependency_rollup[dependency] = internal_dependency_rollup.get(dependency, 0) + 1
+        for dependency in item.get("external_dependency_names", []) or []:
+            external_dependency_rollup[dependency] = external_dependency_rollup.get(dependency, 0) + 1
         owner = str(item.get("owner", "") or "").strip() or "Unowned"
         owner_rollup[owner] = owner_rollup.get(owner, 0) + 1
     summary = {
@@ -840,6 +848,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "api_repos": sum(1 for item in repo_inventory if item.get("has_api_surface")),
         "orphaned_repos": sum(1 for item in repo_inventory if item.get("is_orphaned")),
         "dependency_count": len(dependency_rollup),
+        "internal_dependency_repos": sum(1 for item in repo_inventory if item.get("internal_dependency_names")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
         "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -848,6 +857,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "version_rollup": sorted(version_rollup.items(), key=lambda item: (-item[1], item[0])),
         "owner_rollup": sorted(owner_rollup.items(), key=lambda item: (-item[1], item[0])),
         "dependency_rollup": sorted(dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "internal_dependency_rollup": sorted(internal_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "external_dependency_rollup": sorted(external_dependency_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary
 

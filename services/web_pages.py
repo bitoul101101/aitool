@@ -1120,6 +1120,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         ai_text = provider_text or "-"
         owner_text = str(item.get("owner", "") or "Unowned")
         dependency_text = ", ".join(item.get("dependency_names", [])[:6])
+        internal_dependency_text = ", ".join(item.get("internal_dependency_names", [])[:4]) or "-"
         date_text, time_text, ts = _fmt_dt(item.get("last_scan_at_utc", ""))
         reports = item.get("reports") or {}
         html_link = (
@@ -1148,6 +1149,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             f'<td>{_esc(platform_text)}</td>'
             f'<td>{_esc(api_text)}</td>'
             f'<td>{_esc(dependency_text or "-")}</td>'
+            f'<td>{_esc(internal_dependency_text)}</td>'
             f'<td>{_esc(ai_text)}</td>'
             f'<td>{html_link}</td>'
             "</tr>"
@@ -1168,6 +1170,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
       <div class="inventory-card-stat"><span class="baseline-label">API Surface</span><strong>{_esc(summary.get("api_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Orphaned</span><strong>{_esc(summary.get("orphaned_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Dependencies</span><strong>{_esc(summary.get("dependency_count", 0))}</strong></div>
+      <div class="inventory-card-stat"><span class="baseline-label">Repos Using Internal Libs</span><strong>{_esc(summary.get("internal_dependency_repos", 0))}</strong></div>
       <div class="inventory-card-stat"><span class="baseline-label">Repos Using AI</span><strong>{_esc(summary.get("repos_using_ai_count", 0))}</strong></div>
     </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
@@ -1179,6 +1182,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
       <section class="inventory-rollup-card"><strong>IaC / Cloud</strong>{_rollup_list(list(summary.get("iac_rollup", []) or []), "No IaC or cloud markers yet.")}</section>
       <section class="inventory-rollup-card"><strong>API / Events</strong>{_rollup_list(list(summary.get("api_rollup", []) or []), "No API surface detected.")}</section>
       <section class="inventory-rollup-card"><strong>Dependencies</strong>{_rollup_list(list(summary.get("dependency_rollup", []) or []), "No dependency data yet.")}</section>
+      <section class="inventory-rollup-card"><strong>Internal Dependencies</strong>{_rollup_list(list(summary.get("internal_dependency_rollup", []) or []), "No internal dependencies detected.")}</section>
+      <section class="inventory-rollup-card"><strong>External Dependencies</strong>{_rollup_list(list(summary.get("external_dependency_rollup", []) or []), "No external dependencies detected.")}</section>
     </div>
   </section>
 
@@ -1214,11 +1219,12 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
                 <th data-sort="text">IaC / Cloud</th>
                 <th data-sort="text">API / Events</th>
                 <th data-sort="text">Dependencies</th>
+                <th data-sort="text">Internal Deps</th>
                 <th data-sort="text">AI Profile</th>
                 <th>HTML</th>
               </tr>
             </thead>
-        <tbody>{''.join(rows) or '<tr><td colspan="13">No repository inventory available yet.</td></tr>'}</tbody>
+        <tbody>{''.join(rows) or '<tr><td colspan="14">No repository inventory available yet.</td></tr>'}</tbody>
       </table>
     </div>
   </section>

@@ -287,6 +287,28 @@ def _parse_go_mod_dependencies(text: str) -> list[str]:
     return sorted(deps)
 
 
+def _classify_dependency_scope(name: str) -> str:
+    dep = str(name or "").strip().lower()
+    if not dep:
+        return "external"
+    internal_markers = (
+        "@cognyte/",
+        "cognyte-",
+        "cognyte_",
+        "cognyte.",
+        "bitbucket.cognyte.local/",
+        "cognyte.local/",
+        "git.cognyte.",
+        "cgnt-",
+        "cgnt_",
+    )
+    if dep.startswith(internal_markers):
+        return "internal"
+    if ".cognyte." in dep or dep.endswith(".cognyte.local") or dep.endswith(".local"):
+        return "internal"
+    return "external"
+
+
 def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str, Any]] | None = None, repo_owner: str = "") -> dict[str, Any]:
     root = Path(repo_root)
     names, contents = _interesting_repo_files(root)
@@ -302,6 +324,8 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
     event_systems: list[str] = []
     dependency_files: list[str] = []
     dependency_names: set[str] = set()
+    internal_dependency_names: set[str] = set()
+    external_dependency_names: set[str] = set()
 
     has_package_json = "package.json" in lower_names
     has_pyproject = "pyproject.toml" in lower_names
@@ -454,6 +478,11 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
     is_orphaned = owner_key in {"", "unknown", "user", "unowned"}
 
     findings_list = list(findings or [])
+    for dependency in dependency_names:
+        if _classify_dependency_scope(dependency) == "internal":
+            internal_dependency_names.add(dependency)
+        else:
+            external_dependency_names.add(dependency)
     ai_profile = build_inventory(findings_list, repo_slugs=[repo])["repo_profiles"][0] if repo else {}
     ai_profile.update(
         {
@@ -467,6 +496,8 @@ def collect_repo_facts(repo_root: str | Path, repo: str, findings: list[dict[str
             "event_systems": sorted(set(event_systems)),
             "dependency_files": sorted(set(dependency_files)),
             "dependency_names": sorted(dependency_names),
+            "internal_dependency_names": sorted(internal_dependency_names),
+            "external_dependency_names": sorted(external_dependency_names),
             "governance": governance,
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),
@@ -490,6 +521,9 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
     iac_repos = 0
     api_repos = 0
     dependency_counts: Counter[str] = Counter()
+    internal_dependency_counts: Counter[str] = Counter()
+    external_dependency_counts: Counter[str] = Counter()
+    internal_dependency_repos = 0
 
     for finding in findings:
         repo = str(finding.get("repo", "") or "")
@@ -556,6 +590,8 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         event_systems = sorted(set(facts.get("event_systems", []) or []))
         dependency_files = sorted(set(facts.get("dependency_files", []) or []))
         dependency_names = sorted(set(facts.get("dependency_names", []) or []))
+        internal_dependency_names = sorted(set(facts.get("internal_dependency_names", []) or []))
+        external_dependency_names = sorted(set(facts.get("external_dependency_names", []) or []))
         governance = dict(facts.get("governance") or {})
         missing_governance = list(facts.get("missing_governance") or [])
         for runtime in runtimes:
@@ -570,6 +606,12 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             api_repos += 1
         for dep in dependency_names:
             dependency_counts[dep] += 1
+        if internal_dependency_names:
+            internal_dependency_repos += 1
+        for dep in internal_dependency_names:
+            internal_dependency_counts[dep] += 1
+        for dep in external_dependency_names:
+            external_dependency_counts[dep] += 1
         serialised_profiles.append({
             "repo": repo,
             "finding_count": base["finding_count"],
@@ -590,6 +632,8 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
             "event_systems": event_systems,
             "dependency_files": dependency_files,
             "dependency_names": dependency_names,
+            "internal_dependency_names": internal_dependency_names,
+            "external_dependency_names": external_dependency_names,
             "governance": governance,
             "missing_governance": missing_governance,
             "has_iac": bool(iac_tools),
@@ -623,7 +667,10 @@ def build_inventory(findings: list[dict[str, Any]], repo_slugs: list[str] | None
         "iac_repos": iac_repos,
         "api_repos": api_repos,
         "dependency_count": len(dependency_counts),
+        "internal_dependency_repos": internal_dependency_repos,
         "dependencies_by_count": [{"dependency": key, "count": count} for key, count in dependency_counts.most_common()],
+        "internal_dependencies_by_count": [{"dependency": key, "count": count} for key, count in internal_dependency_counts.most_common()],
+        "external_dependencies_by_count": [{"dependency": key, "count": count} for key, count in external_dependency_counts.most_common()],
         "runtimes_by_count": [{"runtime": key, "count": count} for key, count in runtime_counts.most_common()],
         "technologies_by_count": [{"technology": key, "count": count} for key, count in technology_counts.most_common()],
         "repo_profiles": serialised_profiles,

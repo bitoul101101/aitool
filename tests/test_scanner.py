@@ -1280,6 +1280,23 @@ def test_collect_repo_facts_extracts_dependency_names_from_common_manifests(tmp_
     assert "github.com/gin-gonic/gin" in facts["dependency_names"]
 
 
+def test_collect_repo_facts_classifies_internal_and_external_dependencies(tmp_path):
+    from services.inventory import collect_repo_facts
+
+    (tmp_path / "package.json").write_text('{"dependencies":{"@cognyte/ui":"1.0.0","react":"18.2.0"}}', encoding="utf-8")
+    (tmp_path / "go.mod").write_text(
+        "module demo\n\ngo 1.21\nrequire (\n bitbucket.cognyte.local/platform/sdk v1.0.0\n github.com/gin-gonic/gin v1.10.0\n)\n",
+        encoding="utf-8",
+    )
+
+    facts = collect_repo_facts(tmp_path, "demo-repo", [])
+
+    assert "@cognyte/ui" in facts["internal_dependency_names"]
+    assert "bitbucket.cognyte.local/platform/sdk" in facts["internal_dependency_names"]
+    assert "react" in facts["external_dependency_names"]
+    assert "github.com/gin-gonic/gin" in facts["external_dependency_names"]
+
+
 def test_collect_repo_facts_marks_generic_owner_as_orphaned(tmp_path):
     from services.inventory import collect_repo_facts
 
@@ -3779,6 +3796,8 @@ def test_inventory_page_is_server_rendered():
                 "api_types": ["REST"],
                 "event_systems": ["Kafka"],
                 "dependency_names": ["axios", "react"],
+                "internal_dependency_names": ["@cognyte/ui"],
+                "external_dependency_names": ["axios", "react"],
                 "missing_governance": ["SECURITY.md"],
                 "has_iac": True,
                 "has_api_surface": True,
@@ -3797,6 +3816,7 @@ def test_inventory_page_is_server_rendered():
             "api_repos": 1,
             "orphaned_repos": 0,
             "dependency_count": 2,
+            "internal_dependency_repos": 1,
             "agent_tool_use_repos": 1,
             "owner_rollup": [("@team-platform", 1)],
             "runtime_rollup": [("Node.js", 1), ("Python", 1)],
@@ -3806,6 +3826,8 @@ def test_inventory_page_is_server_rendered():
             "iac_rollup": [("Terraform", 1), ("AWS", 1)],
             "api_rollup": [("REST", 1), ("Kafka", 1)],
             "dependency_rollup": [("react", 1), ("axios", 1)],
+            "internal_dependency_rollup": [("@cognyte/ui", 1)],
+            "external_dependency_rollup": [("react", 1), ("axios", 1)],
         },
     ).decode("utf-8")
 
@@ -3818,9 +3840,12 @@ def test_inventory_page_is_server_rendered():
     assert "Terraform, AWS" in html
     assert "REST, Kafka" in html
     assert "axios, react" in html
+    assert "@cognyte/ui" in html
     assert "Version Drift" in html
     assert "Owners" in html
     assert "Dependencies" in html
+    assert "Internal Dependencies" in html
+    assert "External Dependencies" in html
     assert "Governance Gaps" in html
     assert "Node.js 20" in html
     assert "SECURITY.md" in html
