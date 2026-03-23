@@ -740,6 +740,17 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             repo = str(profile.get("repo", "") or "").strip()
             if not repo:
                 continue
+            repo_details = dict((record.get("repo_details") or {}).get(repo) or {})
+            profile_owner = str(profile.get("owner", "") or "").strip()
+            fallback_owner = str(repo_details.get("owner", "") or "").strip()
+            effective_owner = profile_owner if profile_owner and profile_owner.lower() not in {"unknown", "user", "unowned"} else fallback_owner
+            effective_owner = effective_owner or profile_owner
+            owner_source = str(profile.get("owner_source", "") or "").strip()
+            if not owner_source and effective_owner:
+                owner_source = "repo_metadata"
+            is_orphaned = bool(profile.get("is_orphaned"))
+            if effective_owner and effective_owner.lower() not in {"unknown", "user", "unowned"}:
+                is_orphaned = False
             candidate = {
                 "repo": repo,
                 "project_key": str(record.get("project_key", "") or ""),
@@ -778,9 +789,9 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                   "has_review_gate": bool(profile.get("has_review_gate")),
                   "branch_restrictions": int(profile.get("branch_restrictions", 0) or 0),
                   "default_reviewer_rules": int(profile.get("default_reviewer_rules", 0) or 0),
-                  "owner": str(profile.get("owner", "") or ""),
-                  "owner_source": str(profile.get("owner_source", "") or ""),
-                  "is_orphaned": bool(profile.get("is_orphaned")),
+                  "owner": effective_owner,
+                  "owner_source": owner_source,
+                  "is_orphaned": is_orphaned,
                 "usage_tags": [
                     tag
                     for tag, enabled in (
@@ -794,7 +805,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                           ("branch_governance", bool(profile.get("has_branch_governance"))),
                           ("review_gate", bool(profile.get("has_review_gate"))),
                           ("missing_governance", bool(profile.get("missing_governance"))),
-                          ("orphaned", bool(profile.get("is_orphaned"))),
+                            ("orphaned", is_orphaned),
                       )
                     if enabled
                 ],

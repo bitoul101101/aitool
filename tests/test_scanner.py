@@ -4019,6 +4019,44 @@ def test_inventory_page_is_server_rendered():
     assert 'href="/reports/demo.html"' in html
 
 
+def test_inventory_snapshot_prefers_repo_details_owner_over_generic_profile_owner():
+    import app_server as srv
+
+    history = [
+        {
+            "scan_id": "20260323_101500",
+            "project_key": "COGI",
+            "repo_slugs": ["repo1"],
+            "started_at_utc": "2026-03-23T10:15:00Z",
+            "completed_at_utc": "2026-03-23T10:20:00Z",
+            "repo_details": {"repo1": {"owner": "repo_owner", "branch": "main"}},
+            "reports": {"__all__": {}},
+            "inventory": {
+                "repo_profiles": [
+                    {
+                        "repo": "repo1",
+                        "owner": "User",
+                        "owner_source": "",
+                        "is_orphaned": True,
+                    }
+                ]
+            },
+        }
+    ]
+
+    original = srv._history_records_for_user
+    try:
+        srv._history_records_for_user = lambda: history
+        repo_inventory, summary = srv._inventory_snapshot_for_user()
+    finally:
+        srv._history_records_for_user = original
+
+    assert repo_inventory[0]["owner"] == "repo_owner"
+    assert repo_inventory[0]["owner_source"] == "repo_metadata"
+    assert repo_inventory[0]["is_orphaned"] is False
+    assert summary["owner_rollup"][0] == ("repo_owner", 1)
+
+
 def test_login_page_centers_login_action():
     import app_server as srv
 
