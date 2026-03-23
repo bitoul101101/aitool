@@ -3896,6 +3896,11 @@ def test_inventory_page_is_server_rendered():
                 "ai_drift_risk": True,
                 "framework_drift_labels": ["React on Node.js <18"],
                 "runtime_drift_labels": ["Node.js <18"],
+                "policy_violations": [
+                    "API repos require SECURITY.md",
+                    "AI repos require governance baseline",
+                    "Weak-governance repos cannot carry heavy external dependency load",
+                ],
                 "missing_governance": ["SECURITY.md"],
                 "has_iac": True,
                 "has_api_surface": True,
@@ -3940,6 +3945,12 @@ def test_inventory_page_is_server_rendered():
                 "ai_drift_risk": False,
                 "framework_drift_labels": ["Django on Python 3.8"],
                 "runtime_drift_labels": ["Python 3.8"],
+                "policy_violations": [
+                    "API repos require SECURITY.md",
+                    "IaC repos require CI",
+                    "Orphaned risky repos require owner assignment",
+                    "Weak-governance repos cannot carry heavy external dependency load",
+                ],
                 "missing_governance": ["SECURITY.md", "CI Pipeline"],
                 "has_iac": True,
                 "has_api_surface": True,
@@ -3969,8 +3980,12 @@ def test_inventory_page_is_server_rendered():
             "ai_drift_risk_repos": 1,
             "risky_repos": 2,
             "orphaned_risky_repos": 1,
+            "policy_violation_repos": 2,
             "owner_rollup": [("@team-platform", 1), ("Unowned", 1)],
             "owner_missing_governance_rollup": [("Unowned", 1), ("@team-platform", 1)],
+            "owner_risky_rollup": [("@team-platform", 1), ("Unowned", 1)],
+            "owner_open_findings_rollup": [("@team-platform", 4)],
+            "owner_policy_violation_rollup": [("Unowned", 4), ("@team-platform", 3)],
             "owner_shared_asset_rollup": [("Unowned", 3), ("@team-platform", 3)],
             "runtime_rollup": [("Python", 2), ("Node.js", 1)],
             "technology_rollup": [("Django", 2), ("React", 1)],
@@ -3994,8 +4009,16 @@ def test_inventory_page_is_server_rendered():
             "shared_internal_lib_repo_rollup": [("repo1", 1), ("repo2", 1)],
             "external_dependency_risk_rollup": [("repo1", 3), ("repo2", 3)],
             "ai_dependency_risk_rollup": [("repo1", 2)],
+            "policy_violation_rollup": [
+                ("API repos require SECURITY.md", 2),
+                ("Weak-governance repos cannot carry heavy external dependency load", 2),
+                ("AI repos require governance baseline", 1),
+                ("IaC repos require CI", 1),
+                ("Orphaned risky repos require owner assignment", 1),
+            ],
             "orphaned_exposed_rollup": [("repo2 (API / IaC)", 1)],
         },
+        selected_filters={"owner": "@team-platform", "usage": "risky"},
     ).decode("utf-8")
 
     assert '<a class="nav active" href="/inventory">AI Inventory</a>' in html
@@ -4012,6 +4035,9 @@ def test_inventory_page_is_server_rendered():
     assert "@cognyte/ui" in html
     assert "Version Drift" in html
     assert "Owners" in html
+    assert "Owners Needing Review" in html
+    assert "Owners With Open Findings" in html
+    assert "Owners With Policy Violations" in html
     assert "Owners With Governance Gaps" in html
     assert "Dependencies" in html
     assert "Internal Dependencies" in html
@@ -4034,6 +4060,7 @@ def test_inventory_page_is_server_rendered():
     assert "Shared Internal Library Consumers" in html
     assert "External Dependency Risk" in html
     assert "AI Drift / Governance Risk" in html
+    assert "Policy Violations" in html
     assert "Owners of Shared Assets" in html
     assert "Orphaned Exposed Repos" in html
     assert "Internal API, External API" in html
@@ -4046,6 +4073,8 @@ def test_inventory_page_is_server_rendered():
     assert "Django on Python 3.8" in html
     assert "React on Node.js &lt;18" in html
     assert "AI Drift Risk" in html
+    assert "API repos require SECURITY.md" in html
+    assert "IaC repos require CI" in html
     assert "Weak Gov" in html
     assert "SECURITY.md" in html
     assert 'id="inventory-search"' in html
@@ -4054,9 +4083,14 @@ def test_inventory_page_is_server_rendered():
     assert 'id="inventory-runtime"' in html
     assert 'id="inventory-technology"' in html
     assert 'id="inventory-dependency"' in html
+    assert '<option value="@team-platform" selected>@team-platform</option>' in html
+    assert '<option value="risky" selected>Risky Repos</option>' in html
     assert 'href="/reports/demo.html"' in html
     assert 'href="/inventory/repo?project=COGI&repo=repo1"' in html
+    assert 'href="/inventory?owner=%40team-platform&usage=risky"' in html
+    assert 'href="/inventory?owner=Unowned&usage=policy_violation"' in html
     assert '>Profile</a>' in html
+    assert '>Owner Slice</a>' in html
     assert '>Findings</a>' in html
 
 
@@ -4115,6 +4149,8 @@ def test_inventory_repo_page_is_server_rendered():
     assert 'href="/findings?scan_id=20260318_101500"' in html
     assert 'href="/reports/demo.html"' in html
     assert 'href="/reports/demo.json"' in html
+    assert 'href="/inventory?owner=%40team-platform&usage=risky"' in html
+    assert 'href="/inventory?owner=%40team-platform&usage=missing_governance"' in html
     assert "Branch Governance" in html
     assert "Review Gate" in html
     assert "Produced: orders.created | Consumed: orders.created" in html

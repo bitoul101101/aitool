@@ -773,6 +773,21 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
                 combos.append(f"Go on {label}")
         return combos
 
+    def _policy_violations(item: dict, *, ai_usage: bool, dependency_risk: bool, orphaned_risky: bool) -> list[str]:
+        violations: list[str] = []
+        missing_governance = set(item.get("missing_governance", []) or [])
+        if item.get("has_api_surface") and "SECURITY.md" in missing_governance:
+            violations.append("API repos require SECURITY.md")
+        if item.get("has_iac") and not item.get("ci_systems"):
+            violations.append("IaC repos require CI")
+        if ai_usage and missing_governance:
+            violations.append("AI repos require governance baseline")
+        if orphaned_risky:
+            violations.append("Orphaned risky repos require owner assignment")
+        if dependency_risk:
+            violations.append("Weak-governance repos cannot carry heavy external dependency load")
+        return violations
+
     latest_by_repo: dict[str, dict] = {}
     for record in _history_records_for_user():
         inventory = record.get("inventory") or {}
@@ -877,6 +892,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     version_rollup: dict[str, int] = {}
     owner_rollup: dict[str, int] = {}
     owner_missing_governance_rollup: dict[str, int] = {}
+    owner_risky_rollup: dict[str, int] = {}
+    owner_open_findings_rollup: dict[str, int] = {}
     owner_shared_asset_rollup: dict[str, int] = {}
     dependency_rollup: dict[str, int] = {}
     internal_dependency_rollup: dict[str, int] = {}
@@ -886,6 +903,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
     shared_internal_lib_repo_rollup: dict[str, int] = {}
     external_dependency_risk_rollup: dict[str, int] = {}
     ai_dependency_risk_rollup: dict[str, int] = {}
+    policy_violation_rollup: dict[str, int] = {}
+    owner_policy_violation_rollup: dict[str, int] = {}
     for item in repo_inventory:
         for runtime in item.get("runtimes", []) or []:
             runtime_rollup[runtime] = runtime_rollup.get(runtime, 0) + 1
@@ -924,6 +943,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         owner_rollup[owner] = owner_rollup.get(owner, 0) + 1
         if item.get("missing_governance"):
             owner_missing_governance_rollup[owner] = owner_missing_governance_rollup.get(owner, 0) + 1
+        if int(item.get("finding_count", 0) or 0) > 0:
+            owner_open_findings_rollup[owner] = owner_open_findings_rollup.get(owner, 0) + int(item.get("finding_count", 0) or 0)
 
     for item in repo_inventory:
         drift_labels = [label for runtime, version in (item.get("runtime_versions") or {}).items() if (label := _looks_outdated_runtime(runtime, version))]
@@ -936,6 +957,12 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         ai_drift_risk = ai_usage and bool(drift_labels or dependency_risk)
         risky_repo = bool(drift_labels or dependency_risk or framework_drift or weak_governance)
         orphaned_risky = bool(item.get("is_orphaned")) and risky_repo
+        policy_violations = _policy_violations(
+            item,
+            ai_usage=ai_usage,
+            dependency_risk=dependency_risk,
+            orphaned_risky=orphaned_risky,
+        )
 
         item["runtime_drift_labels"] = drift_labels
         item["framework_drift_labels"] = framework_drift
@@ -945,6 +972,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         item["ai_drift_risk"] = ai_drift_risk
         item["risky_repo"] = risky_repo
         item["orphaned_risky"] = orphaned_risky
+        item["policy_violations"] = policy_violations
         usage_tags = list(item.get("usage_tags", []) or [])
         if drift_labels:
             usage_tags.append("runtime_drift")
@@ -958,6 +986,8 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             usage_tags.append("risky")
         if orphaned_risky:
             usage_tags.append("orphaned_risky")
+        if policy_violations:
+            usage_tags.append("policy_violation")
         item["usage_tags"] = sorted(set(usage_tags))
 
         for label in drift_labels:
@@ -970,6 +1000,14 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             external_dependency_risk_rollup[str(item.get("repo", "") or "")] = external_dependency_count
         if ai_drift_risk:
             ai_dependency_risk_rollup[str(item.get("repo", "") or "")] = len(drift_labels) + (1 if dependency_risk else 0)
+        if risky_repo:
+            owner = str(item.get("owner", "") or "").strip() or "Unowned"
+            owner_risky_rollup[owner] = owner_risky_rollup.get(owner, 0) + 1
+        if policy_violations:
+            owner = str(item.get("owner", "") or "").strip() or "Unowned"
+            owner_policy_violation_rollup[owner] = owner_policy_violation_rollup.get(owner, 0) + len(policy_violations)
+            for violation in policy_violations:
+                policy_violation_rollup[violation] = policy_violation_rollup.get(violation, 0) + 1
 
     orphaned_exposed_repos = [
         item for item in repo_inventory
@@ -1013,6 +1051,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "ai_drift_risk_repos": sum(1 for item in repo_inventory if item.get("ai_drift_risk")),
         "risky_repos": sum(1 for item in repo_inventory if item.get("risky_repo")),
         "orphaned_risky_repos": sum(1 for item in repo_inventory if item.get("orphaned_risky")),
+        "policy_violation_repos": sum(1 for item in repo_inventory if item.get("policy_violations")),
         "runtime_rollup": sorted(runtime_rollup.items(), key=lambda item: (-item[1], item[0])),
         "technology_rollup": sorted(technology_rollup.items(), key=lambda item: (-item[1], item[0])),
           "governance_rollup": sorted(governance_rollup.items(), key=lambda item: (-item[1], item[0])),
@@ -1038,6 +1077,18 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
             owner_missing_governance_rollup.items(),
             key=lambda item: (-item[1], item[0]),
         ),
+        "owner_risky_rollup": sorted(
+            owner_risky_rollup.items(),
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "owner_open_findings_rollup": sorted(
+            owner_open_findings_rollup.items(),
+            key=lambda item: (-item[1], item[0]),
+        ),
+        "owner_policy_violation_rollup": sorted(
+            owner_policy_violation_rollup.items(),
+            key=lambda item: (-item[1], item[0]),
+        ),
         "orphaned_exposed_rollup": orphaned_exposed_rollup,
         "owner_shared_asset_rollup": sorted(
             owner_shared_asset_rollup.items(),
@@ -1054,6 +1105,7 @@ def _inventory_snapshot_for_user() -> tuple[list[dict], dict]:
         "shared_internal_lib_repo_rollup": sorted(shared_internal_lib_repo_rollup.items(), key=lambda item: (-item[1], item[0])),
         "external_dependency_risk_rollup": sorted(external_dependency_risk_rollup.items(), key=lambda item: (-item[1], item[0])),
         "ai_dependency_risk_rollup": sorted(ai_dependency_risk_rollup.items(), key=lambda item: (-item[1], item[0])),
+        "policy_violation_rollup": sorted(policy_violation_rollup.items(), key=lambda item: (-item[1], item[0])),
     }
     return repo_inventory, summary
 
@@ -2483,6 +2535,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             csrf_token=_current_csrf_token(self),
             notice=notice or (qs.get("notice", [""])[0] or ""),
             error=error or (qs.get("error", [""])[0] or ""),
+            selected_filters={
+                "search": qs.get("search", [""])[0] or "",
+                "project": qs.get("project", [""])[0] or "",
+                "owner": qs.get("owner", [""])[0] or "",
+                "runtime": qs.get("runtime", [""])[0] or "",
+                "technology": qs.get("technology", [""])[0] or "",
+                "dependency": qs.get("dependency", [""])[0] or "",
+                "usage": qs.get("usage", [""])[0] or "",
+            },
             show_scan_results=_has_scan_results(),
             current_scan=_current_scan_nav_context(),
         )

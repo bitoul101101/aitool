@@ -1087,7 +1087,15 @@ def render_results_page(
     return _layout(title="Results", body=body, active=nav_active, show_scan_results=show_scan_results, csrf_token=csrf_token, current_scan=current_scan)
 
 
-def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
+def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: str = "", error: str = "", selected_filters: dict | None = None, show_scan_results: bool = True, csrf_token: str = "", current_scan: dict | None = None) -> bytes:
+    selected_filters = dict(selected_filters or {})
+    selected_search = str(selected_filters.get("search", "") or "")
+    selected_project = str(selected_filters.get("project", "") or "")
+    selected_owner = str(selected_filters.get("owner", "") or "")
+    selected_runtime = str(selected_filters.get("runtime", "") or "")
+    selected_technology = str(selected_filters.get("technology", "") or "")
+    selected_dependency = str(selected_filters.get("dependency", "") or "")
+    selected_usage = str(selected_filters.get("usage", "") or "")
     projects = sorted({str(item.get("project_key", "")) for item in repo_inventory if item.get("project_key")})
     providers = sorted({label for item in repo_inventory for label in item.get("provider_labels", []) if label})
     models = sorted({model for item in repo_inventory for model in item.get("models", []) if model})
@@ -1096,8 +1104,11 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
     owners = sorted({str(item.get("owner", "")) for item in repo_inventory if item.get("owner")})
     dependencies = sorted({dep for item in repo_inventory for dep in item.get("dependency_names", []) if dep})
 
-    def _opts(values: list[str], label: str) -> str:
-        return f'<option value="">{_esc(label)}</option>' + "".join(f'<option value="{_esc(v)}">{_esc(v)}</option>' for v in values)
+    def _opts(values: list[str], label: str, selected: str = "") -> str:
+        return f'<option value="">{_esc(label)}</option>' + "".join(
+            f'<option value="{_esc(v)}"{" selected" if v == selected else ""}>{_esc(v)}</option>'
+            for v in values
+        )
 
     def _rollup_list(items: list[tuple[str, int]], empty: str) -> str:
         if not items:
@@ -1106,6 +1117,15 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             f'<div class="inventory-rollup-item"><span>{_esc(label)}</span><strong>{_esc(count)}</strong></div>'
             for label, count in items[:8]
         )
+
+    def _owner_handoff_list(items: list[tuple[str, int]], *, usage: str, empty: str) -> str:
+        if not items:
+            return f'<div class="muted">{_esc(empty)}</div>'
+        rows = []
+        for label, count in items[:8]:
+            link = f'/inventory?owner={quote(str(label))}&usage={quote(usage)}'
+            rows.append(f'<div class="inventory-rollup-item"><a href="{link}">{_esc(label)}</a><strong>{_esc(count)}</strong></div>')
+        return "".join(rows)
 
     rows = []
     for item in repo_inventory:
@@ -1117,6 +1137,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         runtime_drift_text = ", ".join(item.get("runtime_drift_labels", []) or [])
         governance_text = ", ".join(item.get("missing_governance", [])) or "OK"
         governance_meta = []
+        policy_text = ", ".join(item.get("policy_violations", []) or [])
         ci_text = ", ".join(item.get("ci_systems", [])[:2])
         if ci_text:
             governance_meta.append(ci_text)
@@ -1124,6 +1145,8 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
             governance_meta.append("Branch Gov")
         if item.get("has_review_gate"):
             governance_meta.append("Review Gate")
+        if policy_text:
+            governance_meta.append(f"Policy: {policy_text}")
         platform_text = ", ".join(item.get("iac_tools", []) + item.get("cloud_platforms", [])) or "-"
         api_parts = list(item.get("api_types", []) or []) + list(item.get("event_systems", []) or []) + list(item.get("api_boundaries", []) or [])
         api_text = ", ".join(api_parts) or "-"
@@ -1164,6 +1187,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         )
         action_links = [
             f'<a class="ghost" href="{profile_link}">Profile</a>',
+            f'<a class="ghost" href="/inventory?owner={quote(owner_text)}&usage=risky">Owner Slice</a>',
         ]
         if findings_link:
             action_links.append(f'<a class="ghost" href="{findings_link}">Findings</a>')
@@ -1221,9 +1245,13 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <div class="inventory-card-stat"><span class="baseline-label">AI Drift Risk</span><strong>{_esc(summary.get("ai_drift_risk_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Risky Repos</span><strong>{_esc(summary.get("risky_repos", 0))}</strong></div>
         <div class="inventory-card-stat"><span class="baseline-label">Orphaned Risky</span><strong>{_esc(summary.get("orphaned_risky_repos", 0))}</strong></div>
+        <div class="inventory-card-stat"><span class="baseline-label">Policy Violations</span><strong>{_esc(summary.get("policy_violation_repos", 0))}</strong></div>
       </div>
     <div class="inventory-summary-cards" style="margin-top:10px">
         <section class="inventory-rollup-card"><strong>Owners</strong>{_rollup_list(list(summary.get("owner_rollup", []) or []), "No ownership data yet.")}</section>
+        <section class="inventory-rollup-card"><strong>Owners Needing Review</strong>{_owner_handoff_list(list(summary.get("owner_risky_rollup", []) or []), usage="risky", empty="No risky repos by owner.")}</section>
+        <section class="inventory-rollup-card"><strong>Owners With Open Findings</strong>{_owner_handoff_list(list(summary.get("owner_open_findings_rollup", []) or []), usage="risky", empty="No open findings by owner.")}</section>
+        <section class="inventory-rollup-card"><strong>Owners With Policy Violations</strong>{_owner_handoff_list(list(summary.get("owner_policy_violation_rollup", []) or []), usage="policy_violation", empty="No owner-linked policy violations.")}</section>
         <section class="inventory-rollup-card"><strong>Owners With Governance Gaps</strong>{_rollup_list(list(summary.get("owner_missing_governance_rollup", []) or []), "No owner-linked governance gaps.")}</section>
         <section class="inventory-rollup-card"><strong>Runtimes</strong>{_rollup_list(list(summary.get("runtime_rollup", []) or []), "No runtime data yet.")}</section>
       <section class="inventory-rollup-card"><strong>Technologies</strong>{_rollup_list(list(summary.get("technology_rollup", []) or []), "No technology data yet.")}</section>
@@ -1244,6 +1272,7 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
         <section class="inventory-rollup-card"><strong>Shared Internal Library Consumers</strong>{_rollup_list(list(summary.get("shared_internal_lib_repo_rollup", []) or []), "No repos sharing internal libraries yet.")}</section>
         <section class="inventory-rollup-card"><strong>External Dependency Risk</strong>{_rollup_list(list(summary.get("external_dependency_risk_rollup", []) or []), "No weak-governance dependency hotspots.")}</section>
         <section class="inventory-rollup-card"><strong>AI Drift / Governance Risk</strong>{_rollup_list(list(summary.get("ai_dependency_risk_rollup", []) or []), "No AI repos with drift or dependency risk.")}</section>
+        <section class="inventory-rollup-card"><strong>Policy Violations</strong>{_rollup_list(list(summary.get("policy_violation_rollup", []) or []), "No policy violations.")}</section>
         <section class="inventory-rollup-card"><strong>Shared Internal Libraries</strong>{_rollup_list(list(summary.get("shared_internal_dependency_rollup", []) or []), "No shared internal libraries yet.")}</section>
         <section class="inventory-rollup-card"><strong>Owners of Shared Assets</strong>{_rollup_list(list(summary.get("owner_shared_asset_rollup", []) or []), "No owner-linked shared assets yet.")}</section>
         <section class="inventory-rollup-card"><strong>Orphaned Exposed Repos</strong>{_rollup_list(list(summary.get("orphaned_exposed_rollup", []) or []), "No orphaned repos with API or IaC exposure.")}</section>
@@ -1253,27 +1282,28 @@ def render_inventory_page(*, repo_inventory: list[dict], summary: dict, notice: 
 
   <section class="card">
     <div class="inventory-toolbar filters-row">
-      <input type="search" id="inventory-search" placeholder="Search repo, runtime, technology, API, or scan">
-      <select id="inventory-project">{_opts(projects, 'All Projects')}</select>
-      <select id="inventory-owner">{_opts(owners, 'All Owners')}</select>
-      <select id="inventory-runtime">{_opts(runtimes, 'All Runtimes')}</select>
-      <select id="inventory-technology">{_opts(technologies, 'All Technologies')}</select>
-      <select id="inventory-dependency">{_opts(dependencies, 'All Dependencies')}</select>
+      <input type="search" id="inventory-search" placeholder="Search repo, runtime, technology, API, or scan" value="{_esc(selected_search)}">
+      <select id="inventory-project">{_opts(projects, 'All Projects', selected_project)}</select>
+      <select id="inventory-owner">{_opts(owners, 'All Owners', selected_owner)}</select>
+      <select id="inventory-runtime">{_opts(runtimes, 'All Runtimes', selected_runtime)}</select>
+      <select id="inventory-technology">{_opts(technologies, 'All Technologies', selected_technology)}</select>
+      <select id="inventory-dependency">{_opts(dependencies, 'All Dependencies', selected_dependency)}</select>
         <select id="inventory-usage">
           <option value="">All Postures</option>
-          <option value="missing_governance">Missing Governance</option>
-          <option value="ci">Has CI</option>
-          <option value="iac">IaC / Cloud</option>
-          <option value="api">API Surface</option>
-          <option value="branch_governance">Branch Governance</option>
-          <option value="review_gate">Review Gate</option>
-          <option value="runtime_drift">Runtime Drift</option>
-          <option value="shared_internal_libs">Shared Internal Libs</option>
-          <option value="dependency_risk">Dependency Risk</option>
-          <option value="ai_drift_risk">AI Drift Risk</option>
-          <option value="risky">Risky Repos</option>
-          <option value="orphaned_risky">Orphaned Risky</option>
-          <option value="agent">Agent / Tool Use</option>
+          <option value="missing_governance"{" selected" if selected_usage == "missing_governance" else ""}>Missing Governance</option>
+          <option value="ci"{" selected" if selected_usage == "ci" else ""}>Has CI</option>
+          <option value="iac"{" selected" if selected_usage == "iac" else ""}>IaC / Cloud</option>
+          <option value="api"{" selected" if selected_usage == "api" else ""}>API Surface</option>
+          <option value="branch_governance"{" selected" if selected_usage == "branch_governance" else ""}>Branch Governance</option>
+          <option value="review_gate"{" selected" if selected_usage == "review_gate" else ""}>Review Gate</option>
+          <option value="runtime_drift"{" selected" if selected_usage == "runtime_drift" else ""}>Runtime Drift</option>
+          <option value="shared_internal_libs"{" selected" if selected_usage == "shared_internal_libs" else ""}>Shared Internal Libs</option>
+          <option value="dependency_risk"{" selected" if selected_usage == "dependency_risk" else ""}>Dependency Risk</option>
+          <option value="ai_drift_risk"{" selected" if selected_usage == "ai_drift_risk" else ""}>AI Drift Risk</option>
+          <option value="risky"{" selected" if selected_usage == "risky" else ""}>Risky Repos</option>
+          <option value="orphaned_risky"{" selected" if selected_usage == "orphaned_risky" else ""}>Orphaned Risky</option>
+          <option value="policy_violation"{" selected" if selected_usage == "policy_violation" else ""}>Policy Violations</option>
+          <option value="agent"{" selected" if selected_usage == "agent" else ""}>Agent / Tool Use</option>
         </select>
       <button type="button" class="ghost" id="inventory-reset">Reset</button>
     </div>
@@ -1423,6 +1453,8 @@ def render_inventory_repo_page(*, repo_profile: dict, recent_scans: list[dict], 
         {'<a class="ghost" href="' + latest_findings_link + '">Open Findings</a>' if latest_findings_link else ''}
         {'<a class="ghost" href="' + latest_html_link + '" target="_blank">HTML Report</a>' if latest_html_link else ''}
         {'<a class="ghost" href="' + latest_json_link + '" target="_blank">JSON</a>' if latest_json_link else ''}
+        {'<a class="ghost" href="/inventory?owner=' + quote(owner) + '&usage=risky">Owner Risk Slice</a>' if owner and owner != 'Unowned' else ''}
+        {'<a class="ghost" href="/inventory?owner=' + quote(owner) + '&usage=missing_governance">Owner Governance Slice</a>' if owner and owner != 'Unowned' else ''}
       </div>
     </div>
     <div class="inventory-summary-cards" style="margin-top:12px">
